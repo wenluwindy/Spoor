@@ -287,6 +287,75 @@ describe('App 组件', () => {
     });
   });
 
+  // --- 首启引导（内置 API Key 移除后唯一的上手路径） ---
+  describe('首启引导卡', () => {
+    it('未配置 API Key 时出现在画布上', async () => {
+      await act(async () => {
+        render(<App />);
+      });
+
+      expect(screen.getByText('onboarding.title')).toBeInTheDocument();
+    });
+
+    it('已配置 API Key 时不出现', async () => {
+      localStorage.setItem(
+        'ai_config',
+        JSON.stringify({
+          provider: 'doubao',
+          apiKey: 'ark-configured',
+          baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+          model: 'ep-mine',
+        }),
+      );
+
+      await act(async () => {
+        render(<App />);
+      });
+
+      expect(screen.queryByText('onboarding.title')).toBeNull();
+    });
+
+    it('本地 GGUF 只要填了模型路径就算已配置（不需要 API Key）', async () => {
+      localStorage.setItem(
+        'ai_config',
+        JSON.stringify({
+          provider: 'local_llama',
+          apiKey: '',
+          baseUrl: '',
+          model: 'gemma',
+          localGgufPath: 'D:/models/gemma.gguf',
+        }),
+      );
+
+      await act(async () => {
+        render(<App />);
+      });
+
+      expect(screen.queryByText('onboarding.title')).toBeNull();
+    });
+
+    it('点击主按钮直达设置面板', async () => {
+      const user = userEvent.setup();
+      await act(async () => {
+        render(<App />);
+      });
+
+      await user.click(screen.getByText('onboarding.cta').closest('button')!);
+      expect(screen.getByText('设置')).toBeInTheDocument();
+      expect(screen.queryByText('onboarding.title')).toBeNull();
+    });
+
+    it('关掉后本次会话不再出现', async () => {
+      const user = userEvent.setup();
+      await act(async () => {
+        render(<App />);
+      });
+
+      await user.click(screen.getByRole('button', { name: 'onboarding.dismiss' }));
+      expect(screen.queryByText('onboarding.title')).toBeNull();
+    });
+  });
+
   // --- 设置按钮 ---
   describe('设置', () => {
     it('点击设置按钮打开设置面板', async () => {

@@ -21,6 +21,13 @@ const resources = {
         "blurb": "The browser build has been retired. Local file storage, image generation and direct access to model providers all need the desktop shell. Your canvases stay on your own machine.",
         "download": "Download for Windows"
       },
+      "onboarding": {
+        "eyebrow": "Getting started",
+        "title": "Add a model service to get started",
+        "blurb": "Spoor does not ship with an API key. Fill in your provider's Base URL, key and model in Settings — all of it stays on this machine.",
+        "cta": "Open Settings",
+        "dismiss": "Not now"
+      },
       "sidebar": {
         "nav_heading": "Modules",
         "personal": "Canvas",
@@ -364,6 +371,13 @@ const resources = {
         "title": "Spoor 现已是桌面应用",
         "blurb": "网页版已停止维护。本地文件存储、AI 生图、直连模型服务都需要桌面端能力。你的画布数据保存在自己的电脑上。",
         "download": "下载 Windows 版"
+      },
+      "onboarding": {
+        "eyebrow": "开始使用",
+        "title": "先添加一个模型服务",
+        "blurb": "Spoor 不内置 API Key。在设置里填入服务商的 Base URL、密钥和模型即可开始，这些只保存在本机。",
+        "cta": "打开设置",
+        "dismiss": "暂不设置"
       },
       "sidebar": {
         "nav_heading": "导航",

@@ -20,6 +20,7 @@ import { AISettingsModal } from './components/AISettingsModal';
 import { Sidebar } from './components/Sidebar';
 import { CanvasHistoryPopover } from './components/CanvasHistoryPopover';
 import { CanvasToolbar } from './components/CanvasToolbar';
+import { OnboardingCard } from './components/OnboardingCard';
 import type { AIConfig } from './components/AISettingsModal';
 import { Reference } from './components/Reference';
 import { ResearchLab } from './components/ResearchLab';
@@ -101,6 +102,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('personal');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  /** 引导卡只在本次会话内可关掉；下次启动若仍未配置会再提示。 */
+  const [isOnboardingDismissed, setIsOnboardingDismissed] = useState(false);
 
   // User Profile
   const { userName, setUserName, userRole, setUserRole, userAvatar, setUserAvatar } = useUserProfile();
@@ -586,6 +589,16 @@ export default function App() {
           onCancelIntentClarification={cancelIntentClarification}
           onConfirmIntentClarification={(finalRequest) => void confirmIntentClarification(finalRequest)}
         />
+
+        {isAiUnconfigured && !isOnboardingDismissed && (
+          <OnboardingCard
+            onOpenSettings={() => {
+              setIsOnboardingDismissed(true);
+              setIsSettingsOpen(true);
+            }}
+            onDismiss={() => setIsOnboardingDismissed(true)}
+          />
+        )}
 
         {contextMenu && (
           <CanvasContextMenu
