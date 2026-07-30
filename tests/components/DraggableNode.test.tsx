@@ -39,13 +39,13 @@ describe('DraggableNode', () => {
   it('编辑态隐藏外链、布局、删除、缩放手柄与选择圈（避免 group-hover 再次点亮）', () => {
     renderNode({ isEditing: true, isSelected: true });
 
-    expect(screen.getByTitle('Link')).toHaveClass('pointer-events-none');
-    expect(screen.getByTitle('Link')).toHaveClass('!opacity-0');
-    const bottomBar = screen.getByTitle('Layout').parentElement;
+    expect(screen.getByLabelText('Link')).toHaveClass('pointer-events-none');
+    expect(screen.getByLabelText('Link')).toHaveClass('!opacity-0');
+    const bottomBar = screen.getByLabelText('Layout').parentElement;
     expect(bottomBar).toHaveClass('pointer-events-none');
     expect(bottomBar).toHaveClass('!opacity-0');
-    expect(screen.getByTitle('Delete').parentElement).toBe(bottomBar);
-    expect(screen.getByTitle('Select')).toHaveClass('pointer-events-none');
+    expect(screen.getByLabelText('Delete').parentElement).toBe(bottomBar);
+    expect(screen.getByLabelText('Select')).toHaveClass('pointer-events-none');
 
     const resize = document.querySelector('.cursor-nwse-resize');
     expect(resize).toBeTruthy();
@@ -55,8 +55,8 @@ describe('DraggableNode', () => {
 
   it('非编辑且选中时外链按钮常态可见', () => {
     renderNode({ isEditing: false, isSelected: true });
-    expect(screen.getByTitle('Link')).toHaveClass('opacity-100');
-    expect(screen.getByTitle('Link')).not.toHaveClass('pointer-events-none');
+    expect(screen.getByLabelText('Link')).toHaveClass('opacity-100');
+    expect(screen.getByLabelText('Link')).not.toHaveClass('pointer-events-none');
   });
 
   it('编辑态不显示选中描边 ring', () => {

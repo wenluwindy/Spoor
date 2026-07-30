@@ -1,7 +1,9 @@
 import React, { useRef, type RefObject } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import type { Edge as DbEdge } from '../../db';
 import { preventDefaultIfFileDrag } from '../../utils/dnd';
+import { Tooltip } from '../ui/Tooltip';
 
 interface CanvasEdgeLinesProps {
   edges: DbEdge[];
@@ -25,6 +27,7 @@ export function CanvasEdgeLines({
   deleteEdge,
   onEdgeContextMenu,
 }: CanvasEdgeLinesProps) {
+  const { t } = useTranslation();
   return (
     <>
       <svg ref={svgRef} data-connecting-from={connectingFrom || ''} className="absolute inset-0 overflow-visible z-10 w-[1px] h-[1px] pointer-events-none">
@@ -56,8 +59,8 @@ export function CanvasEdgeLines({
 
       <div ref={edgeLabelsRef} className="absolute inset-0 pointer-events-none z-20 w-[1px] h-[1px]">
         {edges.map(edge => (
+          <Tooltip key={`btn-${edge.id}`} label={t('canvas.menu.delete_edge')}>
           <button
-            key={`btn-${edge.id}`}
             data-edge-btn={edge.id}
             className={`absolute transform -translate-x-1/2 -translate-y-1/2 w-5 h-5 bg-white border border-[#C2410C] text-[#C2410C] hover:bg-[#C2410C] hover:text-white shadow-sm rounded-full flex items-center justify-center transition-all pointer-events-auto z-10 ${hoveredEdgeId === edge.id ? 'opacity-100 scale-100' : 'opacity-0 scale-50'}`}
             onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); deleteEdge(edge.id); }}
@@ -67,6 +70,7 @@ export function CanvasEdgeLines({
           >
             <X className="w-3 h-3" />
           </button>
+          </Tooltip>
         ))}
       </div>
     </>

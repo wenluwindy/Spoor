@@ -130,7 +130,7 @@ describe('CanvasToolbar', () => {
       const onCreateNode = vi.fn();
       const { container } = render(<CanvasToolbar {...defaultProps()} onCreateNode={onCreateNode} />);
 
-      const plusButton = container.querySelector('button[title="sidebar.new_note"]')!;
+      const plusButton = container.querySelector('button[aria-label="sidebar.new_note"]')!;
       await user.click(plusButton);
       expect(onCreateNode).toHaveBeenCalledWith(CANVAS_CREATE_ITEMS[0].nodeType);
     });
@@ -145,8 +145,8 @@ describe('CanvasToolbar', () => {
 
     it('上传按钮的提示已汉化（不再是硬编码 Upload File）', () => {
       const { container } = render(<CanvasToolbar {...defaultProps()} />);
-      expect(container.querySelector('label[title="canvas.upload_file"]')).toBeTruthy();
-      expect(container.querySelector('label[title="Upload File"]')).toBeNull();
+      expect(container.querySelector('label[aria-label="canvas.upload_file"]')).toBeTruthy();
+      expect(container.querySelector('label[aria-label="Upload File"]')).toBeNull();
     });
   });
 });

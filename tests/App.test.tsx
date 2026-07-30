@@ -365,7 +365,7 @@ describe('App 组件', () => {
         render(<App />);
       });
 
-      const settingsBtn = screen.getByTitle('设置');
+      const settingsBtn = screen.getByLabelText('设置');
       await user.click(settingsBtn);
 
       // 设置面板应出现
@@ -379,7 +379,7 @@ describe('App 组件', () => {
         render(<App />);
       });
 
-      await user.click(screen.getByTitle('设置'));
+      await user.click(screen.getByLabelText('设置'));
       expect(screen.getByText('English')).toBeInTheDocument();
       expect(screen.getByText('中文')).toBeInTheDocument();
     });
@@ -390,7 +390,7 @@ describe('App 组件', () => {
         render(<App />);
       });
 
-      await user.click(screen.getByTitle('设置'));
+      await user.click(screen.getByLabelText('设置'));
       expect(screen.getByText('AI 服务商')).toBeInTheDocument();
       expect(screen.getByText('API 密钥')).toBeInTheDocument();
       expect(screen.getByText('模型')).toBeInTheDocument();
@@ -406,7 +406,7 @@ describe('App 组件', () => {
       });
 
       // "新建便签" 是 title 属性，不是可见文本
-      const newNoteBtn = screen.getAllByTitle('新建便签')[0];
+      const newNoteBtn = screen.getAllByLabelText('新建便签')[0];
       await user.click(newNoteBtn);
 
       // 验证数据库中有新节点
@@ -433,7 +433,7 @@ describe('App 组件', () => {
       });
 
       // 点击历史按钮（用 title 定位）
-      const historyBtn = screen.getByTitle('历史记录');
+      const historyBtn = screen.getByLabelText('历史记录');
       await user.click(historyBtn);
 
       // 画布列表应出现
@@ -577,7 +577,7 @@ describe('App 组件', () => {
   // ============================================================
   describe('AISettingsModal 设置面板', () => {
     const openSettings = async (user: ReturnType<typeof userEvent.setup>) => {
-      await user.click(screen.getByTitle('设置'));
+      await user.click(screen.getByLabelText('设置'));
       await waitFor(() => {
         expect(screen.getByText('AI 配置')).toBeInTheDocument();
       });
@@ -1049,7 +1049,7 @@ describe('App 组件', () => {
     it('新建便签按钮在数据库中创建 text 类型节点', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
-      const newNoteBtn = screen.getAllByTitle('新建便签')[0];
+      const newNoteBtn = screen.getAllByLabelText('新建便签')[0];
       await user.click(newNoteBtn);
       const nodes = await db.nodes.toArray();
       const textNodes = nodes.filter(n => n.type === 'text');
@@ -1060,7 +1060,7 @@ describe('App 组件', () => {
     it('新建便签的节点有正确的 canvasId', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
-      const newNoteBtn = screen.getAllByTitle('新建便签')[0];
+      const newNoteBtn = screen.getAllByLabelText('新建便签')[0];
       await user.click(newNoteBtn);
       const nodes = await db.nodes.toArray();
       const textNode = nodes.find(n => n.type === 'text');
@@ -1089,7 +1089,7 @@ describe('App 组件', () => {
       await act(async () => { render(<App />); });
 
       // 打开画布列表
-      const historyBtn = screen.getByTitle('历史记录');
+      const historyBtn = screen.getByLabelText('历史记录');
       await user.click(historyBtn);
 
       // 点击新建画布
@@ -1108,7 +1108,7 @@ describe('App 组件', () => {
         await new Promise(resolve => setTimeout(resolve, 200));
       });
 
-      const historyBtn = screen.getByTitle('历史记录');
+      const historyBtn = screen.getByLabelText('历史记录');
       await user.click(historyBtn);
       expect(screen.getByText(i18n.t('seed.canvas_name'))).toBeInTheDocument();
     });
@@ -1120,7 +1120,7 @@ describe('App 组件', () => {
         await new Promise(resolve => setTimeout(resolve, 200));
       });
 
-      const newNoteBtn = screen.getAllByTitle('新建便签')[0];
+      const newNoteBtn = screen.getAllByLabelText('新建便签')[0];
       await user.click(newNoteBtn);
 
       const nodes = await db.nodes.toArray();
@@ -1131,7 +1131,7 @@ describe('App 组件', () => {
     it('合成文章按钮存在', async () => {
       await act(async () => { render(<App />); });
       // 合成文章按钮在右上角
-      const publishBtns = screen.getAllByTitle(/合成文章/);
+      const publishBtns = screen.getAllByLabelText(/合成文章/);
       expect(publishBtns.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -1140,7 +1140,7 @@ describe('App 组件', () => {
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 200));
       });
-      const publishBtn = screen.getByTitle(/合成文章\s*\(/);
+      const publishBtn = screen.getByLabelText(/合成文章\s*\(/);
       expect(publishBtn.className).toContain('bg-white');
       expect(publishBtn.className).not.toContain('bg-[#C2410C]');
     });
@@ -1152,19 +1152,19 @@ describe('App 组件', () => {
         await new Promise((resolve) => setTimeout(resolve, 200));
       });
 
-      let selectBtns = screen.queryAllByTitle('选择便签');
+      let selectBtns = screen.queryAllByLabelText('选择便签');
       if (selectBtns.length === 0) {
-        await user.click(screen.getAllByTitle('新建便签')[0]);
+        await user.click(screen.getAllByLabelText('新建便签')[0]);
         await act(async () => {
           await new Promise((resolve) => setTimeout(resolve, 150));
         });
-        selectBtns = screen.queryAllByTitle('选择便签');
+        selectBtns = screen.queryAllByLabelText('选择便签');
       }
 
       expect(selectBtns.length).toBeGreaterThan(0);
       await user.click(selectBtns[0]);
 
-      const publishBtn = screen.getByTitle(/合成文章\s*\(/);
+      const publishBtn = screen.getByLabelText(/合成文章\s*\(/);
       expect(publishBtn.className).toContain('bg-[#C2410C]');
     });
 
@@ -1176,7 +1176,7 @@ describe('App 组件', () => {
 
     it('全屏按钮存在', async () => {
       await act(async () => { render(<App />); });
-      const fullscreenBtn = screen.getByTitle('全屏');
+      const fullscreenBtn = screen.getByLabelText('全屏');
       expect(fullscreenBtn).toBeInTheDocument();
     });
 

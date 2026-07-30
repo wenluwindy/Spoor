@@ -15,6 +15,7 @@ import { getCanvasCenterPosition } from '../utils/canvas';
 import { resolveAgentLocalizedName } from '../utils/aiI18n';
 import { IntentClarificationModal } from './IntentClarificationModal';
 import { AgentIcon } from './AgentIcon';
+import { Tooltip } from './ui/Tooltip';
 
 export interface CanvasToolbarProps {
   isToolbarAiLoading: boolean;
@@ -76,14 +77,15 @@ export function CanvasToolbar({
         <div className={`bg-white rounded-2xl shadow-2xl border border-[#E6E4DF] p-2 flex items-center space-x-2 ring-4 ring-[#F4F1ED]/50 transition-all ${isToolbarAiLoading ? 'opacity-80' : ''}`}>
           <div className="flex items-center gap-1 pl-2 border-r border-[#E6E4DF] pr-3 mr-1 relative group">
             <div className="relative group/plus">
-              <button
-                type="button"
-                onClick={() => onCreateNode(CANVAS_CREATE_ITEMS[0].nodeType)}
-                title={t(CANVAS_CREATE_ITEMS[0].labelKey)}
-                className="w-8 h-8 flex items-center justify-center text-[#5a5a54] hover:text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg cursor-pointer transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
+              <Tooltip label={t(CANVAS_CREATE_ITEMS[0].labelKey)}>
+                <button
+                  type="button"
+                  onClick={() => onCreateNode(CANVAS_CREATE_ITEMS[0].nodeType)}
+                  className="w-8 h-8 flex items-center justify-center text-[#5a5a54] hover:text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg cursor-pointer transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </Tooltip>
               <div className="absolute bottom-full left-0 mb-2 w-52 bg-white border border-[#E6E4DF] rounded-xl shadow-xl opacity-0 invisible group-hover/plus:opacity-100 group-hover/plus:visible transition-all flex flex-col p-1 z-50">
                 {/* 与画布右键菜单同一份定义，见 constants/canvasMenuItems.ts */}
                 {CANVAS_CREATE_ITEMS.map((item) => {
@@ -105,9 +107,11 @@ export function CanvasToolbar({
               </div>
             </div>
             <div className="relative group/agent">
-              <button title={t('sidebar.agents')} className="w-8 h-8 flex items-center justify-center text-[#5a5a54] hover:text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg cursor-pointer transition-colors">
-                <Bot className="w-4 h-4" />
-              </button>
+              <Tooltip label={t('sidebar.agents')}>
+                <button className="w-8 h-8 flex items-center justify-center text-[#5a5a54] hover:text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg cursor-pointer transition-colors">
+                  <Bot className="w-4 h-4" />
+                </button>
+              </Tooltip>
               {/* Dropdown for agents */}
               <div className="absolute bottom-full left-0 mb-2 w-48 bg-white border border-[#E6E4DF] rounded-xl shadow-xl opacity-0 invisible group-hover/agent:opacity-100 group-hover/agent:visible transition-all flex flex-col p-1">
                 <div className="px-3 py-2 text-[10px] font-bold text-[#8c8a84] uppercase tracking-wider font-mono">{t('sidebar.agents')}</div>
@@ -129,10 +133,12 @@ export function CanvasToolbar({
                 ))}
               </div>
             </div>
-            <label title={t('canvas.upload_file')} className="w-8 h-8 flex items-center justify-center text-[#5a5a54] hover:text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg cursor-pointer transition-colors m-0">
-              <FileTextIcon className="w-4 h-4" />
-              <input type="file" accept={CANVAS_ALL_FILE_ACCEPT} className="hidden" onChange={addFileNode} />
-            </label>
+            <Tooltip label={t('canvas.upload_file')}>
+              <label className="w-8 h-8 flex items-center justify-center text-[#5a5a54] hover:text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg cursor-pointer transition-colors m-0">
+                <FileTextIcon className="w-4 h-4" />
+                <input type="file" accept={CANVAS_ALL_FILE_ACCEPT} className="hidden" onChange={addFileNode} />
+              </label>
+            </Tooltip>
           </div>
           <input 
             className="flex-1 bg-transparent border-none focus:outline-none focus:ring-0 font-sans text-sm py-3 text-[#1a1a1a] placeholder-[#8c8a84] disabled:opacity-50" 
@@ -143,13 +149,15 @@ export function CanvasToolbar({
             onKeyDown={e => e.key === 'Enter' && handleAiSubmit()}
             disabled={isInputDisabled}
           />
-          <button 
-            onClick={handleAiSubmit}
-            disabled={isInputDisabled}
-            className="bg-[#C2410C] text-white p-2.5 rounded-xl font-sans text-sm font-bold shadow-md flex items-center justify-center hover:bg-[#a0350a] transition-colors disabled:opacity-75 shrink-0"
-          >
-            {isToolbarAiLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
-          </button>
+          <Tooltip label={t('ai.submit')}>
+            <button
+              onClick={handleAiSubmit}
+              disabled={isInputDisabled}
+              className="bg-[#C2410C] text-white p-2.5 rounded-xl font-sans text-sm font-bold shadow-md flex items-center justify-center hover:bg-[#a0350a] transition-colors disabled:opacity-75 shrink-0"
+            >
+              {isToolbarAiLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
+            </button>
+          </Tooltip>
         </div>
       </div>
 

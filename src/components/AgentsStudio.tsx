@@ -29,6 +29,7 @@ import {
   isAgentMarkdownFilename,
 } from '../utils/agentMarkdownKnowledge';
 import { useAppDialog } from './AppDialogProvider';
+import { Tooltip } from './ui/Tooltip';
 import { AgentIcon } from './AgentIcon';
 
 type SandboxChatMessage = { role: 'user' | 'model'; text: string };
@@ -618,13 +619,15 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                       value={sandboxInput}
                       onChange={e => setSandboxInput(e.target.value)}
                     />
-                    <button 
-                      type="submit"
-                      disabled={!sandboxInput.trim() || isSandboxLoading}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-[#C2410C] text-white flex items-center justify-center hover:bg-[#9a3412] transition-colors disabled:opacity-50"
-                    >
-                      <Send className="w-4 h-4" />
-                    </button>
+                    <Tooltip label={t('agents.sandbox_send')}>
+                      <button
+                        type="submit"
+                        disabled={!sandboxInput.trim() || isSandboxLoading}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-[#C2410C] text-white flex items-center justify-center hover:bg-[#9a3412] transition-colors disabled:opacity-50"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </Tooltip>
                   </form>
                   <p className="text-[10px] text-center text-[#8c8a84] mt-2 font-mono">
                     {t('agents.sandbox_note')}

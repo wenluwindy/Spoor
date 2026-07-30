@@ -123,17 +123,20 @@ export function Sidebar({
         </a>
       </nav>
       <div className="mt-auto px-4 pb-4 w-full flex flex-col gap-1">
-        <button 
+        <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsSidebarOpen(!isSidebarOpen); }}
           className={`w-full flex items-center ${isSidebarOpen ? 'gap-3' : 'justify-center'} py-2 text-[#8c8a84] hover:text-[#1a1a1a] hover:bg-[#EAE7E2] transition-colors rounded-lg group/toggle`}
+          aria-label={isSidebarOpen ? t('sidebar.collapse') : t('sidebar.expand')}
+          title={isSidebarOpen ? t('sidebar.collapse') : t('sidebar.expand')}
         >
           <div className={`flex items-center justify-center ${isSidebarOpen ? 'w-6' : 'w-10'}`}>
             {isSidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5 transition-transform group-hover/toggle:translate-x-0.5" />}
           </div>
         </button>
-        <button 
+        <button
           onClick={() => setIsSettingsOpen(true)}
           className={`w-full flex items-center ${isSidebarOpen ? 'gap-3' : 'justify-center'} py-2 text-[#5a5a54] hover:bg-[#EAE7E2] transition-colors rounded-lg group/settings`}
+          aria-label={t('sidebar.settings')}
           title={t('sidebar.settings')}
         >
           <div className={`flex items-center justify-center ${isSidebarOpen ? 'w-6' : 'w-10'}`}>

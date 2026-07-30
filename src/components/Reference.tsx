@@ -20,6 +20,7 @@ import type { Article } from '../db';
 import { isContentBlurPersistenceDisabled } from '../config/persistence';
 import { extractToc, slugifyHeading } from '../utils/referenceToc';
 import { useAppDialog } from './AppDialogProvider';
+import { Tooltip } from './ui/Tooltip';
 
 const REFERENCE_MARKDOWN_PLUGINS = [remarkBreaks];
 
@@ -337,6 +338,7 @@ export function Reference({
               type="button"
               onClick={() => setIsFullScreen(!isFullScreen)}
               className="hover:text-[#1a1a1a] transition-colors p-1 bg-white hover:bg-[#EAE7E2] rounded border border-[#E6E4DF] shadow-sm ml-[-4px]"
+              aria-label={isFullScreen ? t('reference.immersive_exit') : t('reference.immersive_enter')}
               title={isFullScreen ? t('reference.immersive_exit') : t('reference.immersive_enter')}
             >
               {isFullScreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -551,15 +553,16 @@ export function Reference({
                   disabled={!activeArticle}
                   className="flex-1 text-[11px] bg-[#FAF9F6] border border-[#E6E4DF] rounded px-2 py-1.5 focus:outline-none focus:border-[#C2410C]"
                 />
-                <button
-                  type="button"
-                  onClick={addTag}
-                  disabled={!activeArticle}
-                  className="p-1.5 rounded border border-[#E6E4DF] hover:bg-[#F4F1ED] disabled:opacity-40"
-                  title={t('reference.tags')}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
+                <Tooltip label={t('reference.tag_add')}>
+                  <button
+                    type="button"
+                    onClick={addTag}
+                    disabled={!activeArticle}
+                    className="p-1.5 rounded border border-[#E6E4DF] hover:bg-[#F4F1ED] disabled:opacity-40"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </Tooltip>
               </div>
             </div>
 

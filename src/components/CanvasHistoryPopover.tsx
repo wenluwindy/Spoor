@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { History, Plus, Edit3 } from 'lucide-react';
 import { db } from '../db';
 import type { Canvas } from '../db';
+import { Tooltip } from './ui/Tooltip';
 
 export interface CanvasHistoryPopoverProps {
   canvases: Canvas[];
@@ -37,13 +38,14 @@ export function CanvasHistoryPopover({ canvases, activeCanvasId, setActiveCanvas
   return (
     <div className="absolute top-6 left-6 flex items-center z-40 gap-2">
       <div className="relative">
-        <button 
-          onClick={() => setIsOpen(!isOpen)}
-          className="bg-white text-[#1a1a1a] p-3 rounded-full shadow-md hover:bg-[#F4F1ED] transition-all flex items-center justify-center border border-[#E6E4DF] group"
-          title={t('canvas.history')}
-        >
-          <History className="w-5 h-5 transition-transform group-hover:rotate-[-10deg]" />
-        </button>
+        <Tooltip label={t('canvas.history')}>
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            className="bg-white text-[#1a1a1a] p-3 rounded-full shadow-md hover:bg-[#F4F1ED] transition-all flex items-center justify-center border border-[#E6E4DF] group"
+          >
+            <History className="w-5 h-5 transition-transform group-hover:rotate-[-10deg]" />
+          </button>
+        </Tooltip>
         
         {isOpen && (
           <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-[#E6E4DF] rounded-xl shadow-2xl p-1 z-50">
@@ -82,17 +84,18 @@ export function CanvasHistoryPopover({ canvases, activeCanvasId, setActiveCanvas
                         {canvas.name}
                       </button>
                       <div className="flex items-center gap-2">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingCanvasId(canvas.id);
-                            setEditingCanvasName(canvas.name);
-                          }}
-                          className="p-1 hover:text-[#C2410C] opacity-0 group-hover:opacity-100 transition-opacity"
-                          title={t('canvas.rename')}
-                        >
-                          <Edit3 className="w-3 h-3" />
-                        </button>
+                        <Tooltip label={t('canvas.rename')}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingCanvasId(canvas.id);
+                              setEditingCanvasName(canvas.name);
+                            }}
+                            className="p-1 hover:text-[#C2410C] opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </button>
+                        </Tooltip>
                         {activeCanvasId === canvas.id && <div className="w-1.5 h-1.5 rounded-full bg-[#C2410C]" />}
                       </div>
                     </div>

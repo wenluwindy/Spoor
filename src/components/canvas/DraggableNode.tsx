@@ -5,6 +5,7 @@ import { colorPresets, fontPresets } from '../../constants/presets';
 import { isDarkNodeBackground } from '../../utils/nodePaletteTone';
 import { useDraggable } from '../../hooks/useDraggable';
 import { useResizable } from '../../hooks/useResizable';
+import { Tooltip } from '../ui/Tooltip';
 
 export interface DraggableNodeProps {
   id: string;
@@ -125,27 +126,29 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
       ref={el => { if (nodesRef) nodesRef.current[id] = el; }}
     >
       {onToggleSelect && (
-        <button 
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onToggleSelect(); }} 
-          className={`absolute -top-3 -left-3 w-6 h-6 bg-white border ${isSelected ? 'border-[#C2410C] text-[#C2410C] opacity-100' : 'border-[#E6E4DF] text-transparent hover:border-[#C2410C] opacity-0 group-hover:opacity-40'} rounded-full flex items-center justify-center transition-all z-10 shadow-sm ${hideChrome ? '!opacity-0 pointer-events-none' : ''}`}
-          title={t('canvas.select_note')}
-        >
-          <Check className="w-3 h-3" />
-        </button>
+        <Tooltip label={t('canvas.select_note')}>
+          <button
+            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onToggleSelect(); }}
+            className={`absolute -top-3 -left-3 w-6 h-6 bg-white border ${isSelected ? 'border-[#C2410C] text-[#C2410C] opacity-100' : 'border-[#E6E4DF] text-transparent hover:border-[#C2410C] opacity-0 group-hover:opacity-40'} rounded-full flex items-center justify-center transition-all z-10 shadow-sm ${hideChrome ? '!opacity-0 pointer-events-none' : ''}`}
+          >
+            <Check className="w-3 h-3" />
+          </button>
+        </Tooltip>
       )}
-      <button 
-        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onLink(id); }}
-        className={`absolute top-1/2 -mt-3 -right-3 w-6 h-6 bg-white border border-[#E6E4DF] rounded-full flex items-center justify-center text-[#8c8a84] hover:text-[#C2410C] hover:border-[#C2410C] transition-all z-10 shadow-sm ${
-          hideChrome
-            ? '!opacity-0 pointer-events-none'
-            : isSelected
-              ? 'opacity-100'
-              : 'opacity-0 group-hover:opacity-100'
-        }`}
-        title={t('canvas.link_note')}
-      >
-        <Plus className="w-4 h-4" />
-      </button>
+      <Tooltip label={t('canvas.link_note')}>
+        <button
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onLink(id); }}
+          className={`absolute top-1/2 -mt-3 -right-3 w-6 h-6 bg-white border border-[#E6E4DF] rounded-full flex items-center justify-center text-[#8c8a84] hover:text-[#C2410C] hover:border-[#C2410C] transition-all z-10 shadow-sm ${
+            hideChrome
+              ? '!opacity-0 pointer-events-none'
+              : isSelected
+                ? 'opacity-100'
+                : 'opacity-0 group-hover:opacity-100'
+          }`}
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      </Tooltip>
       <div
         className={`absolute -bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 transition-opacity z-10 ${
           hideChrome
@@ -156,22 +159,24 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
         }`}
       >
         {onCycleLayout && (
-          <button 
-            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onCycleLayout(); }} 
-            className="w-6 h-6 bg-white border border-[#E6E4DF] rounded-full flex items-center justify-center text-[#8c8a84] hover:text-[#C2410C] hover:border-[#C2410C] transition-all shadow-sm"
-            title={t('canvas.cycle_layout')}
-          >
-            <SlidersHorizontal className="w-3 h-3" />
-          </button>
+          <Tooltip label={t('canvas.cycle_layout')}>
+            <button
+              onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onCycleLayout(); }}
+              className="w-6 h-6 bg-white border border-[#E6E4DF] rounded-full flex items-center justify-center text-[#8c8a84] hover:text-[#C2410C] hover:border-[#C2410C] transition-all shadow-sm"
+            >
+              <SlidersHorizontal className="w-3 h-3" />
+            </button>
+          </Tooltip>
         )}
         {onDelete && (
-          <button 
-            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onDelete(); }} 
-            className="w-6 h-6 bg-white border border-[#E6E4DF] rounded-full flex items-center justify-center text-[#8c8a84] hover:text-[#C2410C] hover:border-[#C2410C] transition-all shadow-sm"
-            title={t('canvas.delete_note')}
-          >
-            <Trash2 className="w-3 h-3" />
-          </button>
+          <Tooltip label={t('canvas.delete_note')}>
+            <button
+              onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onDelete(); }}
+              className="w-6 h-6 bg-white border border-[#E6E4DF] rounded-full flex items-center justify-center text-[#8c8a84] hover:text-[#C2410C] hover:border-[#C2410C] transition-all shadow-sm"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </Tooltip>
         )}
       </div>
       {children}
@@ -197,13 +202,13 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
         >
           <div className="flex gap-1.5">
             {paletteColorChoices.map((color, i) => (
-              <button 
-                key={glassSurface ? i + 3 : i} 
-                onClick={() => setStyleOverrides(prev => ({ ...prev, bg: color.bg, text: color.text, border: color.border }))}
-                className="w-5 h-5 rounded-full border border-black/10 transition-transform hover:scale-110 shadow-sm"
-                style={{ backgroundColor: color.bg }}
-                title={t('canvas.change_color')}
-              />
+              <Tooltip key={glassSurface ? i + 3 : i} label={t('canvas.change_color')}>
+                <button
+                  onClick={() => setStyleOverrides(prev => ({ ...prev, bg: color.bg, text: color.text, border: color.border }))}
+                  className="w-5 h-5 rounded-full border border-black/10 transition-transform hover:scale-110 shadow-sm"
+                  style={{ backgroundColor: color.bg }}
+                />
+              </Tooltip>
             ))}
           </div>
           <div className="w-[1px] h-4 bg-[#E6E4DF]"></div>

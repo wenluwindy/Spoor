@@ -43,7 +43,9 @@ export const en = {
     "agent_subtitle": "Intelligent Co-thinkers",
     "drop_agent": "Drop to analyze context",
     "settings": "Settings",
-    "avatar_alt": "Profile picture"
+    "avatar_alt": "Profile picture",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar"
   },
   "canvas": {
     "zoom": "Zoom",
@@ -230,7 +232,8 @@ export const en = {
       "threadFollowUp": "You are continuing a dialogue on the canvas. The assistant’s previous reply was:\n\n---\n{{previous}}\n---\n\nThe user’s new message:\n{{request}}\n\nRespond as a thoughtful continuation. Address the follow-up directly; keep the same voice and depth as before unless the user asks otherwise.",
       "agentThreadContextMissing": "(Original source note is unavailable or was removed — continue using the dialogue below.)",
       "agentThreadFollowUp": "You are continuing an agent-persona thread on the canvas.\n\n## Original material (same as the first analysis)\n\n---\n{{initialContext}}\n---\n\n## Dialogue so far (oldest to newest)\n\n{{dialogueHistory}}\n\n## User’s new message\n\n{{request}}\n\nReply as a direct continuation: stay aligned with the agent’s role, keep depth consistent, and tie back to the original material when relevant."
-    }
+    },
+    "submit": "Ask AI"
   },
   "lab": {
     "investigate": "What would you like to investigate?",
@@ -297,7 +300,8 @@ export const en = {
       "point_title": "Common causes",
       "point_text": "Real newlines inserted inside a long string; unescaped double quotes in the body; explanatory prose before or after the JSON; trailing commas in arrays or objects.",
       "conclusion": "Try shortening the search context or switching models, then retry. If it keeps failing, check the console for the reported JSON character position to inspect the raw output."
-    }
+    },
+    "start_research": "Start research"
   },
   "reference": {
     "index_title": "Archive Index",
@@ -330,7 +334,8 @@ export const en = {
     "remove_tag": "Remove tag",
     "no_matches": "No matching references.",
     "note_saving": "Saving…",
-    "note_saved": "Saved"
+    "note_saved": "Saved",
+    "tag_add": "Add tag"
   },
   "agents": {
     "personas": "Personas",
@@ -379,7 +384,8 @@ export const en = {
     },
     "default_role": "Assistant",
     "prompt_placeholder": "You are a specialized agent. Your goal is to…",
-    "sandbox_error": "Error: {{msg}} (see the [Spoor] entries in Console)"
+    "sandbox_error": "Error: {{msg}} (see the [Spoor] entries in Console)",
+    "sandbox_send": "Send message"
   },
   "seed": {
     "canvas_name": "Main workspace",

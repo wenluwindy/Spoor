@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import type { CallAIFn } from '../types';
 import { useAppDialog } from './AppDialogProvider';
+import { Tooltip } from './ui/Tooltip';
 
 export type ResearchPlanStep = { title: string; desc: string };
 
@@ -654,12 +655,14 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
                    className="relative w-full bg-white border border-[#E6E4DF] text-[#1a1a1a] pl-6 pr-16 py-4 rounded-xl font-sans focus:outline-none focus:border-[#C2410C] focus:ring-1 focus:ring-[#C2410C] shadow-lg text-lg placeholder-[#8c8a84]"
                    autoFocus
                  />
-                 <button
-                   type="submit"
-                   className={`absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-lg flex items-center justify-center transition-all ${query.trim() ? 'bg-[#C2410C] text-white hover:bg-[#a0350a] shadow-md' : 'bg-[#F4F1ED] text-[#8c8a84] cursor-not-allowed border border-[#E6E4DF]'}`}
-                 >
-                   <ArrowRight className="w-5 h-5" />
-                 </button>
+                 <Tooltip label={t('lab.start_research')}>
+                   <button
+                     type="submit"
+                     className={`absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-lg flex items-center justify-center transition-all ${query.trim() ? 'bg-[#C2410C] text-white hover:bg-[#a0350a] shadow-md' : 'bg-[#F4F1ED] text-[#8c8a84] cursor-not-allowed border border-[#E6E4DF]'}`}
+                   >
+                     <ArrowRight className="w-5 h-5" />
+                   </button>
+                 </Tooltip>
               </form>
 
               <div className="mt-8 flex gap-3 text-xs font-mono text-[#5a5a54]">

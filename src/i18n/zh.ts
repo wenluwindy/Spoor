@@ -43,7 +43,9 @@ export const zh = {
     "agent_subtitle": "智能协同思考者",
     "drop_agent": "拖拽以分析上下文",
     "settings": "设置",
-    "avatar_alt": "头像"
+    "avatar_alt": "头像",
+    "collapse": "收起侧栏",
+    "expand": "展开侧栏"
   },
   "canvas": {
     "zoom": "缩放",
@@ -230,7 +232,8 @@ export const zh = {
       "threadFollowUp": "你正在画布上延续一段对话。助手上一轮回复如下：\n\n---\n{{previous}}\n---\n\n用户的新消息：\n{{request}}\n\n请承接上文，直接回应这条追问；语气与深度与之前保持一致，除非用户另有要求。",
       "agentThreadContextMissing": "（首轮分析的原始便签不可用或已删除，请仅依据下列对话与当前追问作答。）",
       "agentThreadFollowUp": "你正在延续画布上某一 Agent 人格的对话线程。\n\n## 原始材料（与首次分析时相同的那份正文）\n\n---\n{{initialContext}}\n---\n\n## 已发生的对话（从旧到新）\n\n{{dialogueHistory}}\n\n## 用户本条消息\n\n{{request}}\n\n请直接接着谈：保持该 Agent 人设与深度；需要时请回扣原始材料。"
-    }
+    },
+    "submit": "让 AI 生成"
   },
   "lab": {
     "investigate": "您想调查什么？",
@@ -297,7 +300,8 @@ export const zh = {
       "point_title": "常见原因",
       "point_text": "要点段落过长时在字符串里插入了真实换行；正文里使用了未转义的英文双引号；在 JSON 前后写了说明文字；数组或对象末尾带了尾随逗号等。",
       "conclusion": "请尝试缩短检索摘要、更换模型后重试。若多次失败，可在控制台查看 JSON 报错位置（character position）以核对模型原始输出。"
-    }
+    },
+    "start_research": "开始研究"
   },
   "reference": {
     "index_title": "档案索引",
@@ -330,7 +334,8 @@ export const zh = {
     "remove_tag": "移除标签",
     "no_matches": "没有匹配的文献。",
     "note_saving": "保存中…",
-    "note_saved": "已保存"
+    "note_saved": "已保存",
+    "tag_add": "添加标签"
   },
   "agents": {
     "personas": "人格设定",
@@ -379,7 +384,8 @@ export const zh = {
     },
     "default_role": "助手",
     "prompt_placeholder": "你是一个专门的智能体。你的目标是……",
-    "sandbox_error": "出错：{{msg}}（详见 Console 中的 [Spoor] 日志）"
+    "sandbox_error": "出错：{{msg}}（详见 Console 中的 [Spoor] 日志）",
+    "sandbox_send": "发送消息"
   },
   "seed": {
     "canvas_name": "主工作区",
