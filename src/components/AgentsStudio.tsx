@@ -17,6 +17,7 @@ import type { AgentConfig, AgentMarkdownKnowledgeFile } from '../db';
 import { db } from '../db';
 import type { CallAIFn } from '../types';
 import { formatAiError } from '../services/ai';
+import { resolveErrorMessage } from '../utils/resolveErrorMessage';
 import {
   buildAgentSystemInstruction,
   getLocaleDirective,
@@ -195,10 +196,9 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
       enhanced = enhanced.replace(/^(New Enhanced Prompt:|新增强提示词[:：])\s*/i, '').trim();
       handleUpdateActiveAgent('prompt', enhanced);
     } catch (error) {
-      const msg = formatAiError(error);
-      console.error('[Scribe AI] enhance prompt failed', msg);
+      console.error('[Scribe AI] enhance prompt failed', formatAiError(error));
       void appAlert({
-        message: `增强提示词失败\n\n${msg}\n\nF12 → Console 查看 [Scribe AI] 日志。`,
+        message: `${t('agents.enhance_failed')}\n\n${resolveErrorMessage(error, t)}\n\n${t('errors.console_hint')}`,
       });
     } finally {
       setIsEnhancing(false);
@@ -255,11 +255,10 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
         console.error('[Scribe AI] sandbox persist (assistant) failed', err);
       }
     } catch (error) {
-      const msg = formatAiError(error);
-      console.error('[Scribe AI] sandbox chat failed', msg);
+      console.error('[Scribe AI] sandbox chat failed', formatAiError(error));
       const errLine: SandboxChatMessage = {
         role: 'model',
-        text: t('agents.sandbox_error', { msg }),
+        text: t('agents.sandbox_error', { msg: resolveErrorMessage(error, t) }),
       };
       const afterErr: SandboxChatMessage[] = [...afterUser, errLine];
       if (sandboxUiAgentRef.current === scopedAgentId) {

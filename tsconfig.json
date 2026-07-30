@@ -25,5 +25,18 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": [
+    "src",
+    "tests",
+    "scripts",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ],
+  "//exclude": "allowJs 为 true 时，tsc 会把 Rust 构建产物里的生成 JS（src-tauri/target/**/tauri-codegen-assets）也当源码编译并报 TS1490/TS1127。显式限定 include 比逐条 exclude 更稳。",
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src-tauri"
+  ]
 }

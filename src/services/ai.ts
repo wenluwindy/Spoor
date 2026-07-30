@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import { MIMO_TOKEN_PLAN_BASE_URL } from '../constants/mimo';
 import { DOUBAO_ARK_BASE_URL } from '../constants/doubao';
 import { DEEPSEEK_BASE_URL, DEEPSEEK_DEFAULT_MODEL } from '../constants/deepseek';
+import { AppError } from './appError';
 
 const LOG_PREFIX = '[Scribe AI]';
 
@@ -56,7 +57,7 @@ function extractChatCompletionContent(data: unknown): string {
   const content = d?.choices?.[0]?.message?.content;
   if (content == null || content === '') {
     console.error(`${LOG_PREFIX} unexpected response (no choices[0].message.content)`, data);
-    throw new Error('API returned no text content. Open DevTools → Console for the full response.');
+    throw new AppError('ai.no_text');
   }
   if (typeof content === 'string') return content;
   if (Array.isArray(content)) {
@@ -141,7 +142,7 @@ async function postOpenAiCompatibleChat(
 ): Promise<string> {
   const key = apiKey.trim();
   if (!key) {
-    throw new Error('API Key 为空（或只有空格）。请在设置中粘贴 MiMo 的密钥（通常以 tp- 开头）。');
+    throw new AppError('ai.no_api_key');
   }
   console.info(`${LOG_PREFIX} chat/completions request`, {
     provider: meta.provider,
@@ -159,7 +160,8 @@ async function postOpenAiCompatibleChat(
     } catch (e) {
       const msg = formatAiError(e);
       console.error(`${LOG_PREFIX} Tauri invoke openai_compatible_chat failed`, msg);
-      throw new Error(msg);
+      // Rust 侧把 HTTP 错误体原样抛回来，归入 http 类并保留原文作为详情
+      throw new AppError('ai.http', msg);
     }
   }
 
@@ -175,7 +177,7 @@ async function postOpenAiCompatibleChat(
     });
   } catch (e) {
     console.error(`${LOG_PREFIX} network/fetch failed`, { url, error: formatAiError(e) });
-    throw new Error(`Network error: ${formatAiError(e)}. If this is MiMo or Doubao in the browser, ensure Vite dev server is running (proxy /api/mimo or /api/doubao) or use the desktop app.`);
+    throw new AppError('ai.network', formatAiError(e));
   }
 
   const rawText = await response.text();
@@ -186,7 +188,7 @@ async function postOpenAiCompatibleChat(
       url,
       bodyPreview: rawText.slice(0, 2000),
     });
-    throw new Error(msg);
+    throw new AppError('ai.http', msg);
   }
 
   let data: unknown;
@@ -194,7 +196,7 @@ async function postOpenAiCompatibleChat(
     data = JSON.parse(rawText);
   } catch {
     console.error(`${LOG_PREFIX} invalid JSON response`, rawText.slice(0, 2000));
-    throw new Error('API returned non-JSON response. See console for preview.');
+    throw new AppError('ai.bad_response');
   }
   return extractChatCompletionContent(data);
 }
@@ -211,7 +213,7 @@ async function consumeOpenAiSseFromResponse(
     try {
       data = JSON.parse(rawText);
     } catch {
-      throw new Error('API returned non-JSON response.');
+      throw new AppError('ai.bad_response');
     }
     const content = extractChatCompletionContent(data);
     onAccumulated(content);
@@ -284,7 +286,7 @@ async function postOpenAiCompatibleChatWithOptionalStream(
 
   const key = apiKey.trim();
   if (!key) {
-    throw new Error('API Key 为空（或只有空格）。请在设置中粘贴 MiMo 的密钥（通常以 tp- 开头）。');
+    throw new AppError('ai.no_api_key');
   }
   console.info(`${LOG_PREFIX} chat/completions stream`, {
     provider: meta.provider,
@@ -306,17 +308,17 @@ async function postOpenAiCompatibleChatWithOptionalStream(
     });
   } catch (e) {
     console.error(`${LOG_PREFIX} stream network/fetch failed`, { url, error: formatAiError(e) });
-    throw new Error(`Network error: ${formatAiError(e)}. If this is MiMo or Doubao in the browser, ensure Vite dev server is running (proxy /api/mimo or /api/doubao) or use the desktop app.`);
+    throw new AppError('ai.network', formatAiError(e));
   }
 
   if (!response.ok) {
     const errBody = await response.text();
-    throw new Error(parseOpenAiStyleErrorBody(errBody, response.status));
+    throw new AppError('ai.http', parseOpenAiStyleErrorBody(errBody, response.status));
   }
 
   const full = await consumeOpenAiSseFromResponse(response, onStreamChunk);
   if (!full.trim()) {
-    throw new Error('API returned an empty streamed response.');
+    throw new AppError('ai.no_text');
   }
   return full;
 }
@@ -363,16 +365,14 @@ export async function callUniversalAI({
 
   if (config.provider === 'local_llama') {
     if (images?.length) {
-      throw new Error(
-        '本地 GGUF（llama.cpp）当前不支持在请求中附带图片。请改用在线多模态模型，或暂时移除与便签/Agent 相连的图片来源后再试。',
-      );
+      throw new AppError('ai.local_no_images');
     }
     if (!isTauriRuntime()) {
-      throw new Error('本地 GGUF（内置 llama.cpp）仅在使用 Tauri 桌面版时可用，网页版请改用在线模型。');
+      throw new AppError('ai.local_desktop_only');
     }
     const modelPath = (config.localGgufPath ?? '').trim();
     if (!modelPath) {
-      throw new Error('请在设置中填写本地 GGUF 模型文件的完整路径。');
+      throw new AppError('ai.local_no_path');
     }
     const { invoke } = await import('@tauri-apps/api/core');
 
@@ -419,13 +419,12 @@ export async function callUniversalAI({
       const elapsedMs = Date.now() - startedAt;
       const msg = formatAiError(e);
       console.error(`${LOG_PREFIX} local_llama ← FAILED (${elapsedMs}ms)`, msg, { logPath });
-      const suffix = logPath ? `\n\n详细日志：${logPath}` : '';
-      throw new Error(`${msg}${suffix}`);
+      throw new AppError('ai.local_failed', logPath ? `${msg}\n${logPath}` : msg);
     }
   }
 
   if (config.provider === 'gemini') {
-    if (!apiKeyTrimmed) throw new Error('Gemini: API Key missing. Open Settings and paste your key.');
+    if (!apiKeyTrimmed) throw new AppError('ai.no_api_key');
     const apiKey = apiKeyTrimmed;
 
     console.info(`${LOG_PREFIX} Gemini generateContent`, {
@@ -456,7 +455,7 @@ export async function callUniversalAI({
   }
 
   if (!useUserConfig) {
-    throw new Error(`API Key missing for provider "${config.provider}". Open Settings and paste your key.`);
+    throw new AppError('ai.no_api_key');
   }
 
   if (
@@ -490,10 +489,8 @@ export async function callUniversalAI({
             : 'gpt-4o';
     const model = (config.model ?? '').trim() || fallbackModel;
     if (!model) {
-      throw new Error(
-        config.provider === 'doubao'
-          ? 'Volcengine Ark needs the inference endpoint ID from your console (starts with ep-). Open Settings and fill in the model field.'
-          : `Model is empty for provider "${config.provider}". Open Settings and fill in the model field.`,
+      throw new AppError(
+        config.provider === 'doubao' ? 'ai.doubao_needs_endpoint' : 'ai.no_model',
       );
     }
     const body = {
@@ -538,13 +535,13 @@ export async function callUniversalAI({
       const raw = await response.text();
       const msg = parseOpenAiStyleErrorBody(raw, response.status);
       console.error(`${LOG_PREFIX} Anthropic HTTP error`, response.status, raw.slice(0, 2000));
-      throw new Error(msg);
+      throw new AppError('ai.http', msg);
     }
     const data = await response.json();
     const blocks = data.content as Array<{ type?: string; text?: string }>;
     if (!Array.isArray(blocks) || blocks.length === 0) {
       console.error(`${LOG_PREFIX} unexpected Anthropic response`, data);
-      throw new Error('API returned no content blocks.');
+      throw new AppError('ai.bad_response');
     }
     const text = blocks
       .map((b) => {
@@ -555,11 +552,11 @@ export async function callUniversalAI({
       .join('');
     if (!text) {
       console.error(`${LOG_PREFIX} Anthropic returned no text blocks`, data);
-      throw new Error('API returned no text content.');
+      throw new AppError('ai.no_text');
     }
     onStreamChunk?.(text);
     return text;
   }
 
-  throw new Error(`Provider not supported: ${config.provider}`);
+  throw new AppError('ai.provider_unsupported', config.provider);
 }

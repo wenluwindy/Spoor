@@ -233,7 +233,9 @@ export const en = {
       "agentThreadContextMissing": "(Original source note is unavailable or was removed — continue using the dialogue below.)",
       "agentThreadFollowUp": "You are continuing an agent-persona thread on the canvas.\n\n## Original material (same as the first analysis)\n\n---\n{{initialContext}}\n---\n\n## Dialogue so far (oldest to newest)\n\n{{dialogueHistory}}\n\n## User’s new message\n\n{{request}}\n\nReply as a direct continuation: stay aligned with the agent’s role, keep depth consistent, and tie back to the original material when relevant."
     },
-    "submit": "Ask AI"
+    "submit": "Ask AI",
+    "generate_failed": "AI generation failed",
+    "publish_failed": "Synthesis failed"
   },
   "lab": {
     "investigate": "What would you like to investigate?",
@@ -385,7 +387,8 @@ export const en = {
     "default_role": "Assistant",
     "prompt_placeholder": "You are a specialized agent. Your goal is to…",
     "sandbox_error": "Error: {{msg}} (see the [Spoor] entries in Console)",
-    "sandbox_send": "Send message"
+    "sandbox_send": "Send message",
+    "enhance_failed": "Could not enhance the prompt"
   },
   "seed": {
     "canvas_name": "Main workspace",
@@ -395,5 +398,25 @@ export const en = {
     "note_1": "Spatial architecture of trauma",
     "ai": "Memory is not a storage, but a navigation.",
     "note_2": "Non-euclidean memory leaks"
+  },
+  "errors": {
+    "detail_label": "Details: ",
+    "ai.no_api_key": "No API key configured. Open Settings and paste the key for your provider.",
+    "ai.no_model": "The model field is empty. Open Settings and fill in a model name.",
+    "ai.doubao_needs_endpoint": "Volcengine Ark needs the inference endpoint ID from your console (starts with ep-), not a model name. Fill it into the model field in Settings.",
+    "ai.provider_unsupported": "This provider is not supported yet.",
+    "ai.network": "Could not reach the model service. Check your network and the Base URL in Settings.",
+    "ai.http": "The model service rejected the request.",
+    "ai.bad_response": "The model service returned a response that could not be parsed.",
+    "ai.no_text": "The model returned no text. Try again, or switch model.",
+    "ai.local_desktop_only": "Local GGUF inference only works in the desktop app.",
+    "ai.local_no_path": "Fill in the full path to your GGUF model file in Settings.",
+    "ai.local_no_images": "Local GGUF (llama.cpp) cannot take images. Use an online multimodal model, or disconnect the image nodes.",
+    "ai.local_failed": "Local inference failed.",
+    "search.no_key": "No Metaso Search API key configured. Add one in Settings.",
+    "search.failed": "Web search failed.",
+    "file.unsupported": "Unsupported file type.",
+    "console_hint": "Press F12 → Console for the [Spoor] log.",
+    "check_settings_hint": "Check the provider, API key, Base URL and model in Settings."
   }
 };

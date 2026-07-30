@@ -105,7 +105,7 @@ describe('callUniversalAI', () => {
           config: { ...baseConfig, apiKey: '' },
           prompt: 'Hello',
         })
-      ).rejects.toThrow('API Key missing');
+      ).rejects.toThrow('ai.no_api_key');
       process.env.GEMINI_API_KEY = original;
     });
   });
@@ -155,7 +155,7 @@ describe('callUniversalAI', () => {
           config: { ...baseConfig, provider: 'mimo', apiKey: '' },
           prompt: 'Hello',
         }),
-      ).rejects.toThrow(/API Key missing/);
+      ).rejects.toThrow('ai.no_api_key');
     });
   });
 
@@ -205,7 +205,7 @@ describe('callUniversalAI', () => {
           config: { ...baseConfig, provider: 'doubao', apiKey: '' },
           prompt: 'Hello',
         }),
-      ).rejects.toThrow(/API Key missing/);
+      ).rejects.toThrow('ai.no_api_key');
     });
 
     it('throws a pointed error when the endpoint id is blank', async () => {
@@ -214,7 +214,7 @@ describe('callUniversalAI', () => {
           config: { ...baseConfig, provider: 'doubao', apiKey: 'ark-user-key', model: '' },
           prompt: 'Hello',
         }),
-      ).rejects.toThrow(/inference endpoint ID/);
+      ).rejects.toThrow('ai.doubao_needs_endpoint');
     });
   });
 
@@ -311,7 +311,7 @@ describe('callUniversalAI', () => {
           config: { ...baseConfig, provider: 'openai', apiKey: 'bad-key' },
           prompt: 'Hello',
         })
-      ).rejects.toThrow('Unauthorized');
+      ).rejects.toThrow(expect.objectContaining({ code: 'ai.http', detail: expect.stringContaining('Unauthorized') }));
     });
 
     it('onStreamChunk 在 OpenAI SSE 流式响应时增量累积', async () => {
@@ -522,7 +522,7 @@ describe('callUniversalAI', () => {
           config: { ...baseConfig, provider: 'anthropic', apiKey: 'bad-key' },
           prompt: 'Hello',
         })
-      ).rejects.toThrow('Forbidden');
+      ).rejects.toThrow(expect.objectContaining({ code: 'ai.http', detail: expect.stringContaining('Forbidden') }));
     });
   });
 
@@ -555,7 +555,7 @@ describe('callUniversalAI', () => {
       delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
       await expect(
         callUniversalAI({ config: localBase, prompt: 'hi' })
-      ).rejects.toThrow('Tauri 桌面版');
+      ).rejects.toThrow('ai.local_desktop_only');
       expect(mockInvoke).not.toHaveBeenCalled();
     });
 
@@ -565,7 +565,7 @@ describe('callUniversalAI', () => {
           config: { ...localBase, localGgufPath: '' },
           prompt: 'hi',
         })
-      ).rejects.toThrow('请在设置中填写本地 GGUF');
+      ).rejects.toThrow('ai.local_no_path');
       expect(mockInvoke).not.toHaveBeenCalled();
     });
 
@@ -575,7 +575,7 @@ describe('callUniversalAI', () => {
           config: { ...localBase, localGgufPath: '   \t  ' },
           prompt: 'hi',
         })
-      ).rejects.toThrow('请在设置中填写本地 GGUF');
+      ).rejects.toThrow('ai.local_no_path');
     });
 
     it('附带 images 时抛错且不调用 invoke', async () => {
@@ -585,7 +585,7 @@ describe('callUniversalAI', () => {
           prompt: 'hi',
           images: ['data:image/png;base64,AAAA'],
         })
-      ).rejects.toThrow('不支持');
+      ).rejects.toThrow('ai.local_no_images');
       expect(mockInvoke).not.toHaveBeenCalled();
     });
 
@@ -666,7 +666,12 @@ describe('callUniversalAI', () => {
 
       await expect(
         callUniversalAI({ config: localBase, prompt: 'hi' })
-      ).rejects.toThrow(/out of memory[\s\S]*详细日志[\s\S]*spoor_llama\.log/);
+      ).rejects.toThrow(
+        expect.objectContaining({
+          code: 'ai.local_failed',
+          detail: expect.stringMatching(/out of memory[\s\S]*spoor_llama\.log/),
+        }),
+      );
     });
 
     it('get_local_llama_log_path 调用失败时不应中断主流程', async () => {
@@ -686,7 +691,9 @@ describe('callUniversalAI', () => {
 
       await expect(
         callUniversalAI({ config: localBase, prompt: 'hi' })
-      ).rejects.toThrow(/^inference exploded$/);
+      ).rejects.toThrow(
+        expect.objectContaining({ code: 'ai.local_failed', detail: 'inference exploded' }),
+      );
     });
 
     it('Tauri 端返回非 Error 异常（字符串/对象）也能正确格式化', async () => {
@@ -696,7 +703,12 @@ describe('callUniversalAI', () => {
 
       await expect(
         callUniversalAI({ config: localBase, prompt: 'hi' })
-      ).rejects.toThrow(/plain string error from rust[\s\S]*详细日志/);
+      ).rejects.toThrow(
+        expect.objectContaining({
+          code: 'ai.local_failed',
+          detail: expect.stringContaining('plain string error from rust'),
+        }),
+      );
     });
 
     it('modelPath 前后含空格时应被 trim 后再下发', async () => {
@@ -723,7 +735,7 @@ describe('callUniversalAI', () => {
           config: { ...baseConfig, provider: 'invalid-provider', apiKey: 'key' },
           prompt: 'Hello',
         })
-      ).rejects.toThrow('Provider not supported');
+      ).rejects.toThrow('ai.provider_unsupported');
     });
   });
 });

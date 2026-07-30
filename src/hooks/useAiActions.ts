@@ -21,11 +21,18 @@ import { parsePublishArticleResponse } from '../utils/parsePublishArticleRespons
 import { db } from '../db';
 import { useAppDialog } from '../components/AppDialogProvider';
 import { runCanvasStreamingAiCall } from '../utils/canvasStreamingAi';
+import { resolveErrorMessage } from '../utils/resolveErrorMessage';
 
-function formatAiFailureAlertMessage(msg: string): string {
-  return (
-    `AI 生成失败\n\n${msg}\n\n请检查设置中的 Provider / API Key / Base URL / 模型。\n\nF12 → Console 查看 [Spoor] 日志。`
-  );
+type TranslateFn = (key: string) => string;
+
+/** AI 调用失败时的统一提示：本地化原因 + 排查指引 + 日志入口。 */
+function formatAiFailureAlertMessage(e: unknown, t: TranslateFn): string {
+  return [
+    t('ai.generate_failed'),
+    resolveErrorMessage(e, t),
+    t('errors.check_settings_hint'),
+    t('errors.console_hint'),
+  ].join('\n\n');
 }
 
 interface UseAiActionsParams {
@@ -117,10 +124,9 @@ export function useAiActions({
       setActiveTab('reference');
       setSelectedNodes(new Set());
     } catch (e) {
-      const msg = formatAiError(e);
-      console.error('[Spoor] handlePublish failed', { error: msg, provider: aiConfig.provider, model: aiConfig.model, apiKey: maskApiKeyForLog(aiConfig.apiKey) });
+      console.error('[Spoor] handlePublish failed', { error: formatAiError(e), provider: aiConfig.provider, model: aiConfig.model, apiKey: maskApiKeyForLog(aiConfig.apiKey) });
       void appAlert({
-        message: `合成失败\n\n${msg}\n\n打开开发者工具 (F12) → Console 查看 [Spoor] 日志。`,
+        message: `${t('ai.publish_failed')}\n\n${resolveErrorMessage(e, t)}\n\n${t('errors.console_hint')}`,
       });
     } finally {
       setIsPublishing(false);
@@ -186,7 +192,7 @@ export function useAiActions({
       const msg = formatAiError(e);
       console.error('[Spoor] triggerAgentAnalysis failed', { error: msg, provider: aiConfig.provider, model: aiConfig.model, apiKey: maskApiKeyForLog(aiConfig.apiKey) });
       void appAlert({
-        message: formatAiFailureAlertMessage(msg),
+        message: formatAiFailureAlertMessage(e, t),
       });
     } finally {
       setStreamingAiNodeId(null);
@@ -268,7 +274,7 @@ export function useAiActions({
         const msg = formatAiError(error);
         console.error('[Spoor] handleAiSubmit failed', { error: msg, provider: aiConfig.provider, model: aiConfig.model, apiKey: maskApiKeyForLog(aiConfig.apiKey) });
         void appAlert({
-          message: formatAiFailureAlertMessage(msg),
+          message: formatAiFailureAlertMessage(error, t),
         });
       } finally {
         setIsToolbarAiLoading(false);
@@ -318,7 +324,7 @@ export function useAiActions({
       const msg = formatAiError(error);
       console.error('[Spoor] handleAiSubmit after intent clarify failed', { error: msg, provider: aiConfig.provider, model: aiConfig.model, apiKey: maskApiKeyForLog(aiConfig.apiKey) });
       void appAlert({
-        message: formatAiFailureAlertMessage(msg),
+        message: formatAiFailureAlertMessage(error, t),
       });
     } finally {
       setIsToolbarAiLoading(false);
@@ -399,7 +405,7 @@ export function useAiActions({
         console.error('[Spoor] thread web search failed', {
           error: msg,
         });
-        void appAlert({ message: `${t('nodes.search_failed')}\n\n${msg}` });
+        void appAlert({ message: `${t('nodes.search_failed')}\n\n${resolveErrorMessage(e, t)}` });
       } finally {
         followUpGuardRef.current = false;
         setFollowUpParentId(null);
@@ -531,7 +537,7 @@ export function useAiActions({
         apiKey: maskApiKeyForLog(aiConfig.apiKey),
       });
       void appAlert({
-        message: formatAiFailureAlertMessage(msg),
+        message: formatAiFailureAlertMessage(e, t),
       });
     } finally {
       followUpGuardRef.current = false;

@@ -53,13 +53,13 @@ describe('metasoSearch', () => {
     it('throws on empty API key', async () => {
       await expect(
         metasoSearch('test query', { apiKey: '' })
-      ).rejects.toThrow('Metaso API key is empty');
+      ).rejects.toThrow('search.no_key');
     });
 
     it('throws on whitespace-only API key', async () => {
       await expect(
         metasoSearch('test query', { apiKey: '   ' })
-      ).rejects.toThrow('Metaso API key is empty');
+      ).rejects.toThrow('search.no_key');
     });
 
     it('calls Vite proxy endpoint with correct params', async () => {
@@ -98,7 +98,9 @@ describe('metasoSearch', () => {
 
       await expect(
         metasoSearch('test', { apiKey: 'bad-key' })
-      ).rejects.toThrow('Metaso search HTTP 401');
+      ).rejects.toThrow(
+        expect.objectContaining({ code: 'search.failed', detail: expect.stringContaining('401') }),
+      );
     });
   });
 });

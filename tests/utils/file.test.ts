@@ -80,6 +80,6 @@ describe('processFileToNode', () => {
 
   it('throws for unsupported file types', async () => {
     const file = createFile('data.csv', 'text/csv', 'a,b,c');
-    await expect(processFileToNode(file)).rejects.toThrow('Unsupported file type');
+    await expect(processFileToNode(file)).rejects.toThrow('file.unsupported');
   });
 });

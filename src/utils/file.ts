@@ -1,5 +1,6 @@
 ﻿import mammoth from 'mammoth';
 import i18n from '../i18n';
+import { AppError } from '../services/appError';
 
 export function readFileAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -74,5 +75,5 @@ export async function processFileToNode(file: File): Promise<FileNodeData> {
     };
   }
 
-  throw new Error(`Unsupported file type: ${file.type || file.name}`);
+  throw new AppError('file.unsupported', file.type || file.name);
 }

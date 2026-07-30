@@ -1,3 +1,4 @@
+import { AppError } from './appError';
 const LOG_PREFIX = '[Scribe AI][Search]';
 
 // ---------------------------------------------------------------------------
@@ -52,7 +53,7 @@ export async function metasoSearch(
 ): Promise<MetasoSearchResponse> {
   const apiKey = config.apiKey.trim();
   if (!apiKey) {
-    throw new Error('Metaso API key is empty');
+    throw new AppError('search.no_key');
   }
 
   console.info(`${LOG_PREFIX} metasoSearch`, { query });
@@ -96,7 +97,7 @@ export async function metasoSearch(
     if (!response.ok) {
       const text = await response.text();
       console.error(`${LOG_PREFIX} HTTP ${response.status}`, text.slice(0, 500));
-      throw new Error(`Metaso search HTTP ${response.status}: ${text.slice(0, 200)}`);
+      throw new AppError('search.failed', `HTTP ${response.status}: ${text.slice(0, 200)}`);
     }
 
     return (await response.json()) as MetasoSearchResponse;

@@ -233,7 +233,9 @@ export const zh = {
       "agentThreadContextMissing": "（首轮分析的原始便签不可用或已删除，请仅依据下列对话与当前追问作答。）",
       "agentThreadFollowUp": "你正在延续画布上某一 Agent 人格的对话线程。\n\n## 原始材料（与首次分析时相同的那份正文）\n\n---\n{{initialContext}}\n---\n\n## 已发生的对话（从旧到新）\n\n{{dialogueHistory}}\n\n## 用户本条消息\n\n{{request}}\n\n请直接接着谈：保持该 Agent 人设与深度；需要时请回扣原始材料。"
     },
-    "submit": "让 AI 生成"
+    "submit": "让 AI 生成",
+    "generate_failed": "AI 生成失败",
+    "publish_failed": "合成失败"
   },
   "lab": {
     "investigate": "您想调查什么？",
@@ -385,7 +387,8 @@ export const zh = {
     "default_role": "助手",
     "prompt_placeholder": "你是一个专门的智能体。你的目标是……",
     "sandbox_error": "出错：{{msg}}（详见 Console 中的 [Spoor] 日志）",
-    "sandbox_send": "发送消息"
+    "sandbox_send": "发送消息",
+    "enhance_failed": "增强提示词失败"
   },
   "seed": {
     "canvas_name": "主工作区",
@@ -395,5 +398,25 @@ export const zh = {
     "note_1": "创伤的空间结构",
     "ai": "记忆不是储存，而是穿行。",
     "note_2": "非欧几里得的记忆渗漏"
+  },
+  "errors": {
+    "detail_label": "详情：",
+    "ai.no_api_key": "尚未配置 API Key。请到设置里填入所选服务商的密钥。",
+    "ai.no_model": "模型一栏是空的。请到设置里填写模型名。",
+    "ai.doubao_needs_endpoint": "火山方舟要的是控制台「推理接入点」的 ID（ep- 开头），不是模型名。请到设置的「模型」一栏填写。",
+    "ai.provider_unsupported": "暂不支持该服务商。",
+    "ai.network": "连不上模型服务。请检查网络与设置里的 Base URL。",
+    "ai.http": "模型服务拒绝了这次请求。",
+    "ai.bad_response": "模型服务返回了无法解析的内容。",
+    "ai.no_text": "模型没有返回文本。可重试或换一个模型。",
+    "ai.local_desktop_only": "本地 GGUF 推理只在桌面版可用。",
+    "ai.local_no_path": "请在设置里填写本地 GGUF 模型文件的完整路径。",
+    "ai.local_no_images": "本地 GGUF（llama.cpp）不能附带图片。请改用在线多模态模型，或断开相连的图片节点。",
+    "ai.local_failed": "本地推理失败。",
+    "search.no_key": "尚未配置秘塔搜索 API Key。请到设置里添加。",
+    "search.failed": "联网搜索失败。",
+    "file.unsupported": "不支持这种文件类型。",
+    "console_hint": "按 F12 → Console 查看 [Spoor] 日志。",
+    "check_settings_hint": "请检查设置中的服务商、API Key、Base URL 与模型。"
   }
 };
