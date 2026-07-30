@@ -1,7 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig, loadEnv} from 'vite';
+import {defineConfig} from 'vite';
 
 /** 与 tp- Token 套餐控制台一致；开发代理转发到此前缀 */
 const MIMO_PROXY_TARGET = 'https://token-plan-cn.xiaomimimo.com/v1';
@@ -12,21 +12,9 @@ const METASO_PROXY_TARGET = 'https://metaso.cn';
 /** Volcengine Ark (Doubao) OpenAI-compatible API proxy target */
 const DOUBAO_PROXY_TARGET = 'https://ark.cn-beijing.volces.com/api/v3';
 
-export default defineConfig(({mode, command}) => {
-  const env = loadEnv(mode, '.', '');
-  const hostedDoubaoKey = (env.VITE_BUILTIN_DOUBAO_API_KEY ?? '').trim();
-  if (command === 'build' && !hostedDoubaoKey) {
-    console.warn(
-      '\n[Spoor] VITE_BUILTIN_DOUBAO_API_KEY is not set — the built site will NOT include hosted Doubao for end users.\n' +
-        '  Local: npm run setup:doubao-key -- ark-... then npm run build\n' +
-        '  Netlify: Site configuration → Environment variables → add VITE_BUILTIN_DOUBAO_API_KEY → redeploy\n',
-    );
-  }
+export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
-    define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

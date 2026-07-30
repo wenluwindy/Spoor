@@ -21,9 +21,7 @@
     "remotion:render": "npm run remotion:render --prefix remotion-kit",
     "remotion:render:promo": "npm run remotion:render:promo --prefix remotion-kit",
     "remotion:render:spoor": "npm run remotion:render:spoor --prefix remotion-kit",
-    "remotion:render:spoor-zh": "npm run remotion:render:spoor-zh --prefix remotion-kit",
-    "setup:mimo-key": "node scripts/setup-builtin-mimo.mjs",
-    "setup:doubao-key": "node scripts/setup-builtin-doubao.mjs"
+    "remotion:render:spoor-zh": "npm run remotion:render:spoor-zh --prefix remotion-kit"
   },
   "dependencies": {
     "@google/genai": "^1.51.0",

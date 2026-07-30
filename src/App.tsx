@@ -49,39 +49,24 @@ const DEBUG_DND =
   typeof localStorage !== 'undefined' &&
   localStorage.getItem('SCRIBE_DEBUG_DND') === '1';
 
-/** tp- Token 套餐密钥须走 token-plan-cn；旧版默认 api.xiaomimimo.com 会导致 401 */
+/**
+ * 已存配置的兜底修正。
+ *
+ * tp- Token 套餐密钥须走 token-plan-cn，旧版默认 api.xiaomimimo.com 会 401；
+ * 豆包缺 Base URL 时补上方舟地址。模型名一律不代填——内置 Key 移除后没有任何
+ * 对所有账号都有效的默认值（豆包尤其如此，见 constants/doubao.ts）。
+ */
 function migrateStoredAiConfig(raw: unknown): AIConfig | null {
   if (!raw || typeof raw !== 'object') return null;
-  let p = raw as AIConfig;
+  const p = raw as AIConfig;
   if (p.provider === 'mimo') {
     const b = (p.baseUrl ?? '').trim();
     if (!b || /api\.xiaomimimo\.com/i.test(b)) {
-      p = { ...p, baseUrl: MIMO_TOKEN_PLAN_BASE_URL };
+      return { ...p, baseUrl: MIMO_TOKEN_PLAN_BASE_URL };
     }
-    const keyEmpty = !(p.apiKey ?? '').trim();
-    const defaultMimoModel = !p.model?.trim() || p.model === 'mimo-v2.5-pro';
-    if (keyEmpty && defaultMimoModel) {
-      return {
-        ...p,
-        provider: 'doubao',
-        apiKey: '',
-        baseUrl: DOUBAO_ARK_BASE_URL,
-        model: DOUBAO_DEFAULT_MODEL,
-      };
-    }
-    return p;
   }
-  if (p.provider === 'doubao') {
-    const b = (p.baseUrl ?? '').trim();
-    const legacyModel =
-      p.model === 'doubao-seed-2-0-lite-260428' || !p.model?.trim();
-    if (!b || legacyModel) {
-      return {
-        ...p,
-        baseUrl: b || DOUBAO_ARK_BASE_URL,
-        ...(legacyModel ? { model: DOUBAO_DEFAULT_MODEL } : {}),
-      };
-    }
+  if (p.provider === 'doubao' && !(p.baseUrl ?? '').trim()) {
+    return { ...p, baseUrl: DOUBAO_ARK_BASE_URL };
   }
   return p;
 }
@@ -141,19 +126,25 @@ export default function App() {
     [editingNodeId, dynamicNodes, handlePanStart],
   );
 
-  const [aiConfig, setAiConfig] = useState(() => {
+  const [aiConfig, setAiConfig] = useState<AIConfig>(() => {
     const saved = localStorage.getItem('ai_config');
     const parsed = saved ? migrateStoredAiConfig(JSON.parse(saved)) : null;
-    if (!parsed || (parsed.provider === 'gemini' && !parsed.apiKey?.trim())) {
-      return {
+    // 首次启动：给一个空壳（豆包 + 方舟地址），Key 与模型留空等用户填，见首启引导卡。
+    return (
+      parsed ?? {
         provider: 'doubao',
         apiKey: '',
         baseUrl: DOUBAO_ARK_BASE_URL,
         model: DOUBAO_DEFAULT_MODEL,
-      };
-    }
-    return parsed;
+      }
+    );
   });
+
+  /** 未配置任何 API Key（本地 GGUF 只要有模型路径即算已配置）。 */
+  const isAiUnconfigured =
+    aiConfig.provider === 'local_llama'
+      ? !(aiConfig.localGgufPath ?? '').trim()
+      : !(aiConfig.apiKey ?? '').trim();
 
   useEffect(() => {
     localStorage.setItem('ai_config', JSON.stringify(aiConfig));

@@ -127,13 +127,12 @@ describe('callUniversalAI', () => {
       vi.unstubAllEnvs();
     });
 
-    it('uses builtin key when user apiKey empty', async () => {
-      vi.stubEnv('VITE_BUILTIN_MIMO_API_KEY', 'tp-builtin-test');
+    it('uses the user key', async () => {
       const result = await callUniversalAI({
         config: {
           ...baseConfig,
           provider: 'mimo',
-          apiKey: '',
+          apiKey: 'tp-user-key',
           baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
           model: 'mimo-v2.5-pro',
         },
@@ -144,20 +143,19 @@ describe('callUniversalAI', () => {
         '/api/mimo/chat/completions',
         expect.objectContaining({
           headers: expect.objectContaining({
-            Authorization: 'Bearer tp-builtin-test',
+            Authorization: 'Bearer tp-user-key',
           }),
         }),
       );
     });
 
-    it('throws when no user key and no builtin', async () => {
-      vi.stubEnv('VITE_BUILTIN_MIMO_API_KEY', '');
+    it('throws when the key is missing (no built-in fallback any more)', async () => {
       await expect(
         callUniversalAI({
           config: { ...baseConfig, provider: 'mimo', apiKey: '' },
           prompt: 'Hello',
         }),
-      ).rejects.toThrow(/MiMo API Key/);
+      ).rejects.toThrow(/API Key missing/);
     });
   });
 
@@ -178,15 +176,14 @@ describe('callUniversalAI', () => {
       vi.unstubAllEnvs();
     });
 
-    it('uses builtin key when user apiKey empty', async () => {
-      vi.stubEnv('VITE_BUILTIN_DOUBAO_API_KEY', 'ark-builtin-test');
+    it('uses the user key and their own inference endpoint id', async () => {
       const result = await callUniversalAI({
         config: {
           ...baseConfig,
           provider: 'doubao',
-          apiKey: '',
+          apiKey: 'ark-user-key',
           baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-          model: 'ep-20260218175314-xrnrn',
+          model: 'ep-user-endpoint',
         },
         prompt: 'Hello Doubao',
       });
@@ -195,20 +192,29 @@ describe('callUniversalAI', () => {
         '/api/doubao/chat/completions',
         expect.objectContaining({
           headers: expect.objectContaining({
-            Authorization: 'Bearer ark-builtin-test',
+            Authorization: 'Bearer ark-user-key',
           }),
+          body: expect.stringContaining('ep-user-endpoint'),
         }),
       );
     });
 
-    it('throws when no user key and no builtin', async () => {
-      vi.stubEnv('VITE_BUILTIN_DOUBAO_API_KEY', '');
+    it('throws when the key is missing (no built-in fallback any more)', async () => {
       await expect(
         callUniversalAI({
           config: { ...baseConfig, provider: 'doubao', apiKey: '' },
           prompt: 'Hello',
         }),
-      ).rejects.toThrow(/豆包|托管豆包/);
+      ).rejects.toThrow(/API Key missing/);
+    });
+
+    it('throws a pointed error when the endpoint id is blank', async () => {
+      await expect(
+        callUniversalAI({
+          config: { ...baseConfig, provider: 'doubao', apiKey: 'ark-user-key', model: '' },
+          prompt: 'Hello',
+        }),
+      ).rejects.toThrow(/inference endpoint ID/);
     });
   });
 

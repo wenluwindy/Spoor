@@ -1,11 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
-import { MIMO_TOKEN_PLAN_BASE_URL, resolveMimoApiKey } from '../constants/mimo';
-import {
-  DOUBAO_ARK_BASE_URL,
-  DOUBAO_DEFAULT_MODEL,
-  formatDoubaoKeyMissingError,
-  resolveDoubaoApiKey,
-} from '../constants/doubao';
+import { MIMO_TOKEN_PLAN_BASE_URL } from '../constants/mimo';
+import { DOUBAO_ARK_BASE_URL } from '../constants/doubao';
 import { DEEPSEEK_BASE_URL, DEEPSEEK_DEFAULT_MODEL } from '../constants/deepseek';
 
 const LOG_PREFIX = '[Scribe AI]';
@@ -365,10 +360,6 @@ export async function callUniversalAI({
 }): Promise<string> {
   const apiKeyTrimmed = (config.apiKey ?? '').trim();
   const useUserConfig = Boolean(apiKeyTrimmed);
-  const mimoApiKey =
-    config.provider === 'mimo' ? resolveMimoApiKey(apiKeyTrimmed) : '';
-  const doubaoApiKey =
-    config.provider === 'doubao' ? resolveDoubaoApiKey(apiKeyTrimmed) : '';
 
   if (config.provider === 'local_llama') {
     if (images?.length) {
@@ -434,16 +425,16 @@ export async function callUniversalAI({
   }
 
   if (config.provider === 'gemini') {
-    const apiKey = useUserConfig ? apiKeyTrimmed : (process.env.GEMINI_API_KEY as string | undefined)?.trim();
-    if (!apiKey) throw new Error("Gemini: API Key missing (set in Settings or GEMINI_API_KEY).");
+    if (!apiKeyTrimmed) throw new Error('Gemini: API Key missing. Open Settings and paste your key.');
+    const apiKey = apiKeyTrimmed;
 
     console.info(`${LOG_PREFIX} Gemini generateContent`, {
-      model: useUserConfig ? config.model : 'gemini-3-flash-preview',
+      model: config.model,
       apiKey: maskApiKeyForLog(apiKey),
     });
 
     const ai = new GoogleGenAI({ apiKey });
-    const modelId = useUserConfig ? config.model : "gemini-3-flash-preview";
+    const modelId = config.model;
 
     try {
       const response = await ai.models.generateContent({
@@ -464,17 +455,7 @@ export async function callUniversalAI({
     }
   }
 
-  if (config.provider === 'mimo' && !mimoApiKey) {
-    throw new Error(
-      'MiMo API Key 未配置。请在设置中粘贴 tp- 密钥，或在构建时设置 VITE_BUILTIN_MIMO_API_KEY。',
-    );
-  }
-
-  if (config.provider === 'doubao' && !doubaoApiKey) {
-    throw new Error(formatDoubaoKeyMissingError());
-  }
-
-  if (!useUserConfig && config.provider !== 'mimo' && config.provider !== 'doubao') {
+  if (!useUserConfig) {
     throw new Error(`API Key missing for provider "${config.provider}". Open Settings and paste your key.`);
   }
 
@@ -498,15 +479,23 @@ export async function callUniversalAI({
             ? (isTauriRuntime() ? `${doubaoBase}/chat/completions` : '/api/doubao/chat/completions')
             : `${baseNormalized}/chat/completions`;
 
-    const model =
-      config.model ||
-      (config.provider === 'mimo'
+    // 豆包（火山方舟）没有通用默认值：`model` 要的是账号自己的推理接入点 ID。
+    const fallbackModel =
+      config.provider === 'mimo'
         ? 'mimo-v2.5-pro'
         : config.provider === 'deepseek'
           ? DEEPSEEK_DEFAULT_MODEL
           : config.provider === 'doubao'
-            ? DOUBAO_DEFAULT_MODEL
-            : 'gpt-4o');
+            ? ''
+            : 'gpt-4o';
+    const model = (config.model ?? '').trim() || fallbackModel;
+    if (!model) {
+      throw new Error(
+        config.provider === 'doubao'
+          ? 'Volcengine Ark needs the inference endpoint ID from your console (starts with ep-). Open Settings and fill in the model field.'
+          : `Model is empty for provider "${config.provider}". Open Settings and fill in the model field.`,
+      );
+    }
     const body = {
       model,
       messages: [
@@ -517,13 +506,7 @@ export async function callUniversalAI({
       top_p: topP
     };
 
-    const openAiKey =
-      config.provider === 'mimo'
-        ? mimoApiKey
-        : config.provider === 'doubao'
-          ? doubaoApiKey
-          : apiKeyTrimmed;
-    return postOpenAiCompatibleChatWithOptionalStream(openAiKey, chatUrl, body, {
+    return postOpenAiCompatibleChatWithOptionalStream(apiKeyTrimmed, chatUrl, body, {
       provider: config.provider,
       model,
     }, onStreamChunk);

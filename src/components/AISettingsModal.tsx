@@ -1,15 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Download, Monitor, Settings, X, Sparkles } from 'lucide-react';
-import {
-  BUILTIN_MIMO_API_EXPIRES_AT,
-  hasBuiltinMimoApiKey,
-  MIMO_TOKEN_PLAN_BASE_URL,
-} from '../constants/mimo';
-import {
-  DOUBAO_ARK_BASE_URL,
-  DOUBAO_DEFAULT_MODEL,
-  hasBuiltinDoubaoApiKey,
-} from '../constants/doubao';
+import { MIMO_TOKEN_PLAN_BASE_URL } from '../constants/mimo';
+import { DOUBAO_ARK_BASE_URL, DOUBAO_DEFAULT_MODEL } from '../constants/doubao';
 import { DEEPSEEK_BASE_URL, DEEPSEEK_DEFAULT_MODEL } from '../constants/deepseek';
 import { DESKTOP_RELEASE_URL } from '../constants/desktopRelease';
 import { openExternalUrl } from '../utils/openExternal';
@@ -38,16 +30,6 @@ export interface AISettingsModalProps {
 export function AISettingsModal({ isOpen, onClose, config, setConfig }: AISettingsModalProps) {
   const { t, i18n } = useTranslation();
   const inDesktopApp = isTauriRuntime();
-  const hostedMimo = config.provider === 'mimo' && hasBuiltinMimoApiKey();
-  const hostedDoubao = config.provider === 'doubao' && hasBuiltinDoubaoApiKey();
-  const hostedMimoExpiryLabel =
-    i18n.language === 'zh'
-      ? '2026年6月1日'
-      : new Date(BUILTIN_MIMO_API_EXPIRES_AT).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        });
   if (!isOpen) return null;
 
   return (
@@ -174,7 +156,7 @@ export function AISettingsModal({ isOpen, onClose, config, setConfig }: AISettin
                          : config.provider === 'mimo'
                            ? 'mimo-v2.5-pro'
                            : config.provider === 'doubao'
-                             ? DOUBAO_DEFAULT_MODEL
+                             ? 'ep-...'
                              : config.provider === 'deepseek'
                                ? DEEPSEEK_DEFAULT_MODEL
                                : 'gpt-4o'
@@ -184,6 +166,10 @@ export function AISettingsModal({ isOpen, onClose, config, setConfig }: AISettin
                  />
                </div>
             </div>
+
+            {config.provider === 'doubao' && (
+              <p className="text-[10px] text-[#8c8a84] leading-relaxed">{t('settings.doubao_model_hint')}</p>
+            )}
 
             {config.provider === 'local_llama' ? (
               <div className="space-y-2">
@@ -209,32 +195,10 @@ export function AISettingsModal({ isOpen, onClose, config, setConfig }: AISettin
             ) : (
               <div className="space-y-2">
                 <label className="text-[10px] font-mono font-bold text-[#8c8a84] uppercase tracking-wider">{t('settings.api_key')}</label>
-                {hostedMimo && (
-                  <div className="space-y-2">
-                    <p
-                      role="alert"
-                      className="text-[11px] leading-relaxed px-3 py-2 rounded-lg border border-amber-300/80 bg-amber-50 text-amber-950"
-                    >
-                      {t('settings.builtin_mimo_expiry', { date: hostedMimoExpiryLabel })}
-                    </p>
-                    <p className="text-[11px] text-[#8c8a84] leading-relaxed">{t('settings.builtin_mimo_hint')}</p>
-                  </div>
-                )}
-                {hostedDoubao && (
-                  <p className="text-[11px] text-[#8c8a84] leading-relaxed">{t('settings.builtin_doubao_hint')}</p>
-                )}
                 <input
                   type="password"
                   className="w-full h-10 px-3 bg-[#FAF9F6] border border-[#E6E4DF] rounded-lg text-sm outline-none focus:border-[#C2410C] focus:ring-1 focus:ring-[#C2410C] transition-all"
-                  placeholder={
-                    hostedDoubao
-                      ? t('settings.api_key_optional_doubao')
-                      : hostedMimo
-                        ? t('settings.api_key_optional_mimo')
-                        : config.provider === 'doubao'
-                          ? 'ark-...'
-                          : 'tp-...'
-                  }
+                  placeholder={config.provider === 'doubao' ? 'ark-...' : 'tp-...'}
                   value={config.apiKey}
                   onChange={e => setConfig({ ...config, apiKey: e.target.value })}
                 />
