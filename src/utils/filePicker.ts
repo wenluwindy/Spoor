@@ -1,16 +1,43 @@
+import { isTauriRuntime } from './isTauriRuntime';
+
 /**
  * 唤起系统文件选择框。
  *
- * 临时用隐藏的 `<input type="file">`：拿到的是 `File` 对象而非路径，大文件会整段读进内存。
- * v0.3.0 的 S20 会换成 `tauri-plugin-dialog` 的 `open()`（返回绝对路径，由 Rust 直接复制），
- * 届时本文件整体退役。接口刻意保持 `Promise<File[]>` 以外的调用方零感知。
+ * 桌面端走 `tauri-plugin-dialog`，拿到的是**绝对路径**——Rust 侧直接 `fs::copy`
+ * 入库，文件字节一个字节都不进 JS。浏览器（`npm run dev` 调试）没有这条路，
+ * 退回隐藏的 `<input type="file">`，拿 `File` 对象。
+ *
+ * 两种结果形状不同，用 [`PickedFiles`] 的判别联合表达，调用方必须显式分支：
+ * 把它们抹平成同一种就等于把「大文件不进内存」这个收益抹掉了。
  */
+
+export type PickedFiles =
+  | { kind: 'paths'; paths: string[] }
+  | { kind: 'files'; files: File[] };
 
 /** 用户取消时不会触发 change；窗口重新获得焦点后再等这么久仍无 change 就按取消处理。 */
 const CANCEL_GRACE_MS = 400;
 
-export function pickFiles(accept: string, multiple = true): Promise<File[]> {
-  if (typeof document === 'undefined') return Promise.resolve([]);
+/** `accept="image/*,.docx"` → 对话框要的 `[{ name, extensions: ['png', …] }]`。 */
+export function acceptToDialogFilters(accept: string): { name: string; extensions: string[] }[] {
+  const exts = new Set<string>();
+  for (const raw of accept.split(',')) {
+    const item = raw.trim().toLowerCase();
+    if (!item) continue;
+    if (item === 'image/*') ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif'].forEach((e) => exts.add(e));
+    else if (item === 'video/*') ['mp4', 'webm', 'mov', 'mkv', 'avi', 'm4v'].forEach((e) => exts.add(e));
+    else if (item.startsWith('.')) exts.add(item.slice(1));
+    else if (item.includes('/')) {
+      // `text/markdown` 这类具体 MIME：取子类型当扩展名，够用
+      const sub = item.split('/')[1];
+      if (sub && sub !== '*') exts.add(sub);
+    }
+  }
+  return exts.size > 0 ? [{ name: 'files', extensions: [...exts] }] : [];
+}
+
+function pickViaInput(accept: string, multiple: boolean): Promise<PickedFiles> {
+  if (typeof document === 'undefined') return Promise.resolve({ kind: 'files', files: [] });
 
   return new Promise((resolve) => {
     const input = document.createElement('input');
@@ -33,7 +60,7 @@ export function pickFiles(accept: string, multiple = true): Promise<File[]> {
       if (settled) return;
       settled = true;
       cleanup();
-      resolve(files);
+      resolve({ kind: 'files', files });
     };
 
     const onWindowFocus = () => {
@@ -50,4 +77,19 @@ export function pickFiles(accept: string, multiple = true): Promise<File[]> {
 
     input.click();
   });
+}
+
+export async function pickFiles(accept: string, multiple = true): Promise<PickedFiles> {
+  if (!isTauriRuntime()) return pickViaInput(accept, multiple);
+
+  try {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const selected = await open({ multiple, filters: acceptToDialogFilters(accept) });
+    if (selected == null) return { kind: 'paths', paths: [] };
+    return { kind: 'paths', paths: Array.isArray(selected) ? selected : [selected] };
+  } catch (e) {
+    // 插件没装好/权限没配时不该让「插入图片」整个失效，退回 input 仍能用
+    console.error('[Spoor] native file dialog failed, falling back to <input>', e);
+    return pickViaInput(accept, multiple);
+  }
 }

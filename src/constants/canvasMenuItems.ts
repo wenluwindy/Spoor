@@ -29,7 +29,7 @@ export interface CanvasInsertItemDef {
   id: 'image' | 'video' | 'document';
   labelKey: string;
   icon: LucideIcon;
-  /** `<input type="file">` 的 accept，与 `processFileToNode` 支持的类型保持一致。 */
+  /** `<input type="file">` 的 accept，与 `services/fileImport` 支持的类型保持一致。 */
   accept: string;
 }
 

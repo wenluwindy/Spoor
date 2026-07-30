@@ -20,14 +20,21 @@ function readFileAsText(file: File): Promise<string> {
   });
 }
 
-export interface FileNodeData {
+/**
+ * 把文件整个读进内存的结果。
+ *
+ * **只给输入栏附件与浏览器调试兜底用**：画布节点走 `services/fileImport`，
+ * 原件落文件存储、数据库只留相对路径。这里的 data URL 进数据库会把
+ * IndexedDB 撑爆——那正是 v0.3.0 要改掉的。
+ */
+export interface FileContentData {
   type: string;
   content: string;
   description?: string;
   fileType: string;
 }
 
-export async function processFileToNode(file: File): Promise<FileNodeData> {
+export async function readFileContent(file: File): Promise<FileContentData> {
   if (file.type.startsWith('video/')) {
     return {
       type: 'video',

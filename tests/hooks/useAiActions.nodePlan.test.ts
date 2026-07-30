@@ -89,10 +89,10 @@ describe('useAiActions —— 自然语言建节点', () => {
 
     const nodes = await db.nodes.toArray();
     expect(nodes).toHaveLength(2);
-    expect(nodes.map((n) => [n.type, n.content])).toEqual([
-      ['text', '早上：写提纲'],
-      ['theme', '本周主线'],
-    ]);
+    // 主键是 UUID，toArray 的顺序按 id 排而不是插入顺序，所以比集合而非序列
+    expect(new Set(nodes.map((n) => `${n.type}:${n.content}`))).toEqual(
+      new Set(['text:早上：写提纲', 'theme:本周主线']),
+    );
     expect(runCanvasStreamingAiCall).not.toHaveBeenCalled();
   });
 

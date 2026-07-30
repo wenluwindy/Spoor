@@ -1,4 +1,4 @@
-import { processFileToNode } from './file';
+import { readFileContent } from './file';
 import { AppError } from '../services/appError';
 import type { ToolbarAttachment } from '../constants/toolbarAttachments';
 
@@ -25,7 +25,7 @@ export function htmlToPlainText(html: string): string {
 }
 
 export async function fileToToolbarAttachment(file: File): Promise<ToolbarAttachment> {
-  const data = await processFileToNode(file);
+  const data = await readFileContent(file);
   const id = crypto.randomUUID();
 
   if (data.type === 'image') {
@@ -37,7 +37,7 @@ export async function fileToToolbarAttachment(file: File): Promise<ToolbarAttach
   if (data.type === 'text') {
     return { id, name: file.name, kind: 'text', text: data.content };
   }
-  // 视频等：processFileToNode 认得，但当不了提示词上下文
+  // 视频等：readFileContent 认得，但当不了提示词上下文
   throw new AppError('file.unsupported', file.type || file.name);
 }
 

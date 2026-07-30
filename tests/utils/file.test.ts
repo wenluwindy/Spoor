@@ -1,5 +1,5 @@
 ﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { processFileToNode, readFileAsDataURL } from '../../src/utils/file';
+import { readFileContent, readFileAsDataURL } from '../../src/utils/file';
 
 vi.mock('mammoth', () => ({
   default: {
@@ -27,10 +27,10 @@ describe('readFileAsDataURL', () => {
   });
 });
 
-describe('processFileToNode', () => {
+describe('readFileContent', () => {
   it('processes image files', async () => {
     const file = createFile('photo.png', 'image/png', 'binary-data');
-    const result = await processFileToNode(file);
+    const result = await readFileContent(file);
     expect(result.type).toBe('image');
     expect(result.content).toContain('data:image/png');
     expect(result.fileType).toBe('image/png');
@@ -38,7 +38,7 @@ describe('processFileToNode', () => {
 
   it('processes video files', async () => {
     const file = createFile('clip.mp4', 'video/mp4', 'binary-data');
-    const result = await processFileToNode(file);
+    const result = await readFileContent(file);
     expect(result.type).toBe('video');
     expect(result.content).toContain('data:video/mp4');
     expect(result.fileType).toBe('video/mp4');
@@ -46,7 +46,7 @@ describe('processFileToNode', () => {
 
   it('processes .docx files by name', async () => {
     const file = createFile('report.docx', 'application/octet-stream', new ArrayBuffer(100));
-    const result = await processFileToNode(file);
+    const result = await readFileContent(file);
     expect(result.type).toBe('document');
     expect(result.content).toBe('<h1>Test Doc</h1><p>Hello World</p>');
     expect(result.description).toBe('report.docx');
@@ -55,14 +55,14 @@ describe('processFileToNode', () => {
 
   it('processes .docx files by mime type', async () => {
     const file = createFile('report.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', new ArrayBuffer(100));
-    const result = await processFileToNode(file);
+    const result = await readFileContent(file);
     expect(result.type).toBe('document');
     expect(result.fileType).toBe('docx');
   });
 
   it('processes .txt files', async () => {
     const file = createFile('notes.txt', 'text/plain', 'plain text content');
-    const result = await processFileToNode(file);
+    const result = await readFileContent(file);
     expect(result.type).toBe('text');
     expect(result.content).toBe('plain text content');
     expect(result.description).toBe('notes.txt');
@@ -71,7 +71,7 @@ describe('processFileToNode', () => {
 
   it('processes .md files', async () => {
     const file = createFile('readme.md', 'text/markdown', '# Hello');
-    const result = await processFileToNode(file);
+    const result = await readFileContent(file);
     expect(result.type).toBe('text');
     expect(result.content).toBe('# Hello');
     expect(result.description).toBe('readme.md');
@@ -80,6 +80,6 @@ describe('processFileToNode', () => {
 
   it('throws for unsupported file types', async () => {
     const file = createFile('data.csv', 'text/csv', 'a,b,c');
-    await expect(processFileToNode(file)).rejects.toThrow('file.unsupported');
+    await expect(readFileContent(file)).rejects.toThrow('file.unsupported');
   });
 });

@@ -295,7 +295,7 @@ export default function App() {
   // Node actions (CRUD, selection, linking)
   const {
     toggleNodeSelection, handleLink, deleteEdge, removeNodeId,
-    createNodeAt, addAgentNodeAt, insertFilesAt, duplicateNode, cycleNodeLayout, pasteStickyAt,
+    createNodeAt, addAgentNodeAt, insertFilesAt, insertPathsAt, duplicateNode, cycleNodeLayout, pasteStickyAt,
     clearSelection, deleteNodes, linkNodesToHub,
   } = useNodeActions({
     activeCanvasId, nodesRef, connectingFrom, setConnectingFrom, edges, selectedNodes, setSelectedNodes, transformRef,
@@ -350,7 +350,13 @@ export default function App() {
   const contextMenuActions = React.useMemo<CanvasContextMenuActions>(
     () => ({
       createNode: (nodeType, at) => void createNodeAt(nodeType, at),
-      insertFile: (accept, at) => void pickFiles(accept).then((files) => insertFilesAt(files, at)),
+      insertFile: (accept, at) =>
+        void pickFiles(accept).then((picked) =>
+          // 桌面端拿到的是绝对路径（文件不进 JS），浏览器调试才是 File 对象
+          picked.kind === 'paths'
+            ? insertPathsAt(picked.paths, at)
+            : insertFilesAt(picked.files, at),
+        ),
       addAgentNode: (agentConfigId, at) => void addAgentNodeAt(agentConfigId, at),
       pasteSticky: (payload, at) => void pasteStickyAt(payload, at),
       resetView: () => setCanvasTransform({ x: 0, y: 0, scale: 1 }),
@@ -367,7 +373,7 @@ export default function App() {
       deleteNodes: (nodeIds) => void deleteNodes(nodeIds),
     }),
     [
-      createNodeAt, insertFilesAt, addAgentNodeAt, pasteStickyAt, setCanvasTransform,
+      createNodeAt, insertFilesAt, insertPathsAt, addAgentNodeAt, pasteStickyAt, setCanvasTransform,
       duplicateNode, handleLink, cycleNodeLayout, toggleNodeSelection, removeNodeId, deleteEdge,
       linkNodesToHub, handlePublish, clearSelection, deleteNodes,
     ],

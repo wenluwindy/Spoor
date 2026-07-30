@@ -3,7 +3,9 @@ import type { CanvasTransform } from './useCanvasInteraction';
 import { db, type CanvasNode } from '../db';
 import i18n from '../i18n';
 import { getCanvasCenterPosition } from '../utils/canvas';
-import { processFileToNode } from '../utils/file';
+import { readFileContent } from '../utils/file';
+import { importFileToNodeData, importPathToNodeData } from '../services/fileImport';
+import { isTauriRuntime } from '../utils/isTauriRuntime';
 import { nodeSupportsCycleLayout } from '../constants/nodeCapabilities';
 import { NOTE_LAYOUT_COUNT } from '../constants/noteLayouts';
 import { isStickyNoteType, type StickyClipboardPayloadV1 } from '../utils/noteClipboard';
@@ -147,6 +149,18 @@ export function useNodeActions({
     });
   };
 
+  /**
+   * 桌面端：原件归档到文件存储，节点只记相对路径。
+   * 浏览器（`npm run dev` 调试）：没有文件存储可用，退回旧的 data URL，
+   * 渲染层的 `filePath > content` 兜底会照常显示。
+   */
+  const buildNodeDataForFile = async (file: File) => {
+    if (isTauriRuntime()) {
+      return importFileToNodeData(file, i18n.t('nodes.empty_document_body'));
+    }
+    return readFileContent(file);
+  };
+
   /** 落库多个文件，首个放在 `at`，其余依次错开。 */
   const insertFilesAt = async (files: File[], at?: CanvasPoint) => {
     if (files.length === 0) return;
@@ -154,7 +168,7 @@ export function useNodeActions({
     for (let index = 0; index < files.length; index++) {
       const file = files[index];
       try {
-        const data = await processFileToNode(file);
+        const data = await buildNodeDataForFile(file);
         await db.nodes.add({
           id: crypto.randomUUID(),
           canvasId: activeCanvasId,
@@ -164,6 +178,31 @@ export function useNodeActions({
         });
       } catch (err) {
         console.error('Failed to process file:', file.name, err);
+      }
+    }
+  };
+
+  /**
+   * 从原生绝对路径落库（文件对话框给的）。
+   *
+   * 与 `insertFilesAt` 的区别只在源：这条路上文件字节完全不进 JS，
+   * Rust 直接 `fs::copy`，插一个 500MB 的视频也不会卡住界面。
+   */
+  const insertPathsAt = async (paths: string[], at?: CanvasPoint) => {
+    if (paths.length === 0) return;
+    const origin = resolvePosition(at);
+    for (let index = 0; index < paths.length; index++) {
+      try {
+        const data = await importPathToNodeData(paths[index], i18n.t('nodes.empty_document_body'));
+        await db.nodes.add({
+          id: crypto.randomUUID(),
+          canvasId: activeCanvasId,
+          ...data,
+          x: origin.x + index * MULTI_INSERT_STAGGER,
+          y: origin.y + index * MULTI_INSERT_STAGGER,
+        });
+      } catch (err) {
+        console.error('Failed to import file:', paths[index], err);
       }
     }
   };
@@ -219,6 +258,7 @@ export function useNodeActions({
     createNodeAt,
     addAgentNodeAt,
     insertFilesAt,
+    insertPathsAt,
     duplicateNode,
     cycleNodeLayout,
     pasteStickyAt,

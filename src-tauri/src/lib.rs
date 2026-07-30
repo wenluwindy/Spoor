@@ -201,6 +201,9 @@ fn get_local_llama_log_path() -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    // 原生文件对话框：`open()` 返回**绝对路径**，Rust 侧直接 fs::copy 入库，
+    // 大文件不用先读进 JS 再走 IPC
+    .plugin(tauri_plugin_dialog::init())
     // 画布里的图片/视频/文档都走这个协议直接流式读盘：
     // 数据根是运行时解析的，`assetProtocol` 的静态 scope 对不上。
     .register_asynchronous_uri_scheme_protocol("spoor-media", |ctx, request, responder| {
