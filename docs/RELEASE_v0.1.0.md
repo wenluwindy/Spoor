@@ -8,7 +8,7 @@
 
 **Install:** run the `.exe` → follow the wizard → open **Spoor** from the Start menu.
 
-**Latest release:** https://github.com/iimorning/spoor/releases/latest
+**Latest release:** https://github.com/wenluwindy/Spoor/releases/latest
 
 ---
 

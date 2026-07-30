@@ -59,9 +59,9 @@ Spoor ships as a Windows desktop application packaged with Tauri, and can option
 
 ## Demo
 
-Desktop release: https://github.com/iimorning/spoor/releases/latest
+Desktop release: https://github.com/wenluwindy/Spoor/releases/latest
 
-Repository: https://github.com/iimorning/spoor
+Repository: https://github.com/wenluwindy/Spoor
 
 ## Tech Stack
 

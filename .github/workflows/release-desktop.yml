@@ -44,9 +44,9 @@ jobs:
 
             - 系统：Windows 10/11，64 位
             - 首次使用：在应用 **设置** 中配置 AI 服务商与 API Key（仅存本机）
-            - 本地 GGUF 可选，见 [LOCAL_LLM.md](https://github.com/iimorning/spoor/blob/master/docs/LOCAL_LLM.md)
+            - 本地 GGUF 可选，见 [LOCAL_LLM.md](https://github.com/wenluwindy/Spoor/blob/master/docs/LOCAL_LLM.md)
 
-            完整说明：[docs/RELEASE_v0.1.0.md](https://github.com/iimorning/spoor/blob/master/docs/RELEASE_v0.1.0.md) · [DESKTOP_INSTALL.md](https://github.com/iimorning/spoor/blob/master/docs/DESKTOP_INSTALL.md)
+            完整说明：[docs/RELEASE_v0.1.0.md](https://github.com/wenluwindy/Spoor/blob/master/docs/RELEASE_v0.1.0.md) · [DESKTOP_INSTALL.md](https://github.com/wenluwindy/Spoor/blob/master/docs/DESKTOP_INSTALL.md)
           releaseDraft: false
           prerelease: false
           tauriScript: npm run tauri

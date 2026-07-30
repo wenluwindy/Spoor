@@ -17,5 +17,5 @@ if ($confirm -notmatch '^[yY]') { exit 0 }
 git tag -a $tag -m "Spoor desktop $Version"
 git push origin $tag
 Write-Host ""
-Write-Host "Pushed $tag. Watch: https://github.com/iimorning/spoor/actions"
-Write-Host "When green, download: https://github.com/iimorning/spoor/releases/latest"
+Write-Host "Pushed $tag. Watch: https://github.com/wenluwindy/Spoor/actions"
+Write-Host "When green, download: https://github.com/wenluwindy/Spoor/releases/latest"

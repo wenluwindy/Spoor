@@ -18,7 +18,7 @@ copy src-tauri\target\release\bundle\nsis\Spoor_0.1.0_x64-setup.exe release\
 
 ## 2. 在 GitHub 网页创建 Release
 
-1. 打开：https://github.com/iimorning/spoor/releases/new  
+1. 打开：https://github.com/wenluwindy/Spoor/releases/new  
 2. **Choose a tag:** `v0.1.0`（已存在）  
 3. **Release title:** `Spoor 雪泥 v0.1.0`  
 4. **Description:** 复制 [`docs/RELEASE_v0.1.0.md`](../docs/RELEASE_v0.1.0.md) 正文  
@@ -27,7 +27,7 @@ copy src-tauri\target\release\bundle\nsis\Spoor_0.1.0_x64-setup.exe release\
 
 ## 3. 用户下载链接
 
-https://github.com/iimorning/spoor/releases/latest
+https://github.com/wenluwindy/Spoor/releases/latest
 
 ## 4. 恢复自动构建（可选）
 

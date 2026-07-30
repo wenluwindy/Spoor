@@ -208,11 +208,11 @@ https://scribe-ai-canvas.netlify.app/
 
 桌面版下载：
 
-https://github.com/iimorning/spoor/releases/latest
+https://github.com/wenluwindy/Spoor/releases/latest
 
 代码仓库：
 
-https://github.com/iimorning/spoor
+https://github.com/wenluwindy/Spoor
 
 ## 技术栈
 
@@ -772,9 +772,9 @@ Spoor 可以作为网页应用运行，也可以作为 Windows 桌面应用运�
 
 网页 Demo：https://scribe-ai-canvas.netlify.app/
 
-桌面版 Release：https://github.com/iimorning/spoor/releases/latest
+桌面版 Release：https://github.com/wenluwindy/Spoor/releases/latest
 
-代码仓库：https://github.com/iimorning/spoor
+代码仓库：https://github.com/wenluwindy/Spoor
 
 ## 技术栈
 

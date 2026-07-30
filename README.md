@@ -36,7 +36,7 @@ Spoor 是一个带 AI 的无限便签画布。你可以把想法、资料、截�
 
 | 方式 | 适合谁 | 怎么做 |
 |------|--------|--------|
-| **Windows 桌面** | 所有使用者 | 从 **[Releases](https://github.com/iimorning/spoor/releases/latest)** 下载 `Spoor_*_x64-setup.exe` 并安装 |
+| **Windows 桌面** | 所有使用者 | 从 **[Releases](https://github.com/wenluwindy/Spoor/releases/latest)** 下载 `Spoor_*_x64-setup.exe` 并安装 |
 | **本地开发** | 贡献者 / 二次开发 | `npm install` → `npm run tauri:dev` |
 
 > 网页版已停止维护。浏览器打开构建产物只会看到桌面版引导页；`npm run dev` 仍可用于开发调试。

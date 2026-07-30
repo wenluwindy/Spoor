@@ -29,7 +29,7 @@
     "shortDescription": "Local-first spatial notes and AI thinking canvas",
     "longDescription": "Spoor (雪泥) — canvas notes, personas, research lab. Data stays on your device (IndexedDB).",
     "category": "Productivity",
-    "copyright": "Copyright (c) iimorning. PolyForm Noncommercial License 1.0.0.",
+    "copyright": "Copyright (c) wenluwindy. PolyForm Noncommercial License 1.0.0.",
     "windows": {
       "nsis": {
         "displayLanguageSelector": false,
