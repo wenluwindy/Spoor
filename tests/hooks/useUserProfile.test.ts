@@ -9,8 +9,8 @@ describe('useUserProfile', () => {
 
   it('返回默认值', () => {
     const { result } = renderHook(() => useUserProfile());
-    expect(result.current.userName).toBe('Main Library');
-    expect(result.current.userRole).toBe('Focus Mode Active');
+    expect(result.current.userName).toBe('Spoor');
+    expect(result.current.userRole).toBe('专注模式已激活');
     expect(result.current.userAvatar).toContain('LOGO');
   });
 

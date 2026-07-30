@@ -10,8 +10,8 @@ function resolveStoredAvatar() {
 }
 
 export function useUserProfile() {
-  const [userName, setUserName] = useState(() => localStorage.getItem('user_name') || 'Main Library');
-  const [userRole, setUserRole] = useState(() => localStorage.getItem('user_role') || 'Focus Mode Active');
+  const [userName, setUserName] = useState(() => localStorage.getItem('user_name') || 'Spoor');
+  const [userRole, setUserRole] = useState(() => localStorage.getItem('user_role') || '专注模式已激活');
   const [userAvatar, setUserAvatar] = useState(resolveStoredAvatar);
 
   useEffect(() => {
