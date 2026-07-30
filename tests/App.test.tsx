@@ -228,14 +228,14 @@ describe('App 组件', () => {
       await act(async () => {
         render(<App />);
       });
-      expect(screen.getByText('Main Library')).toBeInTheDocument();
+      expect(screen.getByText('Spoor')).toBeInTheDocument();
     });
 
     it('渲染用户默认角色状态', async () => {
       await act(async () => {
         render(<App />);
       });
-      expect(screen.getByText('Focus Mode Active')).toBeInTheDocument();
+      expect(screen.getByText('专注模式已激活')).toBeInTheDocument();
     });
   });
 
@@ -342,7 +342,8 @@ describe('App 组件', () => {
       });
 
       await user.click(screen.getByText('onboarding.cta').closest('button')!);
-      expect(screen.getByText('设置')).toBeInTheDocument();
+      // 侧栏底部也有「设置」文案，按标题定位才唯一
+      expect(screen.getByRole('heading', { name: '设置' })).toBeInTheDocument();
       expect(screen.queryByText('onboarding.title')).toBeNull();
     });
 
@@ -369,7 +370,7 @@ describe('App 组件', () => {
       await user.click(settingsBtn);
 
       // 设置面板应出现
-      expect(screen.getByText('设置')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: '设置' })).toBeInTheDocument();
       expect(screen.getByText('AI 配置')).toBeInTheDocument();
     });
 

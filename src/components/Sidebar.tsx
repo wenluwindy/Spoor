@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+import { Tooltip } from './ui/Tooltip';
 
 export interface SidebarProps {
   isSidebarOpen: boolean;
@@ -41,6 +42,7 @@ export function Sidebar({
   const { t } = useTranslation();
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const isLogoAvatar = userAvatar.includes('LOGO');
+  const toggleLabel = isSidebarOpen ? t('sidebar.collapse') : t('sidebar.expand');
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -123,26 +125,31 @@ export function Sidebar({
         </a>
       </nav>
       <div className="mt-auto px-4 pb-4 w-full flex flex-col gap-1">
-        <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsSidebarOpen(!isSidebarOpen); }}
-          className={`w-full flex items-center ${isSidebarOpen ? 'gap-3' : 'justify-center'} py-2 text-[#8c8a84] hover:text-[#1a1a1a] hover:bg-[#EAE7E2] transition-colors rounded-lg group/toggle`}
-          aria-label={isSidebarOpen ? t('sidebar.collapse') : t('sidebar.expand')}
-          title={isSidebarOpen ? t('sidebar.collapse') : t('sidebar.expand')}
-        >
-          <div className={`flex items-center justify-center ${isSidebarOpen ? 'w-6' : 'w-10'}`}>
-            {isSidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5 transition-transform group-hover/toggle:translate-x-0.5" />}
-          </div>
-        </button>
-        <button
-          onClick={() => setIsSettingsOpen(true)}
-          className={`w-full flex items-center ${isSidebarOpen ? 'gap-3' : 'justify-center'} py-2 text-[#5a5a54] hover:bg-[#EAE7E2] transition-colors rounded-lg group/settings`}
-          aria-label={t('sidebar.settings')}
-          title={t('sidebar.settings')}
-        >
-          <div className={`flex items-center justify-center ${isSidebarOpen ? 'w-6' : 'w-10'}`}>
-            <Settings className={`w-4 h-4 flex-shrink-0 transition-transform group-hover/settings:rotate-45`} />
-          </div>
-        </button>
+        {/* 收起时只剩图标，靠悬停提示说明；展开时文案已经写在按钮上，再弹提示是噪音。 */}
+        <Tooltip label={toggleLabel} disabled={isSidebarOpen}>
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsSidebarOpen(!isSidebarOpen); }}
+            className={`w-full flex items-center ${isSidebarOpen ? 'gap-3' : 'justify-center'} py-2 text-[#8c8a84] hover:text-[#1a1a1a] hover:bg-[#EAE7E2] transition-colors rounded-lg group/toggle`}
+            aria-label={toggleLabel}
+          >
+            <div className={`flex items-center justify-center ${isSidebarOpen ? 'w-6' : 'w-10'}`}>
+              {isSidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5 transition-transform group-hover/toggle:translate-x-0.5" />}
+            </div>
+            {isSidebarOpen && <span className="whitespace-nowrap">{toggleLabel}</span>}
+          </button>
+        </Tooltip>
+        <Tooltip label={t('sidebar.settings')} disabled={isSidebarOpen}>
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className={`w-full flex items-center ${isSidebarOpen ? 'gap-3' : 'justify-center'} py-2 text-[#5a5a54] hover:bg-[#EAE7E2] transition-colors rounded-lg group/settings`}
+            aria-label={t('sidebar.settings')}
+          >
+            <div className={`flex items-center justify-center ${isSidebarOpen ? 'w-6' : 'w-10'}`}>
+              <Settings className={`w-4 h-4 flex-shrink-0 transition-transform group-hover/settings:rotate-45`} />
+            </div>
+            {isSidebarOpen && <span className="whitespace-nowrap">{t('sidebar.settings')}</span>}
+          </button>
+        </Tooltip>
       </div>
     </aside>
   );
