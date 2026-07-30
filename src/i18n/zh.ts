@@ -66,6 +66,7 @@ export const zh = {
     "change_font": "更改字体",
     "upload_file": "上传文件",
     "attach_file": "添加附件（供 AI 参考，不会放到画布上）",
+    "drop_files_hint": "松手即可放到画布上",
     "remove_attachment": "移除附件",
     "menu": {
       "insert_image": "插入图片…",

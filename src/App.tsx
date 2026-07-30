@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useTranslation } from 'react-i18next';
 import { db, type CanvasNode } from './db';
@@ -40,18 +40,15 @@ import { computeFitTransform, unionNodeBoundsInCanvasSpace } from './utils/zoomT
 import { useNodeActions } from './hooks/useNodeActions';
 import { pickFiles } from './utils/filePicker';
 import { useAiActions } from './hooks/useAiActions';
+import { useNativeFileDrop } from './hooks/useNativeFileDrop';
+import { migrateBase64MediaNodes } from './services/migrateBase64Media';
 import { useAppDialog } from './components/AppDialogProvider';
-import { dataTransferHasFiles, preventDefaultIfFileDrag } from './utils/dnd';
 import {
   buildStickyClipboardPayload,
   isTextEditingTarget,
   parseStickyClipboardPayload,
   stickyPastePosition,
 } from './utils/noteClipboard';
-/** 控制台执行 localStorage.setItem('SCRIBE_DEBUG_DND','1') 并刷新；桌面打包版也可用（不设 DEV 门槛）。 */
-const DEBUG_DND =
-  typeof localStorage !== 'undefined' &&
-  localStorage.getItem('SCRIBE_DEBUG_DND') === '1';
 
 /**
  * 已存配置的兜底修正。
@@ -196,6 +193,13 @@ export default function App() {
 
   useSeedData();
 
+  // 旧的 base64 节点搬进文件存储。best-effort，失败原样留着靠 content 兜底显示
+  useEffect(() => {
+    void migrateBase64MediaNodes().then((count) => {
+      if (count > 0) console.info(`[Spoor] 已把 ${count} 个节点的内联数据搬到文件存储`);
+    });
+  }, []);
+
   useEffect(() => registerCanvasUnloadFlush(), []);
 
   const lastStickyClickIdRef = useRef<string | null>(null);
@@ -259,38 +263,6 @@ export default function App() {
     };
   }, [activeTab]);
 
-  /**
-   * 捕获阶段放行文件拖放：子元素（连线粗命中区、video/img 等）若未调用 dragover.preventDefault，
-   * 浏览器会禁止放置；在 main 上捕获可先放行整张画布。
-   * Manual QA：Chrome vs Tauri；空白区 vs 连线附近 vs 节点上；参见 localStorage SCRIBE_DEBUG_DND='1'。
-   */
-  useLayoutEffect(() => {
-    if (activeTab !== 'personal') return;
-    const el = mainRef.current;
-    if (!el) return;
-
-    const handleCaptureDragEnter = (e: DragEvent) => {
-      preventDefaultIfFileDrag(e);
-      if (!DEBUG_DND || !dataTransferHasFiles(e.dataTransfer)) return;
-      const t = e.target;
-      const tag = t instanceof Element ? t.tagName : String(t);
-      console.debug('[dnd:dragenter]', {
-        tag,
-        types: e.dataTransfer ? Array.from(e.dataTransfer.types) : [],
-      });
-    };
-
-    const handleCaptureDragOver = (e: DragEvent) => {
-      preventDefaultIfFileDrag(e);
-    };
-
-    el.addEventListener('dragenter', handleCaptureDragEnter, true);
-    el.addEventListener('dragover', handleCaptureDragOver, true);
-    return () => {
-      el.removeEventListener('dragenter', handleCaptureDragEnter, true);
-      el.removeEventListener('dragover', handleCaptureDragOver, true);
-    };
-  }, [activeTab]);
 
   // Node actions (CRUD, selection, linking)
   const {
@@ -299,6 +271,30 @@ export default function App() {
     clearSelection, deleteNodes, linkNodesToHub,
   } = useNodeActions({
     activeCanvasId, nodesRef, connectingFrom, setConnectingFrom, edges, selectedNodes, setSelectedNodes, transformRef,
+  });
+
+  /**
+   * 原生拖放落点：Tauri 给的是窗口坐标，先换算成画布坐标。
+   * 以指针为中心（节点约 200 宽高的一半）；右键菜单新建则以点击点为左上角。
+   */
+  const handleNativeFileDrop = useCallback(
+    (paths: string[], point: { x: number; y: number }) => {
+      const main = mainRef.current;
+      if (!main) return;
+      const { x, y } = screenToCanvasPosition(
+        point.x,
+        point.y,
+        main.getBoundingClientRect(),
+        transformRef.current ?? { x: 0, y: 0, scale: 1 },
+      );
+      void insertPathsAt(paths, { x: x - 100, y: y - 100 });
+    },
+    [insertPathsAt, transformRef],
+  );
+
+  const { isDragOver: isFileDragOver } = useNativeFileDrop({
+    enabled: activeTab === 'personal',
+    onDrop: handleNativeFileDrop,
   });
 
   // Right-click menu (canvas / node / nodes / edge)
@@ -473,33 +469,6 @@ export default function App() {
         <main 
           ref={mainRef} 
           className="flex-1 min-h-0 relative overflow-hidden bg-[#FAF9F6] paper-texture"
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onDrop={async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (DEBUG_DND) {
-              const t = e.target;
-              console.debug('[dnd:drop]', {
-                tag: t instanceof Element ? t.tagName : String(t),
-                types: Array.from(e.dataTransfer.types),
-                filesLength: e.dataTransfer.files?.length ?? 0,
-              });
-            }
-            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-              const { x: ox, y: oy } = screenToCanvasPosition(
-                e.clientX,
-                e.clientY,
-                e.currentTarget.getBoundingClientRect(),
-                canvasTransform,
-              );
-              // 拖放沿用「以指针为中心」的落点（节点约 200 宽高的一半）；
-              // 右键菜单新建则以点击点为左上角，见 CanvasContextMenu。
-              await insertFilesAt(Array.from(e.dataTransfer.files), { x: ox - 100, y: oy - 100 });
-            }
-          }}
           onContextMenu={(e) => openContextMenu(e, { kind: 'canvas' })}
         >
           {/* 画布背景：左键框选、中键平移 */}
@@ -507,6 +476,18 @@ export default function App() {
             className="absolute inset-0 z-0"
             onPointerDown={handleCanvasBackgroundPointerDown}
           />
+
+          {/* 原生拖放没有 DataTransfer，浏览器也不给放置光标，只能自己画个提示 */}
+          {isFileDragOver && (
+            <div
+              data-file-drag-overlay=""
+              className="pointer-events-none absolute inset-3 z-[60] rounded-2xl border-2 border-dashed border-[#C2410C] bg-[#C2410C]/5 flex items-center justify-center"
+            >
+              <span className="font-sans text-sm font-bold text-[#C2410C] bg-white/90 px-4 py-2 rounded-xl shadow-sm">
+                {t('canvas.drop_files_hint')}
+              </span>
+            </div>
+          )}
 
           {/* 框选矩形（屏幕坐标，不随画布 transform 缩放） */}
           {marquee && (

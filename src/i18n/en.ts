@@ -66,6 +66,7 @@ export const en = {
     "change_font": "Change Font",
     "upload_file": "Upload file",
     "attach_file": "Attach a file for AI (not added to the canvas)",
+    "drop_files_hint": "Drop to place on the canvas",
     "remove_attachment": "Remove attachment",
     "menu": {
       "insert_image": "Insert image…",
