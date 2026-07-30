@@ -11,6 +11,8 @@ interface CanvasEdgeLinesProps {
   hoveredEdgeId: string | null;
   setHoveredEdgeId: (id: string | null) => void;
   deleteEdge: (id: string) => void;
+  /** Right-click on a connection (its wide hit area) opens the context menu for that edge. */
+  onEdgeContextMenu?: (e: React.MouseEvent, edgeId: string) => void;
 }
 
 export function CanvasEdgeLines({
@@ -21,6 +23,7 @@ export function CanvasEdgeLines({
   hoveredEdgeId,
   setHoveredEdgeId,
   deleteEdge,
+  onEdgeContextMenu,
 }: CanvasEdgeLinesProps) {
   return (
     <>
@@ -36,6 +39,7 @@ export function CanvasEdgeLines({
             onDragOver={(e) => preventDefaultIfFileDrag(e)}
             onMouseEnter={() => setHoveredEdgeId(edge.id)}
             onMouseLeave={() => setHoveredEdgeId(null)}
+            onContextMenu={onEdgeContextMenu ? (e) => onEdgeContextMenu(e, edge.id) : undefined}
           >
             <line
               className="node-connector transition-colors group-hover:stroke-[#C2410C]"

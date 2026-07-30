@@ -157,25 +157,10 @@ vi.mock('react-i18next', () => ({
   Trans: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-// Mock lucide-react icons - 简单返回 SVG 占位
-vi.mock('lucide-react', () => {
-  const iconNames = [
-    'MessageSquare', 'Terminal', 'Network', 'Search', 'Bell', 'Settings', 'Plus',
-    'BookOpen', 'Users', 'Library', 'Microscope', 'Sparkles', 'Maximize2', 'Minimize2',
-    'Quote', 'Brain', 'Bot', 'Coffee', 'Wand2', 'Send', 'SlidersHorizontal', 'History', 'ZoomIn',
-    'Focus', 'Image', 'FilePlus', 'Trash2', 'Link2', 'X', 'Camera', 'ChevronLeft',
-    'ChevronRight', 'Check', 'Cpu', 'ArrowRight', 'ListChecks', 'CheckCircle2',
-    'Loader2', 'PenLine', 'Edit3', 'FileText', 'Globe', 'ExternalLink', 'RotateCcw',
-    'Monitor', 'Download',
-  ];
-  const icons: Record<string, React.FC> = {};
-  for (const name of iconNames) {
-    icons[name] = (props: Record<string, unknown>) => {
-      const { createElement } = require('react');
-      return createElement('svg', { 'data-testid': `icon-${name}`, ...props });
-    };
-  }
-  return icons;
+// Mock lucide-react icons - 简单返回 SVG 占位（导出名取自真实模块，见 tests/lucideMock.ts）
+vi.mock('lucide-react', async (importOriginal) => {
+  const { lucideIconMock } = await import('./lucideMock');
+  return lucideIconMock(importOriginal as () => Promise<Record<string, unknown>>);
 });
 
 // Mock react-markdown

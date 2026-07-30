@@ -13,9 +13,9 @@ import { registerCanvasUnloadFlush } from './utils/registerCanvasUnloadFlush';
 import { getCanvasNodeContextText } from './utils/canvasNodeContextText';
 import { screenToCanvasPosition } from './utils/canvas';
 import { nodeSupportsCycleLayout } from './constants/nodeCapabilities';
-import { NOTE_LAYOUT_COUNT } from './constants/noteLayouts';
 import { CanvasEdgeLines } from './components/canvas/CanvasEdgeLines';
 import { DraggableNode } from './components/canvas/DraggableNode';
+import { CanvasContextMenu, type CanvasContextMenuActions } from './components/canvas/CanvasContextMenu';
 import { AISettingsModal } from './components/AISettingsModal';
 import { Sidebar } from './components/Sidebar';
 import { CanvasHistoryPopover } from './components/CanvasHistoryPopover';
@@ -32,10 +32,11 @@ import { useSeedData } from './hooks/useSeedData';
 import { useUserProfile } from './hooks/useUserProfile';
 import { useFullscreen } from './hooks/useFullscreen';
 import { useCanvasInteraction } from './hooks/useCanvasInteraction';
+import { useCanvasContextMenu } from './hooks/useCanvasContextMenu';
 import { useNodeActions } from './hooks/useNodeActions';
+import { pickFiles } from './utils/filePicker';
 import { useAiActions } from './hooks/useAiActions';
 import { useAppDialog } from './components/AppDialogProvider';
-import { processFileToNode } from './utils/file';
 import { dataTransferHasFiles, preventDefaultIfFileDrag } from './utils/dnd';
 import {
   buildStickyClipboardPayload,
@@ -271,9 +272,41 @@ export default function App() {
   }, [activeTab]);
 
   // Node actions (CRUD, selection, linking)
-  const { toggleNodeSelection, handleLink, deleteEdge, removeNodeId, addTextNode, addThemeNode, addFileNode } = useNodeActions({
+  const {
+    toggleNodeSelection, handleLink, deleteEdge, removeNodeId, addTextNode, addThemeNode, addFileNode,
+    createNodeAt, addAgentNodeAt, insertFilesAt, duplicateNode, cycleNodeLayout, pasteStickyAt,
+  } = useNodeActions({
     activeCanvasId, nodesRef, connectingFrom, setConnectingFrom, edges, selectedNodes, setSelectedNodes, transformRef,
   });
+
+  // Right-click menu (canvas / node / edge)
+  const { menu: contextMenu, openContextMenu, closeContextMenu } = useCanvasContextMenu(mainRef, transformRef);
+
+  const nodesById = React.useMemo(
+    () => new Map(dynamicNodes.map((n) => [n.id, n])),
+    [dynamicNodes],
+  );
+
+  const contextMenuActions = React.useMemo<CanvasContextMenuActions>(
+    () => ({
+      createNode: (nodeType, at) => void createNodeAt(nodeType, at),
+      insertFile: (accept, at) => void pickFiles(accept).then((files) => insertFilesAt(files, at)),
+      addAgentNode: (agentConfigId, at) => void addAgentNodeAt(agentConfigId, at),
+      pasteSticky: (payload, at) => void pasteStickyAt(payload, at),
+      resetView: () => setCanvasTransform({ x: 0, y: 0, scale: 1 }),
+      editNode: (nodeId) => setEditingNodeId(nodeId),
+      duplicateNode: (nodeId) => void duplicateNode(nodeId),
+      startLink: (nodeId) => handleLink(nodeId),
+      cycleLayout: (nodeId) => void cycleNodeLayout(nodeId),
+      toggleSelect: (nodeId) => toggleNodeSelection(nodeId),
+      deleteNode: (nodeId) => removeNodeId(nodeId),
+      deleteEdge: (edgeId) => deleteEdge(edgeId),
+    }),
+    [
+      createNodeAt, insertFilesAt, addAgentNodeAt, pasteStickyAt, setCanvasTransform,
+      duplicateNode, handleLink, cycleNodeLayout, toggleNodeSelection, removeNodeId, deleteEdge,
+    ],
+  );
 
   // AI actions (publish, agent analysis, AI submit)
   const {
@@ -414,24 +447,12 @@ export default function App() {
                 e.currentTarget.getBoundingClientRect(),
                 canvasTransform,
               );
-
-              for (let index = 0; index < Array.from(e.dataTransfer.files).length; index++) {
-                const file = e.dataTransfer.files[index];
-                try {
-                  const data = await processFileToNode(file);
-                  await db.nodes.add({
-                    id: crypto.randomUUID(),
-                    canvasId: activeCanvasId,
-                    ...data,
-                    x: ox + (index * 20) - 100,
-                    y: oy + (index * 20) - 100
-                  });
-                } catch (err) {
-                  console.error('Failed to process file:', file.name, err);
-                }
-              }
+              // 拖放沿用「以指针为中心」的落点（节点约 200 宽高的一半）；
+              // 右键菜单新建则以点击点为左上角，见 CanvasContextMenu。
+              await insertFilesAt(Array.from(e.dataTransfer.files), { x: ox - 100, y: oy - 100 });
             }
           }}
+          onContextMenu={(e) => openContextMenu(e, { kind: 'canvas' })}
         >
           {/* Draggable background (pan) */}
           <div 
@@ -476,6 +497,7 @@ export default function App() {
               svgRef={svgRef} edgeLabelsRef={edgeLabelsRef}
               hoveredEdgeId={hoveredEdgeId} setHoveredEdgeId={setHoveredEdgeId}
               deleteEdge={deleteEdge}
+              onEdgeContextMenu={(e, edgeId) => openContextMenu(e, { kind: 'edge', edgeId })}
             />
 
             <div className="absolute inset-0 z-30 w-[1px] h-[1px] pointer-events-none"> 
@@ -498,12 +520,7 @@ export default function App() {
                     rotation={rotation}
                     onCycleLayout={
                       nodeSupportsCycleLayout(node.type)
-                        ? () => {
-                            const currentLayout = node.layout || 0;
-                            const layoutCycleMod =
-                              node.type === 'note' || node.type === 'text' ? NOTE_LAYOUT_COUNT : 4;
-                            db.nodes.update(node.id, { layout: (currentLayout + 1) % layoutCycleMod });
-                          }
+                        ? () => void cycleNodeLayout(node.id)
                         : undefined
                     }
                     isSelected={selectedNodes.has(node.id)}
@@ -524,6 +541,7 @@ export default function App() {
                           }
                         : undefined
                     }
+                    onContextMenu={(e, nid) => openContextMenu(e, { kind: 'node', nodeId: nid })}
                 >
                   <NodeRenderer
                     node={node}
@@ -559,6 +577,17 @@ export default function App() {
           onCancelIntentClarification={cancelIntentClarification}
           onConfirmIntentClarification={(finalRequest) => void confirmIntentClarification(finalRequest)}
         />
+
+        {contextMenu && (
+          <CanvasContextMenu
+            menu={contextMenu}
+            onClose={closeContextMenu}
+            agentConfigs={agentConfigs}
+            nodesById={nodesById}
+            selectedNodes={selectedNodes}
+            actions={contextMenuActions}
+          />
+        )}
         </main>
         )}
 

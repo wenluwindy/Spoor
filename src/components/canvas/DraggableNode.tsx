@@ -31,6 +31,8 @@ export interface DraggableNodeProps {
   glassSurface?: boolean;
   /** Note/text: card body pointer sets which node Ctrl+C duplicates (not from checkbox). */
   onStickyActivate?: (id: string) => void;
+  /** Right-click on the card opens the canvas context menu for this node. */
+  onContextMenu?: (e: React.MouseEvent<HTMLDivElement>, id: string) => void;
 }
 
 export const DraggableNode: React.FC<DraggableNodeProps> = ({ 
@@ -41,6 +43,7 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
   rotation = 0,
   glassSurface = false,
   onStickyActivate,
+  onContextMenu,
 }) => {
   const { t } = useTranslation();
   const scaleRef = useRef(scale);
@@ -90,6 +93,14 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
           setShowPalette(true);
         }
       }}
+      onContextMenu={
+        onContextMenu
+          ? (e) => {
+              if (showPalette) setShowPalette(false);
+              onContextMenu(e, id);
+            }
+          : undefined
+      }
       onPointerDown={(e) => {
         // 右键/中键交给画布右键菜单与平移逻辑；否则右键按住会把节点拖走。
         if (e.button !== 0) return;

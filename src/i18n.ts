@@ -47,7 +47,17 @@ const resources = {
         "menu": {
           "insert_image": "Insert image…",
           "insert_video": "Insert video…",
-          "insert_document": "Insert document…"
+          "insert_document": "Insert document…",
+          "add_agent": "Add persona",
+          "paste_sticky": "Paste note",
+          "reset_view": "Reset view",
+          "edit_content": "Edit content",
+          "duplicate": "Duplicate",
+          "start_link": "Start a connection",
+          "select": "Select",
+          "unselect": "Deselect",
+          "delete_node": "Delete node",
+          "delete_edge": "Delete connection"
         }
       },
       "nodes": {
@@ -376,7 +386,17 @@ const resources = {
         "menu": {
           "insert_image": "插入图片…",
           "insert_video": "插入视频…",
-          "insert_document": "插入文档…"
+          "insert_document": "插入文档…",
+          "add_agent": "添加助手",
+          "paste_sticky": "粘贴便签",
+          "reset_view": "重置视图",
+          "edit_content": "编辑内容",
+          "duplicate": "创建副本",
+          "start_link": "开始连线",
+          "select": "选中",
+          "unselect": "取消选中",
+          "delete_node": "删除节点",
+          "delete_edge": "删除连线"
         }
       },
       "nodes": {

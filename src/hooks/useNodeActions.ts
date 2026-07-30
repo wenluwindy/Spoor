@@ -1,9 +1,22 @@
 import type { RefObject } from 'react';
 import type { CanvasTransform } from './useCanvasInteraction';
-import { db } from '../db';
+import { db, type CanvasNode } from '../db';
 import i18n from '../i18n';
 import { getCanvasCenterPosition } from '../utils/canvas';
 import { processFileToNode } from '../utils/file';
+import { nodeSupportsCycleLayout } from '../constants/nodeCapabilities';
+import { NOTE_LAYOUT_COUNT } from '../constants/noteLayouts';
+import { isStickyNoteType, type StickyClipboardPayloadV1 } from '../utils/noteClipboard';
+
+export interface CanvasPoint {
+  x: number;
+  y: number;
+}
+
+/** 同一次插入多个文件时，逐个错开一点，避免完全重叠。 */
+const MULTI_INSERT_STAGGER = 20;
+/** 主题卡以外的版式轮换档数（见 `nodeCapabilities` 注释）。 */
+const THEME_LAYOUT_COUNT = 4;
 
 interface UseNodeActionsParams {
   activeCanvasId: string;
@@ -26,6 +39,10 @@ export function useNodeActions({
   setSelectedNodes,
   transformRef,
 }: UseNodeActionsParams) {
+  /** 未指定落点时沿用「视口中心 + 抖动」，供工具栏按钮使用。 */
+  const resolvePosition = (at?: CanvasPoint): CanvasPoint =>
+    at ?? getCanvasCenterPosition(transformRef.current ?? { x: 0, y: 0, scale: 1 });
+
   const toggleNodeSelection = (id: string) => {
     setSelectedNodes(prev => {
       const next = new Set(prev);
@@ -53,15 +70,21 @@ export function useNodeActions({
   const removeNodeId = (id: string) => {
     db.nodes.delete(id);
     db.edges.where('from').equals(id).or('to').equals(id).delete();
+    setSelectedNodes(prev => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
-  const addTextNode = async () => {
-    const { x, y } = getCanvasCenterPosition(transformRef.current);
+  const addTextNode = async (at?: CanvasPoint) => {
+    const { x, y } = resolvePosition(at);
     await db.nodes.add({ id: crypto.randomUUID(), canvasId: activeCanvasId, type: 'text', content: '', x, y });
   };
 
-  const addThemeNode = async () => {
-    const { x, y } = getCanvasCenterPosition(transformRef.current);
+  const addThemeNode = async (at?: CanvasPoint) => {
+    const { x, y } = resolvePosition(at);
     await db.nodes.add({
       id: crypto.randomUUID(),
       canvasId: activeCanvasId,
@@ -72,24 +95,106 @@ export function useNodeActions({
     });
   };
 
-  const addFileNode = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
+  /** 供右键菜单按 `CanvasCreateItemDef.nodeType` 统一分发。 */
+  const createNodeAt = async (nodeType: 'text' | 'theme', at?: CanvasPoint) => {
+    if (nodeType === 'theme') await addThemeNode(at);
+    else await addTextNode(at);
+  };
+
+  const addAgentNodeAt = async (agentConfigId: string, at?: CanvasPoint) => {
+    const { x, y } = resolvePosition(at);
+    await db.nodes.add({
+      id: crypto.randomUUID(),
+      canvasId: activeCanvasId,
+      type: 'agent',
+      agentConfigId,
+      x,
+      y,
+    });
+  };
+
+  /** 落库多个文件，首个放在 `at`，其余依次错开。 */
+  const insertFilesAt = async (files: File[], at?: CanvasPoint) => {
+    if (files.length === 0) return;
+    const origin = resolvePosition(at);
+    for (let index = 0; index < files.length; index++) {
+      const file = files[index];
       try {
-        const { x, y } = getCanvasCenterPosition(transformRef.current);
         const data = await processFileToNode(file);
         await db.nodes.add({
           id: crypto.randomUUID(),
           canvasId: activeCanvasId,
           ...data,
-          x, y,
+          x: origin.x + index * MULTI_INSERT_STAGGER,
+          y: origin.y + index * MULTI_INSERT_STAGGER,
         });
       } catch (err) {
         console.error('Failed to process file:', file.name, err);
       }
+    }
+  };
+
+  const addFileNode = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      await insertFilesAt([e.target.files[0]]);
       e.target.value = '';
     }
   };
 
-  return { toggleNodeSelection, handleLink, deleteEdge, removeNodeId, addTextNode, addThemeNode, addFileNode };
+  /** 复制一个节点的全部内容到旁边（不复制它的连线）。 */
+  const duplicateNode = async (id: string) => {
+    const node = await db.nodes.get(id);
+    if (!node) return;
+    const { id: _omit, ...rest } = node;
+    await db.nodes.add({
+      ...rest,
+      id: crypto.randomUUID(),
+      canvasId: activeCanvasId,
+      x: node.x + MULTI_INSERT_STAGGER,
+      y: node.y + MULTI_INSERT_STAGGER,
+    });
+  };
+
+  const cycleNodeLayout = async (id: string) => {
+    const node = await db.nodes.get(id);
+    if (!node || !nodeSupportsCycleLayout(node.type)) return;
+    const cycleMod = isStickyNoteType(node.type) ? NOTE_LAYOUT_COUNT : THEME_LAYOUT_COUNT;
+    await db.nodes.update(id, { layout: ((node.layout ?? 0) + 1) % cycleMod });
+  };
+
+  /** 按剪贴板负载建便签；保留多张之间的相对位置，整体落到 `at`。 */
+  const pasteStickyAt = async (payload: StickyClipboardPayloadV1, at?: CanvasPoint) => {
+    if (payload.nodes.length === 0) return;
+    const origin = resolvePosition(at);
+    const baseX = Math.min(...payload.nodes.map((n) => n.x));
+    const baseY = Math.min(...payload.nodes.map((n) => n.y));
+    const rows: CanvasNode[] = payload.nodes.map((item) => ({
+      id: crypto.randomUUID(),
+      canvasId: activeCanvasId,
+      type: item.type,
+      content: item.content ?? '',
+      layout: item.layout,
+      width: item.width,
+      height: item.height,
+      x: origin.x + (item.x - baseX),
+      y: origin.y + (item.y - baseY),
+    }));
+    await db.nodes.bulkAdd(rows);
+  };
+
+  return {
+    toggleNodeSelection,
+    handleLink,
+    deleteEdge,
+    removeNodeId,
+    addTextNode,
+    addThemeNode,
+    addFileNode,
+    createNodeAt,
+    addAgentNodeAt,
+    insertFilesAt,
+    duplicateNode,
+    cycleNodeLayout,
+    pasteStickyAt,
+  };
 }
