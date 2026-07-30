@@ -1,13 +1,20 @@
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, Monitor, Settings, X, Sparkles } from 'lucide-react';
-import { MIMO_TOKEN_PLAN_BASE_URL } from '../constants/mimo';
-import { DOUBAO_ARK_BASE_URL, DOUBAO_DEFAULT_MODEL } from '../constants/doubao';
-import { DEEPSEEK_BASE_URL, DEEPSEEK_DEFAULT_MODEL } from '../constants/deepseek';
-import { DESKTOP_RELEASE_URL } from '../constants/desktopRelease';
-import { openExternalUrl } from '../utils/openExternal';
-import { isTauriRuntime } from '../utils/isTauriRuntime';
-import { AISettingsDocsPanel } from './AISettingsDocsPanel';
+import { Settings, X } from 'lucide-react';
+import type { AIConfigV2 } from '../types/aiConfig';
+import { resolveActiveChatTarget } from '../services/aiConfig';
+import { GeneralSettingsTab } from './settings/GeneralSettingsTab';
+import { ProvidersSettingsTab } from './settings/ProvidersSettingsTab';
+import { StorageSettingsTab } from './settings/StorageSettingsTab';
 
+/**
+ * v1 的扁平配置形状。
+ *
+ * 配置本身已经是 v2（多服务商），但对话链路仍吃这一份扁平结构，由
+ * `services/aiConfig.resolveActiveChatConfig` 压出来。类型留在这里是因为
+ * `services/ai`、`ResearchLab`、`AgentsStudio` 都从这里 import，挪走等于
+ * 把重构的爆炸半径又扩大一圈。
+ */
 export interface AIConfig {
   provider: string;
   apiKey: string;
@@ -20,21 +27,31 @@ export interface AIConfig {
   metasoApiKey?: string;
 }
 
+type SettingsTab = 'general' | 'providers' | 'storage';
+
+const TABS: { id: SettingsTab; labelKey: string }[] = [
+  { id: 'general', labelKey: 'settings.tab_general' },
+  { id: 'providers', labelKey: 'settings.tab_providers' },
+  { id: 'storage', labelKey: 'settings.tab_storage' },
+];
+
 export interface AISettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  config: AIConfig;
-  setConfig: React.Dispatch<React.SetStateAction<AIConfig>>;
+  config: AIConfigV2;
+  setConfig: React.Dispatch<React.SetStateAction<AIConfigV2>>;
 }
 
 export function AISettingsModal({ isOpen, onClose, config, setConfig }: AISettingsModalProps) {
-  const { t, i18n } = useTranslation();
-  const inDesktopApp = isTauriRuntime();
+  const { t } = useTranslation();
+  const [tab, setTab] = useState<SettingsTab>('general');
   if (!isOpen) return null;
+
+  const activeProviderKind = resolveActiveChatTarget(config).provider?.kind ?? 'custom';
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-2xl w-full max-w-2xl overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
         <div className="p-6 border-b border-[#E6E4DF] flex items-center justify-between bg-[#F4F1ED]/50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#C2410C]/10 border border-[#C2410C]/20 flex items-center justify-center text-[#C2410C]">
@@ -42,7 +59,9 @@ export function AISettingsModal({ isOpen, onClose, config, setConfig }: AISettin
             </div>
             <div>
               <h2 className="font-serif text-xl font-bold text-[#1a1a1a]">{t('settings.title')}</h2>
-              <p className="text-[10px] text-[#8c8a84] uppercase tracking-widest font-mono">{t('settings.ai_config')}</p>
+              <p className="text-[10px] text-[#8c8a84] uppercase tracking-widest font-mono">
+                {t('settings.ai_config')}
+              </p>
             </div>
           </div>
           <button
@@ -55,211 +74,45 @@ export function AISettingsModal({ isOpen, onClose, config, setConfig }: AISettin
           </button>
         </div>
 
-        <div className="p-8 space-y-6 overflow-y-auto max-h-[70vh]">
-          {/* Language selection */}
-          <div className="space-y-3">
-            <label className="text-[10px] font-mono font-bold text-[#8c8a84] uppercase tracking-wider">{t('settings.language')}</label>
-            <div className="grid grid-cols-2 gap-3">
-              <button 
-                onClick={() => { i18n.changeLanguage('en'); localStorage.setItem('app_language', 'en'); }}
-                className={`flex items-center justify-center gap-2 h-10 px-4 rounded-lg border transition-all text-sm font-bold ${i18n.language === 'en' ? 'border-[#C2410C] bg-[#C2410C]/5 text-[#C2410C]' : 'border-[#E6E4DF] text-[#5a5a54] hover:border-[#C2410C]/30'}`}
-              >
-                English
-              </button>
-              <button 
-                onClick={() => { i18n.changeLanguage('zh'); localStorage.setItem('app_language', 'zh'); }}
-                className={`flex items-center justify-center gap-2 h-10 px-4 rounded-lg border transition-all text-sm font-bold ${i18n.language === 'zh' ? 'border-[#C2410C] bg-[#C2410C]/5 text-[#C2410C]' : 'border-[#E6E4DF] text-[#5a5a54] hover:border-[#C2410C]/30'}`}
-              >
-                中文
-              </button>
-            </div>
-          </div>
-
-          <div className="h-px bg-[#F4F1ED]" />
-          <div className="p-4 rounded-xl border border-[#E6E4DF] bg-[#FAF9F6] space-y-3">
-            <div className="flex gap-3">
-              <div className="w-9 h-9 rounded-lg bg-[#C2410C]/10 border border-[#C2410C]/20 flex items-center justify-center text-[#C2410C] flex-shrink-0">
-                <Monitor className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-[#1a1a1a]">
-                  {inDesktopApp ? t('settings.desktop_installed_title') : t('settings.desktop_download_title')}
-                </p>
-                <p className="text-[11px] text-[#5a5a54] leading-relaxed mt-1">
-                  {inDesktopApp ? t('settings.desktop_installed_blurb') : t('settings.desktop_download_blurb')}
-                </p>
-              </div>
-            </div>
+        <div role="tablist" className="flex gap-1 px-6 pt-4 border-b border-[#E6E4DF]">
+          {TABS.map((entry) => (
             <button
+              key={entry.id}
               type="button"
-              onClick={() => void openExternalUrl(DESKTOP_RELEASE_URL)}
-              className="w-full flex items-center justify-center gap-2 h-10 px-4 rounded-lg border border-[#C2410C]/40 bg-[#C2410C]/5 text-[#C2410C] text-sm font-bold hover:bg-[#C2410C]/10 transition-colors"
+              role="tab"
+              aria-selected={tab === entry.id}
+              onClick={() => setTab(entry.id)}
+              className={`px-4 py-2 text-sm font-bold rounded-t-lg border-b-2 -mb-px transition-colors ${
+                tab === entry.id
+                  ? 'border-[#C2410C] text-[#C2410C]'
+                  : 'border-transparent text-[#8c8a84] hover:text-[#1a1a1a]'
+              }`}
             >
-              <Download className="w-4 h-4" />
-              {inDesktopApp ? t('settings.desktop_releases_button') : t('settings.desktop_download_button')}
+              {t(entry.labelKey)}
             </button>
-          </div>
-
-          <div className="h-px bg-[#F4F1ED]"></div>
-
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-               <div className="space-y-2">
-                 <label className="text-[10px] font-mono font-bold text-[#8c8a84] uppercase tracking-wider">{t('settings.provider')}</label>
-                 <select 
-                   className="w-full h-10 px-3 bg-[#FAF9F6] border border-[#E6E4DF] rounded-lg text-sm outline-none focus:border-[#C2410C] focus:ring-1 focus:ring-[#C2410C] transition-all"
-                   value={config.provider}
-                   onChange={e => {
-                     const newProvider = e.target.value;
-                     const defaults: Record<string, { model: string; baseUrl: string }> = {
-                       gemini: { model: 'gemini-1.5-flash', baseUrl: '' },
-                       openai: { model: 'gpt-4o', baseUrl: '' },
-                       anthropic: { model: 'claude-3-5-sonnet-20240620', baseUrl: '' },
-                       mimo: { model: 'mimo-v2.5-pro', baseUrl: MIMO_TOKEN_PLAN_BASE_URL },
-                       doubao: { model: DOUBAO_DEFAULT_MODEL, baseUrl: DOUBAO_ARK_BASE_URL },
-                       deepseek: { model: DEEPSEEK_DEFAULT_MODEL, baseUrl: DEEPSEEK_BASE_URL },
-                       custom: { model: 'gpt-4o', baseUrl: '' },
-                       local_llama: { model: 'gemma-4-e4b-it', baseUrl: '' },
-                     };
-                     const d = defaults[newProvider] || { model: '', baseUrl: '' };
-                     setConfig({
-                       ...config,
-                       provider: newProvider,
-                       model: d.model,
-                       baseUrl: d.baseUrl,
-                       ...(newProvider === 'local_llama'
-                         ? { apiKey: '', localGgufPath: config.localGgufPath ?? '' }
-                         : {}),
-                     });
-                   }}
-                 >
-                   <option value="gemini">Google Gemini</option>
-                   <option value="openai">OpenAI (GPT)</option>
-                   <option value="anthropic">Anthropic (Claude)</option>
-                   <option value="mimo">MiMo (小米大模型)</option>
-                   <option value="doubao">{t('settings.provider_doubao')}</option>
-                   <option value="deepseek">DeepSeek</option>
-                   <option value="custom">{t('settings.provider_custom')}</option>
-                   <option value="local_llama">{t('settings.provider_local_llama')}</option>
-                 </select>
-               </div>
-               <div className="space-y-2">
-                 <label className="text-[10px] font-mono font-bold text-[#8c8a84] uppercase tracking-wider">{t('settings.model')}</label>
-                 <input 
-                   type="text"
-                   className="w-full h-10 px-3 bg-[#FAF9F6] border border-[#E6E4DF] rounded-lg text-sm outline-none focus:border-[#C2410C] focus:ring-1 focus:ring-[#C2410C] transition-all"
-                   placeholder={
-                     config.provider === 'local_llama'
-                       ? t('settings.model_local_placeholder')
-                       : config.provider === 'gemini'
-                         ? 'gemini-1.5-flash'
-                         : config.provider === 'mimo'
-                           ? 'mimo-v2.5-pro'
-                           : config.provider === 'doubao'
-                             ? 'ep-...'
-                             : config.provider === 'deepseek'
-                               ? DEEPSEEK_DEFAULT_MODEL
-                               : 'gpt-4o'
-                   }
-                   value={config.model}
-                   onChange={e => setConfig({ ...config, model: e.target.value })}
-                 />
-               </div>
-            </div>
-
-            {config.provider === 'doubao' && (
-              <p className="text-[10px] text-[#8c8a84] leading-relaxed">{t('settings.doubao_model_hint')}</p>
-            )}
-
-            {config.provider === 'local_llama' ? (
-              <div className="space-y-2">
-                <label className="text-[10px] font-mono font-bold text-[#8c8a84] uppercase tracking-wider">{t('settings.local_gguf_path')}</label>
-                <input
-                  type="text"
-                  className="w-full h-10 px-3 bg-[#FAF9F6] border border-[#E6E4DF] rounded-lg text-sm outline-none focus:border-[#C2410C] focus:ring-1 focus:ring-[#C2410C] transition-all font-mono"
-                  placeholder={t('settings.local_gguf_placeholder')}
-                  value={config.localGgufPath ?? ''}
-                  onChange={e => setConfig({ ...config, localGgufPath: e.target.value })}
-                />
-                <label className="flex items-center gap-2 text-[11px] text-[#5a5a54] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="rounded border-[#E6E4DF]"
-                    checked={config.localEnableThinking ?? false}
-                    onChange={e => setConfig({ ...config, localEnableThinking: e.target.checked })}
-                  />
-                  {t('settings.local_enable_thinking')}
-                </label>
-                <p className="text-[10px] text-[#8c8a84] leading-relaxed">{t('settings.local_llama_hint')}</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <label className="text-[10px] font-mono font-bold text-[#8c8a84] uppercase tracking-wider">{t('settings.api_key')}</label>
-                <input
-                  type="password"
-                  className="w-full h-10 px-3 bg-[#FAF9F6] border border-[#E6E4DF] rounded-lg text-sm outline-none focus:border-[#C2410C] focus:ring-1 focus:ring-[#C2410C] transition-all"
-                  placeholder={config.provider === 'doubao' ? 'ark-...' : 'tp-...'}
-                  value={config.apiKey}
-                  onChange={e => setConfig({ ...config, apiKey: e.target.value })}
-                />
-              </div>
-            )}
-
-            {(config.provider === 'custom' || config.provider === 'openai' || config.provider === 'mimo' || config.provider === 'doubao' || config.provider === 'deepseek') && (
-              <div className="space-y-2">
-                <label className="text-[10px] font-mono font-bold text-[#8c8a84] uppercase tracking-wider">{t('settings.base_url')}</label>
-                <input
-                  type="text"
-                  className="w-full h-10 px-3 bg-[#FAF9F6] border border-[#E6E4DF] rounded-lg text-sm outline-none focus:border-[#C2410C] focus:ring-1 focus:ring-[#C2410C] transition-all"
-                  placeholder={
-                    config.provider === 'mimo'
-                      ? MIMO_TOKEN_PLAN_BASE_URL
-                      : config.provider === 'doubao'
-                        ? DOUBAO_ARK_BASE_URL
-                        : config.provider === 'deepseek'
-                          ? DEEPSEEK_BASE_URL
-                          : 'https://api.openai.com/v1'
-                  }
-                  value={config.baseUrl}
-                  onChange={e => setConfig({ ...config, baseUrl: e.target.value })}
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="h-px bg-[#F4F1ED]"></div>
-
-          {/* Metaso Search API Key (optional) */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-mono font-bold text-[#8c8a84] uppercase tracking-wider">{t('settings.metaso_key')}</label>
-            <input
-              type="password"
-              className="w-full h-10 px-3 bg-[#FAF9F6] border border-[#E6E4DF] rounded-lg text-sm outline-none focus:border-[#C2410C] focus:ring-1 focus:ring-[#C2410C] transition-all"
-              placeholder="sk-metaso-..."
-              value={config.metasoApiKey ?? ''}
-              onChange={e => setConfig({ ...config, metasoApiKey: e.target.value })}
-            />
-            <p className="text-[10px] text-[#8c8a84] leading-relaxed">{t('settings.metaso_key_hint')}</p>
-          </div>
-
-          <AISettingsDocsPanel provider={config.provider} />
-
-          <div className="p-4 bg-[#F4F1ED] rounded-xl border border-[#E6E4DF] border-dashed">
-            <div className="flex gap-3">
-              <Sparkles className="w-4 h-4 text-[#C2410C] flex-shrink-0 mt-0.5" />
-              <div className="text-[11px] leading-relaxed text-[#5a5a54]">
-                {t('settings.save_success')}
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
 
-        <div className="p-6 border-t border-[#E6E4DF] bg-white flex justify-end">
+        <div className="p-6 overflow-y-auto max-h-[65vh]">
+          {tab === 'general' && (
+            <GeneralSettingsTab
+              config={config}
+              onChange={setConfig}
+              activeProviderKind={activeProviderKind}
+            />
+          )}
+          {tab === 'providers' && <ProvidersSettingsTab config={config} onChange={setConfig} />}
+          {tab === 'storage' && <StorageSettingsTab />}
+        </div>
+
+        <div className="p-6 border-t border-[#E6E4DF] bg-white flex items-center justify-between gap-4">
+          {/* 配置是即时保存的，这里只说明一句，避免用户以为不点按钮就丢了 */}
+          <p className="text-[11px] text-[#8c8a84]">{t('settings.save_success')}</p>
           <button
             onClick={onClose}
-            className="px-8 py-2.5 bg-[#C2410C] text-white rounded-xl font-sans font-bold hover:bg-[#9A3412] transition-all text-sm shadow-sm shadow-[#C2410C]/20"
+            className="px-8 py-2.5 bg-[#C2410C] text-white rounded-xl font-sans font-bold hover:bg-[#9A3412] transition-all text-sm shadow-sm shadow-[#C2410C]/20 shrink-0"
           >
-            {t('settings.save')}
+            {t('settings.close')}
           </button>
         </div>
       </div>

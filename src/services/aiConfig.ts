@@ -268,50 +268,6 @@ export function normalizeAiConfig(raw: unknown): AIConfigV2 {
   };
 }
 
-/**
- * 反向垫片：把扁平形状的编辑结果写回 v2 的**当前**服务商。
- *
- * 现有的 `AISettingsModal` 编辑的是 v1 扁平结构。这个函数让它在 v2 落地之后
- * 继续原样工作，直到 S25 把设置面板换成多服务商 CRUD。届时本函数退役。
- */
-export function applyFlatChatConfig(config: AIConfigV2, flat: AIConfig): AIConfigV2 {
-  const kind = isProviderKind(flat.provider) ? flat.provider : 'custom';
-  const metasoApiKey = (flat.metasoApiKey ?? '').trim() || undefined;
-
-  const { provider: current } = resolveActiveChatTarget(config);
-  const providerId = current?.id ?? newId();
-  const modelId =
-    current?.chatModels.find((m) => m.id === config.activeChat?.modelId)?.id ??
-    current?.chatModels[0]?.id ??
-    newId();
-
-  const nextProvider: AIProviderProfile = {
-    id: providerId,
-    // 名字用户没改过时跟着 kind 走，改过就保留
-    name: current && current.name !== current.kind ? current.name : kind,
-    kind,
-    apiKey: flat.apiKey ?? '',
-    baseUrl: flat.baseUrl ?? '',
-    chatModels: [{ id: modelId, modelName: flat.model ?? '', label: flat.model ?? '' }],
-    imageModels: current?.imageModels ?? [],
-    imageApiKind: current?.imageApiKind,
-    localGgufPath: flat.localGgufPath,
-    localEnableThinking: flat.localEnableThinking,
-  };
-
-  const providers = current
-    ? config.providers.map((p) => (p.id === providerId ? nextProvider : p))
-    : [...config.providers, nextProvider];
-
-  return {
-    ...config,
-    version: 2,
-    providers,
-    activeChat: { providerId, modelId },
-    metasoApiKey,
-  };
-}
-
 /** 是否还没配任何模型服务（首启引导卡据此显示）。 */
 export function isAiConfigEmpty(config: AIConfigV2): boolean {
   const { provider } = resolveActiveChatTarget(config);

@@ -397,16 +397,17 @@ describe('App 组件', () => {
       expect(screen.getByText('中文')).toBeInTheDocument();
     });
 
-    it('设置面板包含 AI 提供商选项', async () => {
+    it('模型服务在独立标签页里，不再堆在设置首屏', async () => {
       const user = userEvent.setup();
       await act(async () => {
         render(<App />);
       });
 
       await user.click(screen.getByLabelText('设置'));
-      expect(screen.getByText('AI 服务商')).toBeInTheDocument();
-      expect(screen.getByText('API 密钥')).toBeInTheDocument();
-      expect(screen.getByText('模型')).toBeInTheDocument();
+      // 首屏是「通用」，服务商配置要切过去才看得到
+      expect(screen.queryByLabelText('AI 服务商')).toBeNull();
+      await user.click(screen.getByRole('tab', { name: 'settings.tab_providers' }));
+      expect(screen.getByText('settings.add_provider')).toBeInTheDocument();
     });
   });
 
@@ -594,19 +595,44 @@ describe('App 组件', () => {
       });
     };
 
+    /** 切到「模型服务」页并按预设加一个服务商。 */
+    const addProvider = async (
+      user: ReturnType<typeof userEvent.setup>,
+      preset = 'settings.provider_kind.openai',
+    ) => {
+      await user.click(screen.getByRole('tab', { name: 'settings.tab_providers' }));
+      await user.click(screen.getByRole('button', { name: preset }));
+    };
+
     it('设置面板显示关闭按钮', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
       await openSettings(user);
-      expect(screen.getByRole('button', { name: '关闭' })).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: '关闭' }).length).toBeGreaterThanOrEqual(1);
     });
 
-    it('设置面板包含 API 密钥输入框', async () => {
+    it('三个标签页都在，默认停在通用', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
       await openSettings(user);
-      const passwordInputs = document.querySelectorAll('input[type="password"]');
-      expect(passwordInputs.length).toBeGreaterThanOrEqual(1);
+
+      expect(screen.getByRole('tab', { name: 'settings.tab_general' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      expect(screen.getByRole('tab', { name: 'settings.tab_providers' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'settings.tab_storage' })).toBeInTheDocument();
+    });
+
+    it('通用页有语言、秘塔密钥与说明折叠区', async () => {
+      const user = userEvent.setup();
+      await act(async () => { render(<App />); });
+      await openSettings(user);
+
+      expect(screen.getByText('English')).toBeInTheDocument();
+      expect(screen.getByText('中文')).toBeInTheDocument();
+      expect(screen.getByText('settings.metaso_key')).toBeInTheDocument();
+      expect(screen.getByText('配置说明与官方文档')).toBeInTheDocument();
     });
 
     it('网页版设置面板显示桌面版下载入口', async () => {
@@ -616,73 +642,61 @@ describe('App 组件', () => {
       expect(screen.getByText('下载 Windows 安装包')).toBeInTheDocument();
     });
 
-    it('设置面板包含提供商下拉选项', async () => {
+    it('首次进入模型服务页是空的，并给出预设入口', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
       await openSettings(user);
-      const select = document.querySelector('select');
-      expect(select).toBeInTheDocument();
-      expect(select?.querySelector('option[value="gemini"]')).toBeTruthy();
-      expect(select?.querySelector('option[value="openai"]')).toBeTruthy();
-      expect(select?.querySelector('option[value="anthropic"]')).toBeTruthy();
-      expect(select?.querySelector('option[value="deepseek"]')).toBeTruthy();
-      expect(select?.querySelector('option[value="custom"]')).toBeTruthy();
+      await user.click(screen.getByRole('tab', { name: 'settings.tab_providers' }));
+
+      expect(screen.getByText('settings.providers_empty')).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'settings.provider_kind.doubao' }),
+      ).toBeInTheDocument();
     });
 
-    it('切换到 gemini 提供商后不显示 Base URL 字段', async () => {
+    it('按预设添加服务后出现完整的服务商卡片', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
       await openSettings(user);
-      const select = document.querySelector('select')!;
-      await user.selectOptions(select, 'gemini');
-      expect(screen.queryByText('基础 URL (可选)')).not.toBeInTheDocument();
+      await addProvider(user);
+
+      expect(screen.queryByText('settings.providers_empty')).toBeNull();
+      expect(screen.getByLabelText('AI 服务商')).toBeInTheDocument();
+      expect(screen.getByLabelText('基础 URL (可选)')).toBeInTheDocument();
+      expect(screen.getByLabelText('API 密钥')).toBeInTheDocument();
+      expect(screen.getAllByLabelText('模型').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('切换到 OpenAI 提供商时显示 Base URL 字段', async () => {
+    it('OpenAI 预设带出生图模型；换成 DeepSeek 后生图区消失', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
       await openSettings(user);
-      const select = document.querySelector('select')!;
-      await user.selectOptions(select, 'openai');
-      expect(screen.getByText('基础 URL (可选)')).toBeInTheDocument();
+      await addProvider(user);
+      expect(screen.getByText('settings.image_models')).toBeInTheDocument();
+
+      await user.selectOptions(screen.getByLabelText('AI 服务商'), 'deepseek');
+      expect(screen.queryByText('settings.image_models')).toBeNull();
     });
 
-    it('切换到 DeepSeek 提供商时显示 Base URL 字段', async () => {
+    it('本地 GGUF 显示模型路径而不是 API 密钥', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
       await openSettings(user);
-      const select = document.querySelector('select')!;
-      await user.selectOptions(select, 'deepseek');
-      expect(screen.getByText('基础 URL (可选)')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('deepseek-chat')).toBeInTheDocument();
+      await addProvider(user);
+
+      await user.selectOptions(screen.getByLabelText('AI 服务商'), 'local_llama');
+      expect(screen.getByLabelText('settings.local_gguf_path')).toBeInTheDocument();
+      expect(screen.queryByLabelText('API 密钥')).toBeNull();
     });
 
-    it('切换到 Custom 提供商时显示 Base URL 字段', async () => {
+    it('填 API Key 后自动存进 localStorage 的 v2 结构', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
       await openSettings(user);
-      const select = document.querySelector('select')!;
-      await user.selectOptions(select, 'custom');
-      expect(screen.getByText('基础 URL (可选)')).toBeInTheDocument();
-    });
+      await addProvider(user);
 
-    it('切换到 Anthropic 提供商时不显示 Base URL 字段', async () => {
-      const user = userEvent.setup();
-      await act(async () => { render(<App />); });
-      await openSettings(user);
-      const select = document.querySelector('select')!;
-      await user.selectOptions(select, 'anthropic');
-      expect(screen.queryByText('基础 URL (可选)')).not.toBeInTheDocument();
-    });
+      await user.type(screen.getByLabelText('API 密钥'), 'test-key-123');
 
-    it('修改 API Key 后自动更新 localStorage', async () => {
-      const user = userEvent.setup();
-      await act(async () => { render(<App />); });
-      await openSettings(user);
-      const apiKeyInput = document.querySelector('input[type="password"]') as HTMLInputElement;
-      await user.clear(apiKeyInput);
-      await user.type(apiKeyInput, 'test-key-123');
-      // 配置通过 useEffect 自动保存到 localStorage（v2 多服务商结构）
       await waitFor(() => {
         const saved = JSON.parse(localStorage.getItem('ai_config') || '{}');
         expect(saved.version).toBe(2);
@@ -690,27 +704,39 @@ describe('App 组件', () => {
       });
     });
 
-    it('修改模型名称', async () => {
+    it('改模型名会写进配置', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
       await openSettings(user);
-      const textInputs = document.querySelectorAll('input[type="text"]');
-      const modelInput = Array.from(textInputs).find(input =>
-        (input as HTMLInputElement).placeholder?.includes('gemini') ||
-        (input as HTMLInputElement).value?.includes('gemini')
-      );
-      if (modelInput) {
-        await user.clear(modelInput);
-        await user.type(modelInput, 'gpt-4o');
-        expect((modelInput as HTMLInputElement).value).toBe('gpt-4o');
-      }
+      await addProvider(user);
+
+      const modelInput = screen.getAllByLabelText('模型')[0];
+      await user.clear(modelInput);
+      await user.type(modelInput, 'o3');
+
+      await waitFor(() => {
+        const saved = JSON.parse(localStorage.getItem('ai_config') || '{}');
+        expect(resolveActiveChatConfig(normalizeAiConfig(saved)).model).toBe('o3');
+      });
     });
 
-    it('设置面板展示 AI 配置说明折叠区', async () => {
+    it('第一个添加的服务商自动成为当前对话服务商', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
       await openSettings(user);
-      expect(screen.getByText('配置说明与官方文档')).toBeInTheDocument();
+      await addProvider(user);
+
+      expect(screen.getByText('settings.badge_active_chat')).toBeInTheDocument();
+    });
+
+    it('删除服务商要二次确认', async () => {
+      const user = userEvent.setup();
+      await act(async () => { render(<App />); });
+      await openSettings(user);
+      await addProvider(user);
+
+      await user.click(screen.getByRole('button', { name: 'settings.delete_provider' }));
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
     });
   });
 

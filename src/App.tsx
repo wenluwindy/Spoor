@@ -43,7 +43,6 @@ import { useAiActions } from './hooks/useAiActions';
 import { useNativeFileDrop } from './hooks/useNativeFileDrop';
 import { migrateBase64MediaNodes } from './services/migrateBase64Media';
 import {
-  applyFlatChatConfig,
   emptyAiConfigV2,
   isAiConfigEmpty,
   normalizeAiConfig,
@@ -183,14 +182,6 @@ export default function App() {
    * 这层垫片是这次重构的爆炸半径边界，见 services/aiConfig。
    */
   const aiConfig = React.useMemo(() => resolveActiveChatConfig(aiConfigV2), [aiConfigV2]);
-
-  /** 现有设置面板仍编辑扁平结构，写回时落到当前服务商上。S25 换成多服务商 CRUD 后退役。 */
-  const setAiConfig = useCallback<React.Dispatch<React.SetStateAction<AIConfig>>>((update) => {
-    setAiConfigV2((prev) => {
-      const flat = typeof update === 'function' ? update(resolveActiveChatConfig(prev)) : update;
-      return applyFlatChatConfig(prev, flat);
-    });
-  }, []);
 
   /** 未配置任何 API Key（本地 GGUF 只要有模型路径即算已配置）。 */
   const isAiUnconfigured = isAiConfigEmpty(aiConfigV2);
@@ -693,7 +684,7 @@ export default function App() {
           await Promise.all(existing.filter((row) => !nextIds.has(row.id)).map((row) => db.agents.delete(row.id)));
           await Promise.all(newConfigs.map((config) => db.agents.put(config)));
         }} aiConfig={aiConfig} callAI={callUniversalAI} />}
-        <AISettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={aiConfig} setConfig={setAiConfig} />
+        <AISettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={aiConfigV2} setConfig={setAiConfigV2} />
       </div>
     </div>
   );
