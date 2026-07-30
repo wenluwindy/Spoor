@@ -122,6 +122,7 @@ export const zh = {
     "search_no_results": "没有搜到相关网页结果。",
     "search_failed": "联网搜索失败，请检查秘塔 Key 与网络。",
     "image_alt": "画布图片",
+    "media_missing": "文件已删除或移动",
     "document_label": "文档",
     "empty_document_body": "（空文档）",
     "theme_default_desc": "当前工作区的核心研究目标。",
@@ -428,6 +429,8 @@ export const zh = {
     "search.no_key": "尚未配置秘塔搜索 API Key。请到设置里添加。",
     "search.failed": "联网搜索失败。",
     "file.unsupported": "不支持这种文件类型。",
+    "media.desktop_only": "本地文件存储仅在桌面版可用。",
+    "media.command_failed": "本地文件操作失败。",
     "console_hint": "按 F12 → Console 查看 [Spoor] 日志。",
     "check_settings_hint": "请检查设置中的服务商、API Key、Base URL 与模型。"
   }

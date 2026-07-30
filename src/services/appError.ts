@@ -29,7 +29,10 @@ export type AppErrorCode =
   | 'search.no_key'
   | 'search.failed'
   // --- 文件 ---
-  | 'file.unsupported';
+  | 'file.unsupported'
+  // --- 本地媒体存储 ---
+  | 'media.desktop_only'
+  | 'media.command_failed';
 
 export class AppError extends Error {
   readonly code: AppErrorCode;

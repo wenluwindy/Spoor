@@ -122,6 +122,7 @@ export const en = {
     "search_no_results": "No web results for that query.",
     "search_failed": "Web search failed. Check the Metaso key and network.",
     "image_alt": "Canvas image",
+    "media_missing": "File deleted or moved",
     "document_label": "Document",
     "empty_document_body": "(empty document)",
     "theme_default_desc": "Central research objective for the current workspace.",
@@ -428,6 +429,8 @@ export const en = {
     "search.no_key": "No Metaso Search API key configured. Add one in Settings.",
     "search.failed": "Web search failed.",
     "file.unsupported": "Unsupported file type.",
+    "media.desktop_only": "Local file storage is only available in the desktop app.",
+    "media.command_failed": "Local file operation failed.",
     "console_hint": "Press F12 → Console for the [Spoor] log.",
     "check_settings_hint": "Check the provider, API key, Base URL and model in Settings."
   }

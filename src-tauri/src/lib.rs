@@ -1,4 +1,5 @@
 mod local_llama;
+mod media;
 
 use futures_util::StreamExt;
 use serde_json::Value;
@@ -200,13 +201,43 @@ fn get_local_llama_log_path() -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    // 画布里的图片/视频/文档都走这个协议直接流式读盘：
+    // 数据根是运行时解析的，`assetProtocol` 的静态 scope 对不上。
+    .register_asynchronous_uri_scheme_protocol("spoor-media", |ctx, request, responder| {
+      let root = media::init_data_root(ctx.app_handle()).to_path_buf();
+      let path = request.uri().path().to_string();
+      let range = request
+        .headers()
+        .get(tauri::http::header::RANGE)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+      // 读盘是阻塞的，别占住 webview 的 IPC 线程
+      std::thread::spawn(move || {
+        responder.respond(media::serve_media(&root, &path, range.as_deref()));
+      });
+    })
+    .setup(|app| {
+      let root = media::init_data_root(app.handle());
+      println!("[Spoor] 媒体数据根：{}", root.display());
+      Ok(())
+    })
     .invoke_handler(tauri::generate_handler![
       openai_compatible_chat,
       openai_compatible_chat_stream,
       metaso_search,
       open_external_url,
       local_llama_chat,
-      get_local_llama_log_path
+      get_local_llama_log_path,
+      media::media_store_info,
+      media::media_list,
+      media::media_import,
+      media::media_import_bytes,
+      media::media_export,
+      media::media_delete,
+      media::media_reveal,
+      media::media_open_root,
+      media::media_gc
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

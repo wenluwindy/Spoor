@@ -10,6 +10,14 @@ export interface CanvasNode {
   themeTag?: string;
   agentConfigId?: string;
   fileType?: string;
+  /**
+   * 媒体/文档在数据根内的**相对**路径（`media/uploaded/2026/07/ab12.png`）。
+   * 渲染优先级 `filePath` > `content`（旧的 data URL）。绝不存绝对路径——
+   * 安装目录一变，绝对路径全断。
+   */
+  filePath?: string;
+  /** 原始文件名，用于显示与「另存为」。 */
+  fileName?: string;
   x: number;
   y: number;
   width?: number;
