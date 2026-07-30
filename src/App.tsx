@@ -35,6 +35,8 @@ import { useUserProfile } from './hooks/useUserProfile';
 import { useFullscreen } from './hooks/useFullscreen';
 import { useCanvasInteraction } from './hooks/useCanvasInteraction';
 import { useCanvasContextMenu } from './hooks/useCanvasContextMenu';
+import { useCanvasMarquee } from './hooks/useCanvasMarquee';
+import { computeFitTransform, unionNodeBoundsInCanvasSpace } from './utils/zoomToFit';
 import { useNodeActions } from './hooks/useNodeActions';
 import { pickFiles } from './utils/filePicker';
 import { useAiActions } from './hooks/useAiActions';
@@ -117,7 +119,14 @@ export default function App() {
     mainRef, contentContainerRef, svgRef, edgeLabelsRef, nodesRef, connectingFrom, setConnectingFrom,
   );
 
-  const handleCanvasPanPointerDown = useCallback(
+  // 左键框选（中键平移由 useCanvasInteraction 负责）
+  const { marquee, handleMarqueeStart } = useCanvasMarquee({ mainRef, nodesRef, setSelectedNodes });
+
+  /**
+   * 画布背景按下：先把正在编辑的节点存盘，再按键位分派。
+   * 左键 → 框选；中键 → 平移；右键交给 onContextMenu，不在这里处理。
+   */
+  const handleCanvasBackgroundPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       const nodeRow = editingNodeId ? dynamicNodes.find((n) => n.id === editingNodeId) : undefined;
       commitCanvasInlineEditing({
@@ -125,10 +134,27 @@ export default function App() {
         nodesRef,
         nodeType: nodeRow?.type,
       });
-      handlePanStart(e);
+      if (e.button === 1) handlePanStart(e);
+      else if (e.button === 0) handleMarqueeStart(e);
     },
-    [editingNodeId, dynamicNodes, handlePanStart],
+    [editingNodeId, dynamicNodes, handlePanStart, handleMarqueeStart],
   );
+
+  /** 缩放至适应全部内容：把所有节点的包围盒装进视口。 */
+  const handleZoomToFit = useCallback(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    const containerRect = main.getBoundingClientRect();
+    const bounds = unionNodeBoundsInCanvasSpace(
+      Object.values(nodesRef.current),
+      containerRect,
+      transformRef.current ?? { x: 0, y: 0, scale: 1 },
+    );
+    if (!bounds) return;
+    setCanvasTransform(
+      computeFitTransform(bounds, { width: containerRect.width, height: containerRect.height }),
+    );
+  }, [transformRef, setCanvasTransform]);
 
   const [aiConfig, setAiConfig] = useState<AIConfig>(() => {
     const saved = localStorage.getItem('ai_config');
@@ -467,11 +493,25 @@ export default function App() {
           }}
           onContextMenu={(e) => openContextMenu(e, { kind: 'canvas' })}
         >
-          {/* Draggable background (pan) */}
-          <div 
-            className="absolute inset-0 cursor-grab active:cursor-grabbing z-0" 
-            onPointerDown={handleCanvasPanPointerDown}
+          {/* 画布背景：左键框选、中键平移 */}
+          <div
+            className="absolute inset-0 z-0"
+            onPointerDown={handleCanvasBackgroundPointerDown}
           />
+
+          {/* 框选矩形（屏幕坐标，不随画布 transform 缩放） */}
+          {marquee && (
+            <div
+              data-canvas-marquee=""
+              className="pointer-events-none absolute z-50 rounded-sm border border-[#C2410C] bg-[#C2410C]/10"
+              style={{
+                left: marquee.left,
+                top: marquee.top,
+                width: marquee.width,
+                height: marquee.height,
+              }}
+            />
+          )}
 
           {/* Symmetrical Controls */}
           <CanvasHistoryPopover canvases={canvases} activeCanvasId={activeCanvasId} setActiveCanvasId={setActiveCanvasId} />
@@ -589,6 +629,7 @@ export default function App() {
           agentConfigs={agentConfigs} canvasTransform={canvasTransform}
           setCanvasTransform={setCanvasTransform} transformRef={transformRef}
           activeCanvasId={activeCanvasId}
+          onZoomToFit={handleZoomToFit}
           intentClarification={intentClarification}
           isIntentSubmitting={isToolbarAiLoading}
           onCancelIntentClarification={cancelIntentClarification}

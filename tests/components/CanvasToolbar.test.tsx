@@ -39,6 +39,7 @@ const defaultProps = () => ({
   setAiPrompt: vi.fn(),
   handleAiSubmit: vi.fn(),
   onCreateNode: vi.fn(),
+  onZoomToFit: vi.fn(),
   addFileNode: vi.fn(),
   agentConfigs: [],
   canvasTransform: { x: 0, y: 0, scale: 1 },
@@ -141,6 +142,16 @@ describe('CanvasToolbar', () => {
         'accept',
         CANVAS_ALL_FILE_ACCEPT,
       );
+    });
+
+    it('右下角有「缩放至适应全部内容」按钮并回调', async () => {
+      const user = userEvent.setup();
+      const onZoomToFit = vi.fn();
+      render(<CanvasToolbar {...defaultProps()} onZoomToFit={onZoomToFit} />);
+
+      const btn = screen.getByRole('button', { name: 'canvas.zoom_to_fit' });
+      await user.click(btn);
+      expect(onZoomToFit).toHaveBeenCalledTimes(1);
     });
 
     it('上传按钮的提示已汉化（不再是硬编码 Upload File）', () => {

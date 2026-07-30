@@ -79,7 +79,8 @@ export const en = {
       "synthesize_selected": "Synthesize into an article ({{count}})",
       "clear_selection": "Deselect all",
       "delete_selected": "Delete {{count}} nodes"
-    }
+    },
+    "zoom_to_fit": "Fit all content"
   },
   "nodes": {
     "theme": "Core Theme",

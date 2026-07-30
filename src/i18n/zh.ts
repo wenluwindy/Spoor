@@ -79,7 +79,8 @@ export const zh = {
       "synthesize_selected": "合成长文（{{count}} 张）",
       "clear_selection": "全部取消选中",
       "delete_selected": "批量删除（{{count}} 张）"
-    }
+    },
+    "zoom_to_fit": "缩放至适应全部内容"
   },
   "nodes": {
     "theme": "核心主题",

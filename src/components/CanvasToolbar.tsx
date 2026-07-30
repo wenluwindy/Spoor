@@ -5,6 +5,7 @@ import {
   Bot,
   Wand2,
   ZoomIn,
+  Maximize,
   FileText as FileTextIcon,
   Loader2,
 } from 'lucide-react';
@@ -31,6 +32,8 @@ export interface CanvasToolbarProps {
   setCanvasTransform: React.Dispatch<React.SetStateAction<{ x: number; y: number; scale: number }>>;
   transformRef: React.MutableRefObject<{ x: number; y: number; scale: number }>;
   activeCanvasId: string;
+  /** 缩放至适应全部内容（右下角按钮）。 */
+  onZoomToFit: () => void;
   intentClarification: {
     original: string;
     options: [string, string, string];
@@ -54,6 +57,7 @@ export function CanvasToolbar({
   setCanvasTransform,
   transformRef,
   activeCanvasId,
+  onZoomToFit,
   intentClarification,
   isIntentSubmitting,
   onCancelIntentClarification,
@@ -163,15 +167,25 @@ export function CanvasToolbar({
 
       {/* Zoom Controls */}
       <div className="absolute bottom-8 right-6 flex items-center bg-white/80 backdrop-blur-sm border border-[#E6E4DF] rounded-md px-3 py-1.5 shadow-sm font-sans text-[10px] font-bold text-[#8c8a84] space-x-3 z-40">
-        <button 
+        <button
           className="hover:text-[#1a1a1a] transition-colors"
           onClick={() => setCanvasTransform(p => ({ ...p, scale: Math.max(0.1, p.scale / 1.1) }))}
         >{t('canvas.zoom')} -</button>
         <span className="flex items-center gap-1 w-12 justify-center"><ZoomIn className="w-3 h-3" /> {Math.round(canvasTransform.scale * 100)}%</span>
-        <button 
+        <button
           className="hover:text-[#1a1a1a] transition-colors"
           onClick={() => setCanvasTransform(p => ({ ...p, scale: Math.min(5, p.scale * 1.1) }))}
         >{t('canvas.zoom')} +</button>
+        <span className="h-3 w-[1px] bg-[#E6E4DF]" />
+        <Tooltip label={t('canvas.zoom_to_fit')}>
+          <button
+            type="button"
+            onClick={onZoomToFit}
+            className="flex items-center justify-center text-[#8c8a84] hover:text-[#C2410C] transition-colors"
+          >
+            <Maximize className="w-3.5 h-3.5" />
+          </button>
+        </Tooltip>
       </div>
     </>
   );

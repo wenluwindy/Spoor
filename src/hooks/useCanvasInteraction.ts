@@ -33,95 +33,93 @@ export function useCanvasInteraction(
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // Wheel zoom & scroll
+  /**
+   * 滚轮 = 缩放画布。
+   *
+   * 例外：指针位于节点内部的可滚动区域（AI 卡正文、文档节点等）且内容尚未滚到边界时，
+   * 交给浏览器默认滚动——否则那些卡片里的长文根本没法看。
+   */
   useEffect(() => {
     const main = mainRef.current;
     if (!main) return;
     const onWheel = (e: WheelEvent) => {
-      // 缩放手势仍始终由画布处理；普通滚轮在可滚动子区域内交给浏览器默认滚动
-      if (!e.ctrlKey && !e.metaKey) {
-        let node: HTMLElement | null = e.target as HTMLElement;
-        if (node && node.nodeType !== Node.ELEMENT_NODE) {
-          node = node.parentElement;
-        }
-        let insideScrollable = false;
-        while (node && main.contains(node) && node !== main) {
-          const { overflowY } = window.getComputedStyle(node);
-          const canScrollY =
-            (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') &&
-            node.scrollHeight > node.clientHeight;
-          if (canScrollY) {
-            insideScrollable = true;
-            const dy = e.deltaY;
-            const atTop = node.scrollTop <= 0;
-            const atBottom = node.scrollTop + node.clientHeight >= node.scrollHeight - 1;
-            // 内容未滚到边界时，交给浏览器默认滚动
-            if ((dy < 0 && !atTop) || (dy > 0 && !atBottom)) {
-              return;
-            }
-          }
-          node = node.parentElement;
-        }
-        // 如果目标位于任何可滚动子区域内（即使已到顶/底），也不触发画布滚动
-        if (insideScrollable) {
-          return;
-        }
+      let node: HTMLElement | null = e.target as HTMLElement;
+      if (node && node.nodeType !== Node.ELEMENT_NODE) {
+        node = node.parentElement;
       }
+      let insideScrollable = false;
+      while (node && main.contains(node) && node !== main) {
+        const { overflowY } = window.getComputedStyle(node);
+        const canScrollY =
+          (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') &&
+          node.scrollHeight > node.clientHeight;
+        if (canScrollY) {
+          insideScrollable = true;
+          const dy = e.deltaY;
+          const atTop = node.scrollTop <= 0;
+          const atBottom = node.scrollTop + node.clientHeight >= node.scrollHeight - 1;
+          if ((dy < 0 && !atTop) || (dy > 0 && !atBottom)) {
+            return;
+          }
+        }
+        node = node.parentElement;
+      }
+      // 已滚到边界也不接着缩放，避免在卡片里滚动时画布突然跳缩放
+      if (insideScrollable) return;
 
       e.preventDefault();
-      if (e.ctrlKey || e.metaKey) {
-        setCanvasTransform(prev => {
-          const zoomBase = 1.05;
-          const factor = e.deltaY < 0 ? zoomBase : 1 / zoomBase;
-          const newScale = Math.min(Math.max(0.1, prev.scale * factor), 5);
+      setCanvasTransform(prev => {
+        const zoomBase = 1.05;
+        const factor = e.deltaY < 0 ? zoomBase : 1 / zoomBase;
+        const newScale = Math.min(Math.max(0.1, prev.scale * factor), 5);
 
-          const mainRect = main.getBoundingClientRect();
-          const clientX = e.clientX - mainRect.left;
-          const clientY = e.clientY - mainRect.top;
+        const mainRect = main.getBoundingClientRect();
+        const clientX = e.clientX - mainRect.left;
+        const clientY = e.clientY - mainRect.top;
 
-          const mouseXInCanvas = (clientX - prev.x) / prev.scale;
-          const mouseYInCanvas = (clientY - prev.y) / prev.scale;
+        // 以指针为锚点缩放：指针下的那一点保持不动
+        const mouseXInCanvas = (clientX - prev.x) / prev.scale;
+        const mouseYInCanvas = (clientY - prev.y) / prev.scale;
 
-          const newX = clientX - mouseXInCanvas * newScale;
-          const newY = clientY - mouseYInCanvas * newScale;
-
-          return { x: newX, y: newY, scale: newScale };
-        });
-      } else {
-        setCanvasTransform(prev => ({
-          ...prev,
-          x: prev.x - e.deltaX,
-          y: prev.y - e.deltaY,
-        }));
-      }
+        return {
+          x: clientX - mouseXInCanvas * newScale,
+          y: clientY - mouseYInCanvas * newScale,
+          scale: newScale,
+        };
+      });
     };
     main.addEventListener('wheel', onWheel, { passive: false });
     return () => main.removeEventListener('wheel', onWheel);
   }, [mainRef]);
 
-  // Pan start handler
+  /**
+   * 平移画布 = 按住**中键**拖动。
+   *
+   * 左键留给框选、右键留给上下文菜单，所以这里只认 button 1。
+   * `preventDefault` 用来压掉 Windows 上中键的自动滚动。
+   */
   const handlePanStart = (e: React.PointerEvent) => {
-    if (e.target === e.currentTarget || e.button === 1 || e.button === 0) {
-      if (connectingFrom) setConnectingFrom(null);
-      e.preventDefault();
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const startTransform = transformRef.current;
+    if (e.button !== 1) return;
+    if (connectingFrom) setConnectingFrom(null);
+    e.preventDefault();
 
-      const onPointerMove = (moveEv: PointerEvent) => {
-        setCanvasTransform({
-          ...startTransform,
-          x: startTransform.x + (moveEv.clientX - startX),
-          y: startTransform.y + (moveEv.clientY - startY),
-        });
-      };
-      const onPointerUp = () => {
-        window.removeEventListener('pointermove', onPointerMove);
-        window.removeEventListener('pointerup', onPointerUp);
-      };
-      window.addEventListener('pointermove', onPointerMove);
-      window.addEventListener('pointerup', onPointerUp);
-    }
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startTransform = transformRef.current;
+
+    const onPointerMove = (moveEv: PointerEvent) => {
+      setCanvasTransform({
+        ...startTransform,
+        x: startTransform.x + (moveEv.clientX - startX),
+        y: startTransform.y + (moveEv.clientY - startY),
+      });
+    };
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
   };
 
   // Edge line animation loop
