@@ -19,12 +19,12 @@ describe('runCanvasStreamingAiCall', () => {
 
     const updates: string[] = [];
     const origUpdate = db.nodes.update.bind(db.nodes);
-    vi.spyOn(db.nodes, 'update').mockImplementation(async (id, changes) => {
+    vi.spyOn(db.nodes, 'update').mockImplementation(((id, changes) => {
       if (typeof changes === 'object' && changes && 'content' in changes) {
         updates.push(String(changes.content));
       }
       return origUpdate(id, changes);
-    });
+    }) as typeof db.nodes.update);
 
     const result = await runCanvasStreamingAiCall({
       nodeId: 'n1',
