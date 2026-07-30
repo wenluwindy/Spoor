@@ -273,7 +273,7 @@ export default function App() {
 
   // Node actions (CRUD, selection, linking)
   const {
-    toggleNodeSelection, handleLink, deleteEdge, removeNodeId, addTextNode, addThemeNode, addFileNode,
+    toggleNodeSelection, handleLink, deleteEdge, removeNodeId, addFileNode,
     createNodeAt, addAgentNodeAt, insertFilesAt, duplicateNode, cycleNodeLayout, pasteStickyAt,
     clearSelection, deleteNodes, linkNodesToHub,
   } = useNodeActions({
@@ -586,7 +586,7 @@ export default function App() {
           isToolbarAiLoading={isToolbarAiLoading || isToolbarIntentPreflight}
           isInputDisabled={isAnyAiBusy}
           aiPrompt={aiPrompt} setAiPrompt={setAiPrompt}
-          handleAiSubmit={handleAiSubmit} addTextNode={addTextNode} addThemeNode={addThemeNode} addFileNode={addFileNode}
+          handleAiSubmit={handleAiSubmit} onCreateNode={(nodeType) => void createNodeAt(nodeType)} addFileNode={addFileNode}
           agentConfigs={agentConfigs} canvasTransform={canvasTransform}
           setCanvasTransform={setCanvasTransform} transformRef={transformRef}
           activeCanvasId={activeCanvasId}

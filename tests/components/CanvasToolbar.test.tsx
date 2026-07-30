@@ -3,6 +3,10 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { CanvasToolbar } from '../../src/components/CanvasToolbar';
+import {
+  CANVAS_ALL_FILE_ACCEPT,
+  CANVAS_CREATE_ITEMS,
+} from '../../src/constants/canvasMenuItems';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -23,16 +27,9 @@ vi.mock('../../src/utils/canvas', () => ({
   getCanvasCenterPosition: () => ({ x: 0, y: 0 }),
 }));
 
-vi.mock('lucide-react', () => {
-  const names = ['Plus', 'Sparkles', 'Bot', 'Wand2', 'Send', 'ZoomIn', 'FileText', 'Loader2', 'Check', 'ChevronDown', 'ChevronUp', 'X'] as const;
-  const icons: Record<string, React.FC> = {};
-  for (const name of names) {
-    icons[name] = (props: Record<string, unknown>) => {
-      const { createElement } = require('react');
-      return createElement('svg', { 'data-testid': `icon-${name}`, ...props });
-    };
-  }
-  return icons;
+vi.mock('lucide-react', async (importOriginal) => {
+  const { lucideIconMock } = await import('../lucideMock');
+  return lucideIconMock(importOriginal as () => Promise<Record<string, unknown>>);
 });
 
 const defaultProps = () => ({
@@ -41,8 +38,7 @@ const defaultProps = () => ({
   aiPrompt: '',
   setAiPrompt: vi.fn(),
   handleAiSubmit: vi.fn(),
-  addTextNode: vi.fn(),
-  addThemeNode: vi.fn(),
+  onCreateNode: vi.fn(),
   addFileNode: vi.fn(),
   agentConfigs: [],
   canvasTransform: { x: 0, y: 0, scale: 1 },
@@ -106,5 +102,51 @@ describe('CanvasToolbar', () => {
   it('禁用时输入框为 disabled（不可编辑）', () => {
     render(<CanvasToolbar {...defaultProps()} isInputDisabled />);
     expect(screen.getByPlaceholderText('ai.input_placeholder')).toBeDisabled();
+  });
+
+  describe('+ 菜单与右键菜单同源', () => {
+    it('逐项渲染 CANVAS_CREATE_ITEMS 的文案', () => {
+      render(<CanvasToolbar {...defaultProps()} />);
+      for (const item of CANVAS_CREATE_ITEMS) {
+        expect(screen.getAllByText(item.labelKey).length).toBeGreaterThan(0);
+      }
+    });
+
+    it('每项按自己的 nodeType 调用 onCreateNode', async () => {
+      const user = userEvent.setup();
+      const onCreateNode = vi.fn();
+      render(<CanvasToolbar {...defaultProps()} onCreateNode={onCreateNode} />);
+
+      for (const item of CANVAS_CREATE_ITEMS) {
+        const entry = screen.getAllByText(item.labelKey).at(-1)!.closest('button')!;
+        await user.click(entry);
+        expect(onCreateNode).toHaveBeenLastCalledWith(item.nodeType);
+      }
+      expect(onCreateNode).toHaveBeenCalledTimes(CANVAS_CREATE_ITEMS.length);
+    });
+
+    it('+ 图标本身触发列表首项', async () => {
+      const user = userEvent.setup();
+      const onCreateNode = vi.fn();
+      const { container } = render(<CanvasToolbar {...defaultProps()} onCreateNode={onCreateNode} />);
+
+      const plusButton = container.querySelector('button[title="sidebar.new_note"]')!;
+      await user.click(plusButton);
+      expect(onCreateNode).toHaveBeenCalledWith(CANVAS_CREATE_ITEMS[0].nodeType);
+    });
+
+    it('上传输入框的 accept 用统一常量', () => {
+      const { container } = render(<CanvasToolbar {...defaultProps()} />);
+      expect(container.querySelector('input[type="file"]')).toHaveAttribute(
+        'accept',
+        CANVAS_ALL_FILE_ACCEPT,
+      );
+    });
+
+    it('上传按钮的提示已汉化（不再是硬编码 Upload File）', () => {
+      const { container } = render(<CanvasToolbar {...defaultProps()} />);
+      expect(container.querySelector('label[title="canvas.upload_file"]')).toBeTruthy();
+      expect(container.querySelector('label[title="Upload File"]')).toBeNull();
+    });
   });
 });

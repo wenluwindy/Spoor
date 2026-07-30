@@ -2,7 +2,6 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Plus,
-  Sparkles,
   Bot,
   Wand2,
   ZoomIn,
@@ -11,6 +10,7 @@ import {
 } from 'lucide-react';
 import type { AgentConfig } from '../db';
 import { db } from '../db';
+import { CANVAS_ALL_FILE_ACCEPT, CANVAS_CREATE_ITEMS } from '../constants/canvasMenuItems';
 import { getCanvasCenterPosition } from '../utils/canvas';
 import { resolveAgentLocalizedName } from '../utils/aiI18n';
 import { IntentClarificationModal } from './IntentClarificationModal';
@@ -22,8 +22,8 @@ export interface CanvasToolbarProps {
   aiPrompt: string;
   setAiPrompt: (prompt: string) => void;
   handleAiSubmit: () => void;
-  addTextNode: () => void;
-  addThemeNode: () => void;
+  /** 由 `CANVAS_CREATE_ITEMS` 分发，落点用视口中心（右键菜单才用点击处）。 */
+  onCreateNode: (nodeType: 'text' | 'theme') => void;
   addFileNode: (e: React.ChangeEvent<HTMLInputElement>) => void;
   agentConfigs: AgentConfig[];
   canvasTransform: { x: number; y: number; scale: number };
@@ -46,8 +46,7 @@ export function CanvasToolbar({
   aiPrompt,
   setAiPrompt,
   handleAiSubmit,
-  addTextNode,
-  addThemeNode,
+  onCreateNode,
   addFileNode,
   agentConfigs,
   canvasTransform,
@@ -79,29 +78,30 @@ export function CanvasToolbar({
             <div className="relative group/plus">
               <button
                 type="button"
-                onClick={addTextNode}
-                title={t('sidebar.new_note')}
+                onClick={() => onCreateNode(CANVAS_CREATE_ITEMS[0].nodeType)}
+                title={t(CANVAS_CREATE_ITEMS[0].labelKey)}
                 className="w-8 h-8 flex items-center justify-center text-[#5a5a54] hover:text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg cursor-pointer transition-colors"
               >
                 <Plus className="w-4 h-4" />
               </button>
               <div className="absolute bottom-full left-0 mb-2 w-52 bg-white border border-[#E6E4DF] rounded-xl shadow-xl opacity-0 invisible group-hover/plus:opacity-100 group-hover/plus:visible transition-all flex flex-col p-1 z-50">
-                <button
-                  type="button"
-                  onClick={addTextNode}
-                  className="text-left px-3 py-2 text-sm text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg mb-1 flex items-center gap-2 min-w-0"
-                >
-                  <Plus className="w-3.5 h-3.5 shrink-0 text-[#5a5a54]" />
-                  <span className="font-bold truncate">{t('sidebar.new_note')}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={addThemeNode}
-                  className="text-left px-3 py-2 text-sm text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg mb-1 flex items-center gap-2 min-w-0"
-                >
-                  <Sparkles className="w-3.5 h-3.5 shrink-0 text-[#C2410C]" />
-                  <span className="font-bold truncate">{t('sidebar.new_theme_card')}</span>
-                </button>
+                {/* 与画布右键菜单同一份定义，见 constants/canvasMenuItems.ts */}
+                {CANVAS_CREATE_ITEMS.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onCreateNode(item.nodeType)}
+                      className="text-left px-3 py-2 text-sm text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg mb-1 flex items-center gap-2 min-w-0"
+                    >
+                      <Icon
+                        className={`w-3.5 h-3.5 shrink-0 ${item.accent ? 'text-[#C2410C]' : 'text-[#5a5a54]'}`}
+                      />
+                      <span className="font-bold truncate">{t(item.labelKey)}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div className="relative group/agent">
@@ -129,9 +129,9 @@ export function CanvasToolbar({
                 ))}
               </div>
             </div>
-            <label title="Upload File" className="w-8 h-8 flex items-center justify-center text-[#5a5a54] hover:text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg cursor-pointer transition-colors m-0">
+            <label title={t('canvas.upload_file')} className="w-8 h-8 flex items-center justify-center text-[#5a5a54] hover:text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg cursor-pointer transition-colors m-0">
               <FileTextIcon className="w-4 h-4" />
-              <input type="file" accept="image/*,video/*,.docx,.txt,.md" className="hidden" onChange={addFileNode} />
+              <input type="file" accept={CANVAS_ALL_FILE_ACCEPT} className="hidden" onChange={addFileNode} />
             </label>
           </div>
           <input 
