@@ -42,7 +42,8 @@ export const zh = {
     "publish": "合成文章",
     "agent_subtitle": "智能协同思考者",
     "drop_agent": "拖拽以分析上下文",
-    "settings": "设置"
+    "settings": "设置",
+    "avatar_alt": "头像"
   },
   "canvas": {
     "zoom": "缩放",
@@ -110,7 +111,13 @@ export const zh = {
     "search_no_metaso_key": "请先在设置中填写秘塔搜索 API Key，才能在 AI 追问中输入「联网搜索」或使用研究实验室检索。",
     "search_need_text": "缺少检索词：可在「联网搜索」后写上关键词，或确保上方 AI 回复首行有可用内容。",
     "search_no_results": "没有搜到相关网页结果。",
-    "search_failed": "联网搜索失败，请检查秘塔 Key 与网络。"
+    "search_failed": "联网搜索失败，请检查秘塔 Key 与网络。",
+    "image_alt": "画布图片",
+    "document_label": "文档",
+    "empty_document_body": "（空文档）",
+    "theme_default_desc": "当前工作区的核心研究目标。",
+    "theme_footer_encoding": "空间编码",
+    "theme_footer_latent": "潜空间"
   },
   "settings": {
     "title": "设置",
@@ -189,7 +196,8 @@ export const zh = {
     "docs_provider_doubao": "豆包（火山方舟）",
     "docs_provider_deepseek": "DeepSeek",
     "docs_provider_custom": "自定义 OpenAI 兼容接口",
-    "docs_provider_local_llama": "本地 GGUF（仅桌面版）"
+    "docs_provider_local_llama": "本地 GGUF（仅桌面版）",
+    "provider_custom": "自定义端点"
   },
   "ai": {
     "input_placeholder": "让 AI 构思一些想法或段落...",
@@ -275,7 +283,21 @@ export const zh = {
     "report_footer_offline": "离线模式 — 仅由 LLM 综合",
     "report_failed_banner": "报告生成失败（模型返回无法解析或调用出错）。研究大纲仍保留，可直接点击下方按钮重新生成。",
     "retry_generate_report": "重新生成报告",
-    "conclusion_label": "智能体建议与结论："
+    "conclusion_label": "智能体建议与结论：",
+    "plan_fallback": {
+      "step1_title": "档案抽取",
+      "step1_desc": "在个人草稿与文献库中检索直接相关的内容。",
+      "step2_title": "主题串联",
+      "step2_desc": "把对话与既有的隐喻线索交叉比对。",
+      "step3_title": "综合成稿",
+      "step3_desc": "生成一份完整的深度研究报告。"
+    },
+    "parse_error_report": {
+      "intro": "未能解析模型返回的报告：输出不是合法 JSON，或字符串中含有未转义的英文双引号、真实换行等。",
+      "point_title": "常见原因",
+      "point_text": "要点段落过长时在字符串里插入了真实换行；正文里使用了未转义的英文双引号；在 JSON 前后写了说明文字；数组或对象末尾带了尾随逗号等。",
+      "conclusion": "请尝试缩短检索摘要、更换模型后重试。若多次失败，可在控制台查看 JSON 报错位置（character position）以核对模型原始输出。"
+    }
   },
   "reference": {
     "index_title": "档案索引",
@@ -306,7 +328,9 @@ export const zh = {
     "immersive_exit": "退出沉浸",
     "immersive_enter": "沉浸阅读",
     "remove_tag": "移除标签",
-    "no_matches": "没有匹配的文献。"
+    "no_matches": "没有匹配的文献。",
+    "note_saving": "保存中…",
+    "note_saved": "已保存"
   },
   "agents": {
     "personas": "人格设定",
@@ -352,6 +376,18 @@ export const zh = {
     "studio": {
       "fallback_assistant": "你是一个乐于助人的助手。",
       "enhance_user": "你是提示词工程与 AI 系统设计专家。请优化以下 AI 智能体的系统提示词。\n\n智能体名称：{{name}}\n角色：{{role}}\n原始系统提示词：\n\"\"\"\n{{prompt}}\n\"\"\"\n\n请给出显著改进后的系统提示词，必须满足：\n\n1. **结构**——分节清晰（如：角色与人格、核心能力、行为准则、沟通风格、情绪智能、边界与约束、工作流）。\n2. **角色展开**——结合名称与角色，把人格写透。\n3. **可执行细节**——在合适处补充分步思考或流程；说明语气、工具与兜底行为。\n4. **情绪智能**——融入共情、倾听、语气匹配、降温与澄清提问等规则。\n5. **要与不要**——明确行为红线与必须坚持的做法。\n6. **忠实原意**——保留原任务与职责，不凭空增加无关能力。\n7. **排版**——使用 Markdown 标题、列表与短段落，成稿可直接使用。\n\n只输出增强后的系统提示词。先单独一行写「新增强提示词：」，随后给出正文，不要解释或评论。\n新增强提示词:"
-    }
+    },
+    "default_role": "助手",
+    "prompt_placeholder": "你是一个专门的智能体。你的目标是……",
+    "sandbox_error": "出错：{{msg}}（详见 Console 中的 [Spoor] 日志）"
+  },
+  "seed": {
+    "canvas_name": "主工作区",
+    "article_title": "重构性记忆中的空间编码",
+    "article_content": "人的心智并不是把经历当成一份份孤立的图像或声音文件存起来。它更像在搭建一处建筑空间，让这些记忆成为其中承重的结构……",
+    "theme": "记忆建筑师",
+    "note_1": "创伤的空间结构",
+    "ai": "记忆不是储存，而是穿行。",
+    "note_2": "非欧几里得的记忆渗漏"
   }
 };

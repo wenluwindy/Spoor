@@ -72,7 +72,7 @@ export function Sidebar({
               className={`relative cursor-pointer group/avatar flex-shrink-0 flex items-center justify-center overflow-hidden rounded ${isSidebarOpen ? 'w-6' : 'w-10'}`}
             >
               <img 
-                alt="Curator Profile" 
+                alt={t('sidebar.avatar_alt')}
                 className={`rounded border-2 border-[#E6E4DF] object-cover shadow-sm transition-all group-hover/avatar:opacity-80 ${isLogoAvatar ? 'scale-[1.45]' : ''} ${isSidebarOpen ? 'w-6 h-6' : 'w-10 h-10'}`} 
                 src={userAvatar}
               />

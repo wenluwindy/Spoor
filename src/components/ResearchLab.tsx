@@ -33,11 +33,21 @@ import { useAppDialog } from './AppDialogProvider';
 
 export type ResearchPlanStep = { title: string; desc: string };
 
-const RESEARCH_PLAN_FALLBACK: ResearchPlanStep[] = [
-  { title: 'Archive Extraction', desc: "Scan personal drafts and reference library for direct mentions." },
-  { title: 'Thematic Networking', desc: 'Cross-reference dialogue with established metaphors.' },
-  { title: 'Synthesis & Drafting', desc: 'Generate a comprehensive deep-dive report.' },
-];
+/** 只用到取值这一件事，因此不引 i18next 的完整 TFunction 类型。 */
+type TranslateFn = (key: string) => string;
+
+/**
+ * 计划拆解失败时的兜底步骤。
+ *
+ * 取 `t` 作为参数而非在模块顶层求值：后者会把文案固定成模块加载时的语言，
+ * 用户中途切换语言就不再跟随。
+ */
+function researchPlanFallback(t: TranslateFn): ResearchPlanStep[] {
+  return [1, 2, 3].map((n) => ({
+    title: t(`lab.plan_fallback.step${n}_title`),
+    desc: t(`lab.plan_fallback.step${n}_desc`),
+  }));
+}
 
 const RESEARCH_HISTORY_LIMIT = 50;
 
@@ -101,33 +111,17 @@ function normalizeResearchReport(raw: unknown): ResearchReportBody {
   return { intro, points, conclusion };
 }
 
-function researchReportParseFallback(language: string): ResearchReportBody {
-  const zh = language.toLowerCase().startsWith('zh');
-  if (zh) {
-    return {
-      intro:
-        '未能解析模型返回的报告：输出不是合法 JSON，或字符串中含有未转义的英文双引号、真实换行等。',
-      points: [
-        {
-          title: '常见原因',
-          text:
-            '要点段落过长时在字符串里插入了真实换行；正文里使用了未转义的英文双引号；在 JSON 前后写了说明文字；数组或对象末尾带了尾随逗号等。',
-        },
-      ],
-      conclusion:
-        '请尝试缩短检索摘要、更换模型后重试。若多次失败，可在控制台查看 JSON 报错位置（character position）以核对模型原始输出。',
-    };
-  }
+/** 报告 JSON 解析失败时展示的说明（不是研究结果，只是告知失败原因）。 */
+function researchReportParseFallback(t: TranslateFn): ResearchReportBody {
   return {
-    intro:
-      'The model returned malformed JSON (often unescaped quotes or raw newlines inside strings, trailing commas, or extra prose outside the object).',
+    intro: t('lab.parse_error_report.intro'),
     points: [
       {
-        title: 'What happened',
-        text: 'The previous English “blueprint / chapter 4” copy was a fixed fallback after parse failure — not your topic.',
+        title: t('lab.parse_error_report.point_title'),
+        text: t('lab.parse_error_report.point_text'),
       },
     ],
-    conclusion: 'Retry with a stricter JSON model or shorter web-search context; check the console for the exact parse position.',
+    conclusion: t('lab.parse_error_report.conclusion'),
   };
 }
 
@@ -357,13 +351,13 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
         onStreamChunk: (acc) => setPlanStreamText(acc),
       });
       const plan = normalizeResearchPlan(parseLenientLlmJson(text ?? '[]'));
-      setResearchPlan(plan.length > 0 ? plan : RESEARCH_PLAN_FALLBACK);
+      setResearchPlan(plan.length > 0 ? plan : researchPlanFallback(t));
       setPlanStreamText('');
       setPhase('plan_ready');
     } catch (e) {
       console.error('[Scribe AI] ResearchLab generatePlan failed', formatAiError(e));
       setPlanStreamText('');
-      setResearchPlan(RESEARCH_PLAN_FALLBACK);
+      setResearchPlan(researchPlanFallback(t));
       setPhase('plan_ready');
     }
   };
@@ -439,7 +433,7 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
           ? `\n\nThe user-approved research plan (your report must follow this structure: align the "points" array with these steps in order and honor each step's goals in the analysis):\n${JSON.stringify(researchPlan, null, 2)}`
           : '';
 
-      const fallbackReport = researchReportParseFallback(i18n.language);
+      const fallbackReport = researchReportParseFallback(t);
 
       let finalReport: ResearchReportBody = fallbackReport;
       let executionSucceeded = false;

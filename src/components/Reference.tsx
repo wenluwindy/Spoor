@@ -149,11 +149,11 @@ export function Reference({
       setNotesLocal(v);
       const art = activeArticle;
       if (!art) return;
-      setNoteStatus('Saving...');
+      setNoteStatus(t('reference.note_saving'));
       if (notesDebounceRef.current) clearTimeout(notesDebounceRef.current);
       notesDebounceRef.current = setTimeout(async () => {
         await db.articles.update(art.id, { privateNotes: v });
-        setNoteStatus('Saved');
+        setNoteStatus(t('reference.note_saved'));
         if (noteTimeoutRef.current) clearTimeout(noteTimeoutRef.current);
         noteTimeoutRef.current = setTimeout(() => {
           setNoteStatus('');

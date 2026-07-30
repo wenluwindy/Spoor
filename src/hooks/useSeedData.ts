@@ -26,7 +26,7 @@ export function useSeedData() {
       if (!defaultCanvas) {
         await db.canvases.add({
           id: 'default',
-          name: 'Main Workspace',
+          name: i18n.t('seed.canvas_name'),
           createdAt: Date.now(),
           updatedAt: Date.now()
         });
@@ -61,8 +61,8 @@ export function useSeedData() {
         if (nodeCount === 0) {
           await db.articles.put({
             id: 'ref-042',
-            title: 'Spatial Encoding in Reconstructive Memory',
-            content: 'The human mind does not merely store experiences as isolated visual or auditory files. Instead, it constructs architectural spaces where these memories represent structural loads...',
+            title: i18n.t('seed.article_title'),
+            content: i18n.t('seed.article_content'),
             date: '1994',
             type: 'REF-042',
             tags: [],
@@ -70,10 +70,10 @@ export function useSeedData() {
           });
 
           await db.nodes.bulkPut([
-            { id: 'theme', type: 'theme', content: 'The Memory Architect', x: 200, y: 300 },
-            { id: 'insp1', type: 'note', content: 'Spatial architecture of trauma', x: 500, y: 200 },
-            { id: 'ai', type: 'ai', content: 'Memory is not a storage, but a navigation.', x: 500, y: 400 },
-            { id: 'insp2', type: 'note', content: 'Non-euclidean memory leaks', x: 800, y: 300 }
+            { id: 'theme', type: 'theme', content: i18n.t('seed.theme'), x: 200, y: 300 },
+            { id: 'insp1', type: 'note', content: i18n.t('seed.note_1'), x: 500, y: 200 },
+            { id: 'ai', type: 'ai', content: i18n.t('seed.ai'), x: 500, y: 400 },
+            { id: 'insp2', type: 'note', content: i18n.t('seed.note_2'), x: 800, y: 300 }
           ]);
 
           await db.edges.bulkPut([

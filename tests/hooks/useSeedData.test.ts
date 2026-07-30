@@ -22,7 +22,7 @@ describe('useSeedData', () => {
 
     const canvas = await db.canvases.get('default');
     expect(canvas).toBeDefined();
-    expect(canvas?.name).toBe('Main Workspace');
+    expect(canvas?.name).toBe(i18n.t('seed.canvas_name'));
   });
 
   it('首次运行创建系统 agents', async () => {
@@ -53,7 +53,7 @@ describe('useSeedData', () => {
     // 预先插入默认画布和 agents，模拟已完成种子初始化的状态
     await db.canvases.add({
       id: 'default',
-      name: 'Main Workspace',
+      name: i18n.t('seed.canvas_name'),
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });

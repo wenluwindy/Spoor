@@ -16,6 +16,20 @@
   *::-webkit-scrollbar {
     display: none;
   }
+
+  /*
+   * 中文下取消装饰性小标签的字距。
+   *
+   * `tracking-wider` / `tracking-widest` 是为英文小型大写标签设计的；中文里它表现为
+   * 字间距被拉宽，两三个字会散开成一排。全站有近 40 处这样的标签（设置、长文、研究、
+   * 节点外壳都有），逐个换成组件的改动面远大于问题本身，所以在语言层统一修：
+   * `main.tsx` 会把当前语言写到 <html lang>，这里按语言收敛字距。
+   * `uppercase` 对中文本身是空操作，不必处理。
+   */
+  html[lang^="zh"] .tracking-wider,
+  html[lang^="zh"] .tracking-widest {
+    letter-spacing: normal;
+  }
 }
 
 @layer utilities {

@@ -51,11 +51,11 @@ function ThemeEditableField({ as: Tag, nodeId, displayValue, className, onPersis
 export function ThemeNode({ node, editingNodeId }: NodeContentProps) {
   const { t } = useTranslation();
 
-  const defaultThemeFooter = node.layout === 3 ? 'LATENT_SPACE' : 'Spatial Encoding';
+  const defaultThemeFooter =
+    node.layout === 3 ? t('nodes.theme_footer_latent') : t('nodes.theme_footer_encoding');
   const themeFooterDisplay =
     node.themeTag !== undefined && node.themeTag.trim() !== '' ? node.themeTag : defaultThemeFooter;
-  const descriptionDisplay =
-    node.description || 'Central research objective for the current workspace.';
+  const descriptionDisplay = node.description || t('nodes.theme_default_desc');
 
   const persistField = (field: 'content' | 'description' | 'themeTag') => (raw: string) => {
     if (isContentBlurPersistenceDisabled()) return;

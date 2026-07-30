@@ -42,7 +42,8 @@ export const en = {
     "publish": "Synthesize",
     "agent_subtitle": "Intelligent Co-thinkers",
     "drop_agent": "Drop to analyze context",
-    "settings": "Settings"
+    "settings": "Settings",
+    "avatar_alt": "Profile picture"
   },
   "canvas": {
     "zoom": "Zoom",
@@ -110,7 +111,13 @@ export const en = {
     "search_no_metaso_key": "Add a Metaso Search API key in Settings to use “web search” in the AI follow-up box.",
     "search_need_text": "No query: add keywords after “web search”, or ensure the AI reply above has a usable first line.",
     "search_no_results": "No web results for that query.",
-    "search_failed": "Web search failed. Check the Metaso key and network."
+    "search_failed": "Web search failed. Check the Metaso key and network.",
+    "image_alt": "Canvas image",
+    "document_label": "Document",
+    "empty_document_body": "(empty document)",
+    "theme_default_desc": "Central research objective for the current workspace.",
+    "theme_footer_encoding": "Spatial encoding",
+    "theme_footer_latent": "Latent space"
   },
   "settings": {
     "title": "Settings",
@@ -189,7 +196,8 @@ export const en = {
     "docs_provider_doubao": "Doubao (Volcengine Ark)",
     "docs_provider_deepseek": "DeepSeek",
     "docs_provider_custom": "Custom OpenAI-compatible API",
-    "docs_provider_local_llama": "Local GGUF (desktop only)"
+    "docs_provider_local_llama": "Local GGUF (desktop only)",
+    "provider_custom": "Custom endpoint"
   },
   "ai": {
     "input_placeholder": "Ask AI to draft some ideas or paragraphs...",
@@ -275,7 +283,21 @@ export const en = {
     "report_footer_offline": "Offline mode — LLM-only synthesis",
     "report_failed_banner": "The report could not be generated because the model output was invalid or incomplete. Your outline is unchanged — try again.",
     "retry_generate_report": "Retry report generation",
-    "conclusion_label": "Agent recommendation and conclusion:"
+    "conclusion_label": "Agent recommendation and conclusion:",
+    "plan_fallback": {
+      "step1_title": "Archive extraction",
+      "step1_desc": "Scan personal drafts and the reference library for direct mentions.",
+      "step2_title": "Thematic networking",
+      "step2_desc": "Cross-reference the dialogue with established metaphors.",
+      "step3_title": "Synthesis & drafting",
+      "step3_desc": "Generate a comprehensive deep-dive report."
+    },
+    "parse_error_report": {
+      "intro": "The report could not be parsed: the model's output was not valid JSON, or contained unescaped double quotes or raw newlines inside strings.",
+      "point_title": "Common causes",
+      "point_text": "Real newlines inserted inside a long string; unescaped double quotes in the body; explanatory prose before or after the JSON; trailing commas in arrays or objects.",
+      "conclusion": "Try shortening the search context or switching models, then retry. If it keeps failing, check the console for the reported JSON character position to inspect the raw output."
+    }
   },
   "reference": {
     "index_title": "Archive Index",
@@ -306,7 +328,9 @@ export const en = {
     "immersive_exit": "Exit immersive",
     "immersive_enter": "Immersive reading",
     "remove_tag": "Remove tag",
-    "no_matches": "No matching references."
+    "no_matches": "No matching references.",
+    "note_saving": "Saving…",
+    "note_saved": "Saved"
   },
   "agents": {
     "personas": "Personas",
@@ -352,6 +376,18 @@ export const en = {
     "studio": {
       "fallback_assistant": "You are a helpful assistant.",
       "enhance_user": "You are an expert in prompt engineering and AI system design. Your task is to enhance the system prompt for an AI agent.\n\nAgent Name: {{name}}\nAgent Role: {{role}}\nOriginal System Prompt:\n\"\"\"\n{{prompt}}\n\"\"\"\n\nCreate a significantly improved version of this system prompt. The enhanced prompt must:\n\n1. **Structure** – Use clear sections (e.g., Role & Persona, Core Capabilities, Behavioral Guidelines, Communication Style, Emotional Intelligence, Boundaries & Constraints, Workflow).\n2. **Role Elaboration** – Deeply flesh out the agent’s identity, leveraging its name and role to build a coherent persona.\n3. **Operational Detail** – Add step‑by‑step thinking or process guidelines where appropriate; specify tools, tone, and fallback behaviours.\n4. **Emotional Intelligence** – Integrate empathy, active listening, tone matching, de‑escalation techniques, and rules for asking clarifying questions or handling frustration.\n5. **Do’s & Don’ts** – Include explicit behavioural rules: what the agent should always do and what it must never do.\n6. **Fidelity** – Preserve the original intent and core responsibilities; do not add capabilities unrelated to the original prompt.\n7. **Formatting** – Use a clean, professional layout with markdown headings, bullet points, and short paragraphs. The final prompt should be self-contained and ready to use.\n\nOutput only the enhanced system prompt. Start your response with the line \"New Enhanced Prompt:\" and then provide the prompt – no explanations, no commentary.\nNew Enhanced Prompt:"
-    }
+    },
+    "default_role": "Assistant",
+    "prompt_placeholder": "You are a specialized agent. Your goal is to…",
+    "sandbox_error": "Error: {{msg}} (see the [Spoor] entries in Console)"
+  },
+  "seed": {
+    "canvas_name": "Main workspace",
+    "article_title": "Spatial Encoding in Reconstructive Memory",
+    "article_content": "The human mind does not merely store experiences as isolated visual or auditory files. Instead, it constructs architectural spaces where these memories represent structural loads...",
+    "theme": "The Memory Architect",
+    "note_1": "Spatial architecture of trauma",
+    "ai": "Memory is not a storage, but a navigation.",
+    "note_2": "Non-euclidean memory leaks"
   }
 };

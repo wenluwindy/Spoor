@@ -103,7 +103,7 @@ describe('NodeRenderer', () => {
     expect(getByText('围绕创业意义展开研究')).toBeInTheDocument();
   });
 
-  it('theme 节点 layout=3 时默认页脚为 LATENT_SPACE', () => {
+  it('theme 节点 layout=3 时默认页脚取潜空间文案', () => {
     const { getByText } = render(
       <NodeRenderer
         node={makeNode('theme', { layout: 3 })}
@@ -113,7 +113,7 @@ describe('NodeRenderer', () => {
         analyzingAgentNodeId={null}
       />
     );
-    expect(getByText('LATENT_SPACE')).toBeInTheDocument();
+    expect(getByText('nodes.theme_footer_latent')).toBeInTheDocument();
   });
 
   it('type="note" 渲染 NoteNode', () => {

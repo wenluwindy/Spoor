@@ -49,7 +49,7 @@ describe('ThemeNode blur 持久化', () => {
 
   it('正文失焦时持久化 description', () => {
     render(<ThemeNode node={makeNode()} editingNodeId={null} setEditingNodeId={vi.fn()} />);
-    const body = screen.getByText('Central research objective for the current workspace.');
+    const body = screen.getByText('nodes.theme_default_desc');
     body.innerText = '自定义正文说明';
     fireEvent.blur(body);
     expect(db.nodes.update).toHaveBeenCalledWith('n1', { description: '自定义正文说明' });
@@ -76,7 +76,7 @@ describe('ThemeNode blur 持久化', () => {
     const { rerender } = render(
       <ThemeNode node={makeNode()} editingNodeId={null} setEditingNodeId={vi.fn()} />
     );
-    const body = screen.getByText('Central research objective for the current workspace.');
+    const body = screen.getByText('nodes.theme_default_desc');
     body.innerText = '正在输入的中文';
     fireEvent.focus(body);
     rerender(
@@ -99,7 +99,7 @@ describe('ThemeNode blur 持久化', () => {
 
   it('页脚失焦时持久化 themeTag（空白折叠为 trim）', () => {
     render(<ThemeNode node={makeNode()} editingNodeId={null} setEditingNodeId={vi.fn()} />);
-    const footer = screen.getByText('Spatial Encoding');
+    const footer = screen.getByText('nodes.theme_footer_encoding');
     footer.innerText = '  不知为何  ';
     fireEvent.blur(footer);
     expect(db.nodes.update).toHaveBeenCalledWith('n1', { themeTag: '不知为何' });
@@ -115,7 +115,7 @@ describe('ThemeNode blur 持久化', () => {
     );
     expect(screen.getByText('已持久化的研究目标说明')).toBeInTheDocument();
     expect(
-      screen.queryByText('Central research objective for the current workspace.')
+      screen.queryByText('nodes.theme_default_desc')
     ).toBeNull();
   });
 

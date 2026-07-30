@@ -139,7 +139,7 @@ export function AISettingsModal({ isOpen, onClose, config, setConfig }: AISettin
                    <option value="mimo">MiMo (小米大模型)</option>
                    <option value="doubao">{t('settings.provider_doubao')}</option>
                    <option value="deepseek">DeepSeek</option>
-                   <option value="custom">Custom Endpoint</option>
+                   <option value="custom">{t('settings.provider_custom')}</option>
                    <option value="local_llama">{t('settings.provider_local_llama')}</option>
                  </select>
                </div>

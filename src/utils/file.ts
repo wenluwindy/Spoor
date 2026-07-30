@@ -1,4 +1,5 @@
 ﻿import mammoth from 'mammoth';
+import i18n from '../i18n';
 
 export function readFileAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -47,7 +48,7 @@ export async function processFileToNode(file: File): Promise<FileNodeData> {
     const result = await mammoth.convertToHtml({ arrayBuffer });
     return {
       type: 'document',
-      content: result.value || '<p>(空文档)</p>',
+      content: result.value || `<p>${i18n.t('nodes.empty_document_body')}</p>`,
       description: file.name,
       fileType: 'docx',
     };

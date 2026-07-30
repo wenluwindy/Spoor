@@ -713,7 +713,7 @@ describe('ResearchLab', () => {
     fireEvent.submit(topicInput.closest('form')!);
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Step 1 title')).toHaveValue('Archive Extraction');
+      expect(screen.getByLabelText('Step 1 title')).toHaveValue('lab.plan_fallback.step1_title');
     });
     expect(callAI).toHaveBeenCalledTimes(1);
   });

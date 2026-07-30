@@ -7,7 +7,9 @@ vi.mock('react-dom/client', () => ({
   })),
 }));
 
-vi.mock('../src/i18n', () => ({ default: {} }));
+vi.mock('../src/i18n', () => ({
+  default: { language: 'en', on: vi.fn(), off: vi.fn() },
+}));
 
 vi.mock('../src/App', () => ({
   default: function App() {

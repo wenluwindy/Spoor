@@ -103,7 +103,7 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
     setAgentConfigs([...agentConfigs, {
       id: newId,
       name: t('agents.new_persona'),
-      role: 'Assistant',
+      role: t('agents.default_role'),
       prompt: '',
       temperature: 0.7,
       creativity: 0.4
@@ -258,7 +258,7 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
       console.error('[Scribe AI] sandbox chat failed', msg);
       const errLine: SandboxChatMessage = {
         role: 'model',
-        text: `Error: ${msg}（详见 Console [Scribe AI]）`,
+        text: t('agents.sandbox_error', { msg }),
       };
       const afterErr: SandboxChatMessage[] = [...afterUser, errLine];
       if (sandboxUiAgentRef.current === scopedAgentId) {
@@ -431,7 +431,7 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                       style={{ height: Math.max(160, (displayPrompt.split('\n').length || 1) * 24 + 40) + 'px' }}
                       value={displayPrompt}
                       onChange={e => handleUpdateActiveAgent('prompt', e.target.value)}
-                      placeholder="You are a specialized agent. Your goal is to..."
+                      placeholder={t('agents.prompt_placeholder')}
                     />
                   </div>
                 </div>

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { db } from '../src/db';
+import i18n from '../src/i18n';
 
 // --- Mock 外部依赖 ---
 
@@ -426,7 +427,7 @@ describe('App 组件', () => {
       // 先确保有画布数据
       await db.canvases.put({
         id: 'default',
-        name: 'Main Workspace',
+        name: i18n.t('seed.canvas_name'),
         createdAt: Date.now(),
         updatedAt: Date.now(),
       });
@@ -512,7 +513,7 @@ describe('App 组件', () => {
 
       const canvas = await db.canvases.get('default');
       expect(canvas).toBeDefined();
-      expect(canvas?.name).toBe('Main Workspace');
+      expect(canvas?.name).toBe(i18n.t('seed.canvas_name'));
     });
 
     it('首次渲染时自动创建系统 Agent', async () => {
@@ -725,7 +726,7 @@ describe('App 组件', () => {
       const user = userEvent.setup();
       await goToReference(user);
       // 文章标题同时出现在列表和内容区，使用 getAllByText
-      const matches = screen.getAllByText(/Spatial Encoding/);
+      const matches = screen.getAllByText(i18n.t('seed.article_title'));
       expect(matches.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -1109,7 +1110,7 @@ describe('App 组件', () => {
 
       const historyBtn = screen.getByTitle('历史记录');
       await user.click(historyBtn);
-      expect(screen.getByText('Main Workspace')).toBeInTheDocument();
+      expect(screen.getByText(i18n.t('seed.canvas_name'))).toBeInTheDocument();
     });
 
     it('新建便签后节点属于当前画布', async () => {
