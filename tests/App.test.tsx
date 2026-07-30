@@ -3,6 +3,7 @@ import { render, screen, act, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { db } from '../src/db';
 import i18n from '../src/i18n';
+import { normalizeAiConfig, resolveActiveChatConfig } from '../src/services/aiConfig';
 
 // --- Mock 外部依赖 ---
 
@@ -681,10 +682,11 @@ describe('App 组件', () => {
       const apiKeyInput = document.querySelector('input[type="password"]') as HTMLInputElement;
       await user.clear(apiKeyInput);
       await user.type(apiKeyInput, 'test-key-123');
-      // 配置通过 useEffect 自动保存到 localStorage
+      // 配置通过 useEffect 自动保存到 localStorage（v2 多服务商结构）
       await waitFor(() => {
         const saved = JSON.parse(localStorage.getItem('ai_config') || '{}');
-        expect(saved.apiKey).toContain('test');
+        expect(saved.version).toBe(2);
+        expect(resolveActiveChatConfig(normalizeAiConfig(saved)).apiKey).toContain('test');
       });
     });
 

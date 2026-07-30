@@ -28,7 +28,7 @@ import { ResearchLab } from './components/ResearchLab';
 import { AgentsStudio } from './components/AgentsStudio';
 import { callUniversalAI } from './services/ai';
 import { MIMO_TOKEN_PLAN_BASE_URL } from './constants/mimo';
-import { DOUBAO_ARK_BASE_URL, DOUBAO_DEFAULT_MODEL } from './constants/doubao';
+import { DOUBAO_ARK_BASE_URL } from './constants/doubao';
 import { NodeRenderer } from './components/nodes/NodeRenderer';
 import { useSeedData } from './hooks/useSeedData';
 import { useUserProfile } from './hooks/useUserProfile';
@@ -42,6 +42,14 @@ import { pickFiles } from './utils/filePicker';
 import { useAiActions } from './hooks/useAiActions';
 import { useNativeFileDrop } from './hooks/useNativeFileDrop';
 import { migrateBase64MediaNodes } from './services/migrateBase64Media';
+import {
+  applyFlatChatConfig,
+  emptyAiConfigV2,
+  isAiConfigEmpty,
+  normalizeAiConfig,
+  resolveActiveChatConfig,
+} from './services/aiConfig';
+import type { AIConfigV2 } from './types/aiConfig';
 import { useAppDialog } from './components/AppDialogProvider';
 import {
   buildStickyClipboardPayload,
@@ -153,29 +161,43 @@ export default function App() {
     );
   }, [transformRef, setCanvasTransform]);
 
-  const [aiConfig, setAiConfig] = useState<AIConfig>(() => {
+  /**
+   * 配置以 v2（多服务商）存放，读出来时统一过一遍 normalizeAiConfig：
+   * 它认得 v1 扁平结构并就地迁移，坏数据一律降级为空配置而不是把应用卡死。
+   */
+  const [aiConfigV2, setAiConfigV2] = useState<AIConfigV2>(() => {
     const saved = localStorage.getItem('ai_config');
-    const parsed = saved ? migrateStoredAiConfig(JSON.parse(saved)) : null;
-    // 首次启动：给一个空壳（豆包 + 方舟地址），Key 与模型留空等用户填，见首启引导卡。
-    return (
-      parsed ?? {
-        provider: 'doubao',
-        apiKey: '',
-        baseUrl: DOUBAO_ARK_BASE_URL,
-        model: DOUBAO_DEFAULT_MODEL,
-      }
-    );
+    if (!saved) return emptyAiConfigV2();
+    try {
+      const raw = JSON.parse(saved);
+      // v1 的 Base URL 兜底修正要在迁移之前做，迁移完就没有扁平字段了
+      const prepared = raw?.version === 2 ? raw : migrateStoredAiConfig(raw) ?? raw;
+      return normalizeAiConfig(prepared);
+    } catch {
+      return emptyAiConfigV2();
+    }
   });
 
+  /**
+   * 对话链路（services/ai、ResearchLab、AgentsStudio、useAiActions）继续吃扁平形状。
+   * 这层垫片是这次重构的爆炸半径边界，见 services/aiConfig。
+   */
+  const aiConfig = React.useMemo(() => resolveActiveChatConfig(aiConfigV2), [aiConfigV2]);
+
+  /** 现有设置面板仍编辑扁平结构，写回时落到当前服务商上。S25 换成多服务商 CRUD 后退役。 */
+  const setAiConfig = useCallback<React.Dispatch<React.SetStateAction<AIConfig>>>((update) => {
+    setAiConfigV2((prev) => {
+      const flat = typeof update === 'function' ? update(resolveActiveChatConfig(prev)) : update;
+      return applyFlatChatConfig(prev, flat);
+    });
+  }, []);
+
   /** 未配置任何 API Key（本地 GGUF 只要有模型路径即算已配置）。 */
-  const isAiUnconfigured =
-    aiConfig.provider === 'local_llama'
-      ? !(aiConfig.localGgufPath ?? '').trim()
-      : !(aiConfig.apiKey ?? '').trim();
+  const isAiUnconfigured = isAiConfigEmpty(aiConfigV2);
 
   useEffect(() => {
-    localStorage.setItem('ai_config', JSON.stringify(aiConfig));
-  }, [aiConfig]);
+    localStorage.setItem('ai_config', JSON.stringify(aiConfigV2));
+  }, [aiConfigV2]);
 
   useEffect(() => {
     localStorage.setItem('active_canvas_id', activeCanvasId);
