@@ -78,6 +78,40 @@ export function useNodeActions({
     });
   };
 
+  const clearSelection = () => setSelectedNodes(new Set());
+
+  /** 批量删除节点及其全部关联边。 */
+  const deleteNodes = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    await db.nodes.bulkDelete(ids);
+    const related = await db.edges.filter((e) => idSet.has(e.from) || idSet.has(e.to)).toArray();
+    if (related.length > 0) await db.edges.bulkDelete(related.map((e) => e.id));
+    setSelectedNodes((prev) => {
+      const next = new Set([...prev].filter((id) => !idSet.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  };
+
+  /**
+   * 星型连线：把 `nodeIds` 里除 `hubId` 以外的节点全部连到 `hubId`。
+   * 已存在的边（任一方向）跳过，重复执行不会产生重复连线。
+   */
+  const linkNodesToHub = async (nodeIds: string[], hubId: string) => {
+    const others = new Set(nodeIds.filter((id) => id !== hubId));
+    if (others.size === 0) return;
+
+    const existing = await db.edges
+      .filter((e) => (e.from === hubId && others.has(e.to)) || (e.to === hubId && others.has(e.from)))
+      .toArray();
+    const alreadyLinked = new Set(existing.map((e) => (e.from === hubId ? e.to : e.from)));
+
+    const rows = [...others]
+      .filter((id) => !alreadyLinked.has(id))
+      .map((id) => ({ id: crypto.randomUUID(), canvasId: activeCanvasId, from: hubId, to: id }));
+    if (rows.length > 0) await db.edges.bulkAdd(rows);
+  };
+
   const addTextNode = async (at?: CanvasPoint) => {
     const { x, y } = resolvePosition(at);
     await db.nodes.add({ id: crypto.randomUUID(), canvasId: activeCanvasId, type: 'text', content: '', x, y });
@@ -196,5 +230,8 @@ export function useNodeActions({
     duplicateNode,
     cycleNodeLayout,
     pasteStickyAt,
+    clearSelection,
+    deleteNodes,
+    linkNodesToHub,
   };
 }

@@ -9,8 +9,9 @@ import type { CanvasContextMenuState } from '../../src/hooks/useCanvasContextMen
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) =>
-      ({
+    t: (key: string, opts?: { count?: number }) => {
+      const raw =
+        ({
         'sidebar.new_note': '新建便签',
         'sidebar.new_theme_card': '新建主题卡',
         'canvas.menu.insert_image': '插入图片…',
@@ -26,8 +27,14 @@ vi.mock('react-i18next', () => ({
         'canvas.menu.unselect': '取消选中',
         'canvas.menu.delete_node': '删除节点',
         'canvas.menu.delete_edge': '删除连线',
-        'canvas.cycle_layout': '切换布局',
-      }[key] ?? key),
+          'canvas.cycle_layout': '切换布局',
+          'canvas.menu.clear_selection': '全部取消选中',
+          'canvas.menu.link_all_to_this': '全部连到此节点（{{count}} 条）',
+          'canvas.menu.synthesize_selected': '合成长文（{{count}} 张）',
+          'canvas.menu.delete_selected': '批量删除（{{count}} 张）',
+        }[key] ?? key);
+      return opts?.count === undefined ? raw : raw.replace('{{count}}', String(opts.count));
+    },
   }),
 }));
 
@@ -49,6 +56,10 @@ function makeActions(): CanvasContextMenuActions {
     toggleSelect: vi.fn(),
     deleteNode: vi.fn(),
     deleteEdge: vi.fn(),
+    linkNodesToHub: vi.fn(),
+    synthesizeSelected: vi.fn(),
+    clearSelection: vi.fn(),
+    deleteNodes: vi.fn(),
   };
 }
 
@@ -72,6 +83,7 @@ function renderMenu({
   agents = AGENTS,
   actions = makeActions(),
   onClose = vi.fn(),
+  isSynthesizeDisabled = false,
 }: {
   target: CanvasContextMenuState['target'];
   nodes?: CanvasNode[];
@@ -79,6 +91,7 @@ function renderMenu({
   agents?: AgentConfig[];
   actions?: CanvasContextMenuActions;
   onClose?: () => void;
+  isSynthesizeDisabled?: boolean;
 }) {
   render(
     <CanvasContextMenu
@@ -88,6 +101,7 @@ function renderMenu({
       nodesById={nodesMap(nodes)}
       selectedNodes={selected}
       actions={actions}
+      isSynthesizeDisabled={isSynthesizeDisabled}
     />,
   );
   return { actions, onClose };
@@ -257,6 +271,73 @@ describe('CanvasContextMenu', () => {
     it('删除节点为危险样式', () => {
       renderMenu({ target: { kind: 'node', nodeId: 'n1' }, nodes: [noteNode] });
       expect(screen.getByText('删除节点').closest('button')!.className).toContain('text-red-700');
+    });
+  });
+
+  describe('多选（≥2 张）', () => {
+    const target: CanvasContextMenuState['target'] = {
+      kind: 'nodes',
+      nodeIds: ['n1', 'n2', 'n3'],
+      anchorId: 'n2',
+    };
+
+    it('只给批量操作，不混入单节点项', () => {
+      renderMenu({ target, selected: new Set(target.nodeIds) });
+      expect(labels()).toEqual([
+        '全部连到此节点（2 条）',
+        '合成长文（3 张）',
+        '全部取消选中',
+        '批量删除（3 张）',
+      ]);
+      expect(screen.queryByText('编辑内容')).toBeNull();
+      expect(screen.queryByText('创建副本')).toBeNull();
+    });
+
+    it('连线数是选中数减一（中心节点不连自己）', () => {
+      renderMenu({
+        target: { kind: 'nodes', nodeIds: ['a', 'b'], anchorId: 'a' },
+        selected: new Set(['a', 'b']),
+      });
+      expect(screen.getByText('全部连到此节点（1 条）')).toBeInTheDocument();
+    });
+
+    it('全部连到被右键的那个节点（anchor 作为中心）', () => {
+      const { actions } = renderMenu({ target, selected: new Set(target.nodeIds) });
+      fireEvent.pointerDown(screen.getByText('全部连到此节点（2 条）'));
+      expect(actions.linkNodesToHub).toHaveBeenCalledWith(['n1', 'n2', 'n3'], 'n2');
+    });
+
+    it('合成长文', () => {
+      const { actions } = renderMenu({ target, selected: new Set(target.nodeIds) });
+      fireEvent.pointerDown(screen.getByText('合成长文（3 张）'));
+      expect(actions.synthesizeSelected).toHaveBeenCalled();
+    });
+
+    it('AI 忙时禁用合成长文', () => {
+      const { actions } = renderMenu({
+        target,
+        selected: new Set(target.nodeIds),
+        isSynthesizeDisabled: true,
+      });
+      const btn = screen.getByText('合成长文（3 张）').closest('button')!;
+      expect(btn).toBeDisabled();
+      fireEvent.pointerDown(btn);
+      expect(actions.synthesizeSelected).not.toHaveBeenCalled();
+    });
+
+    it('全部取消选中', () => {
+      const { actions } = renderMenu({ target, selected: new Set(target.nodeIds) });
+      fireEvent.pointerDown(screen.getByText('全部取消选中'));
+      expect(actions.clearSelection).toHaveBeenCalled();
+    });
+
+    it('批量删除传全部选中 id 且为危险样式', () => {
+      const { actions } = renderMenu({ target, selected: new Set(target.nodeIds) });
+      const btn = screen.getByText('批量删除（3 张）').closest('button')!;
+      expect(btn.className).toContain('text-red-700');
+
+      fireEvent.pointerDown(btn);
+      expect(actions.deleteNodes).toHaveBeenCalledWith(['n1', 'n2', 'n3']);
     });
   });
 

@@ -275,11 +275,12 @@ export default function App() {
   const {
     toggleNodeSelection, handleLink, deleteEdge, removeNodeId, addTextNode, addThemeNode, addFileNode,
     createNodeAt, addAgentNodeAt, insertFilesAt, duplicateNode, cycleNodeLayout, pasteStickyAt,
+    clearSelection, deleteNodes, linkNodesToHub,
   } = useNodeActions({
     activeCanvasId, nodesRef, connectingFrom, setConnectingFrom, edges, selectedNodes, setSelectedNodes, transformRef,
   });
 
-  // Right-click menu (canvas / node / edge)
+  // Right-click menu (canvas / node / nodes / edge)
   const { menu: contextMenu, openContextMenu, closeContextMenu } = useCanvasContextMenu(mainRef, transformRef);
 
   const nodesById = React.useMemo(
@@ -287,25 +288,16 @@ export default function App() {
     [dynamicNodes],
   );
 
-  const contextMenuActions = React.useMemo<CanvasContextMenuActions>(
-    () => ({
-      createNode: (nodeType, at) => void createNodeAt(nodeType, at),
-      insertFile: (accept, at) => void pickFiles(accept).then((files) => insertFilesAt(files, at)),
-      addAgentNode: (agentConfigId, at) => void addAgentNodeAt(agentConfigId, at),
-      pasteSticky: (payload, at) => void pasteStickyAt(payload, at),
-      resetView: () => setCanvasTransform({ x: 0, y: 0, scale: 1 }),
-      editNode: (nodeId) => setEditingNodeId(nodeId),
-      duplicateNode: (nodeId) => void duplicateNode(nodeId),
-      startLink: (nodeId) => handleLink(nodeId),
-      cycleLayout: (nodeId) => void cycleNodeLayout(nodeId),
-      toggleSelect: (nodeId) => toggleNodeSelection(nodeId),
-      deleteNode: (nodeId) => removeNodeId(nodeId),
-      deleteEdge: (edgeId) => deleteEdge(edgeId),
-    }),
-    [
-      createNodeAt, insertFilesAt, addAgentNodeAt, pasteStickyAt, setCanvasTransform,
-      duplicateNode, handleLink, cycleNodeLayout, toggleNodeSelection, removeNodeId, deleteEdge,
-    ],
+  /** 右键落在已多选的成员上时走批量菜单；否则按单节点处理且不清空既有选中。 */
+  const openNodeContextMenu = useCallback(
+    (e: React.MouseEvent, nodeId: string) => {
+      if (selectedNodes.size >= 2 && selectedNodes.has(nodeId)) {
+        openContextMenu(e, { kind: 'nodes', nodeIds: [...selectedNodes], anchorId: nodeId });
+      } else {
+        openContextMenu(e, { kind: 'node', nodeId });
+      }
+    },
+    [openContextMenu, selectedNodes],
   );
 
   // AI actions (publish, agent analysis, AI submit)
@@ -330,6 +322,32 @@ export default function App() {
     aiConfig, agentConfigs, activeCanvasId, nodesRef, transformRef,
     dynamicNodes, edges, selectedNodes, setSelectedNodes, setActiveReferenceId, setActiveTab,
   });
+
+  const contextMenuActions = React.useMemo<CanvasContextMenuActions>(
+    () => ({
+      createNode: (nodeType, at) => void createNodeAt(nodeType, at),
+      insertFile: (accept, at) => void pickFiles(accept).then((files) => insertFilesAt(files, at)),
+      addAgentNode: (agentConfigId, at) => void addAgentNodeAt(agentConfigId, at),
+      pasteSticky: (payload, at) => void pasteStickyAt(payload, at),
+      resetView: () => setCanvasTransform({ x: 0, y: 0, scale: 1 }),
+      editNode: (nodeId) => setEditingNodeId(nodeId),
+      duplicateNode: (nodeId) => void duplicateNode(nodeId),
+      startLink: (nodeId) => handleLink(nodeId),
+      cycleLayout: (nodeId) => void cycleNodeLayout(nodeId),
+      toggleSelect: (nodeId) => toggleNodeSelection(nodeId),
+      deleteNode: (nodeId) => removeNodeId(nodeId),
+      deleteEdge: (edgeId) => deleteEdge(edgeId),
+      linkNodesToHub: (nodeIds, hubId) => void linkNodesToHub(nodeIds, hubId),
+      synthesizeSelected: () => void handlePublish(),
+      clearSelection: () => clearSelection(),
+      deleteNodes: (nodeIds) => void deleteNodes(nodeIds),
+    }),
+    [
+      createNodeAt, insertFilesAt, addAgentNodeAt, pasteStickyAt, setCanvasTransform,
+      duplicateNode, handleLink, cycleNodeLayout, toggleNodeSelection, removeNodeId, deleteEdge,
+      linkNodesToHub, handlePublish, clearSelection, deleteNodes,
+    ],
+  );
 
   const runAgentAnalysisFromCard = (agentNodeId: string) => {
     if (isAnyAiBusy) return;
@@ -541,7 +559,7 @@ export default function App() {
                           }
                         : undefined
                     }
-                    onContextMenu={(e, nid) => openContextMenu(e, { kind: 'node', nodeId: nid })}
+                    onContextMenu={openNodeContextMenu}
                 >
                   <NodeRenderer
                     node={node}
@@ -586,6 +604,7 @@ export default function App() {
             nodesById={nodesById}
             selectedNodes={selectedNodes}
             actions={contextMenuActions}
+            isSynthesizeDisabled={isAnyAiBusy}
           />
         )}
         </main>

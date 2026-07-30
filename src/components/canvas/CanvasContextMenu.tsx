@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Copy, Link2, Pencil, RotateCcw, SlidersHorizontal, Square, SquareCheckBig, Trash2 } from 'lucide-react';
+import { Bot, Copy, Link2, Pencil, PenLine, RotateCcw, SlidersHorizontal, Square, SquareCheckBig, Trash2 } from 'lucide-react';
 import type { AgentConfig, CanvasNode } from '../../db';
 import { CANVAS_CREATE_ITEMS, CANVAS_INSERT_ITEMS } from '../../constants/canvasMenuItems';
 import { nodeSupportsCycleLayout, nodeSupportsInlineEdit } from '../../constants/nodeCapabilities';
@@ -31,6 +31,11 @@ export interface CanvasContextMenuActions {
   toggleSelect: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
   deleteEdge: (edgeId: string) => void;
+  /** 星型连线：除 `hubId` 外的选中节点全部连向它。 */
+  linkNodesToHub: (nodeIds: string[], hubId: string) => void;
+  synthesizeSelected: () => void;
+  clearSelection: () => void;
+  deleteNodes: (nodeIds: string[]) => void;
 }
 
 export interface CanvasContextMenuProps {
@@ -40,6 +45,8 @@ export interface CanvasContextMenuProps {
   nodesById: Map<string, CanvasNode>;
   selectedNodes: Set<string>;
   actions: CanvasContextMenuActions;
+  /** AI 正忙时禁用「合成长文」，与右上角合成按钮保持一致。 */
+  isSynthesizeDisabled?: boolean;
 }
 
 export function CanvasContextMenu({
@@ -49,6 +56,7 @@ export function CanvasContextMenu({
   nodesById,
   selectedNodes,
   actions,
+  isSynthesizeDisabled,
 }: CanvasContextMenuProps) {
   const { t } = useTranslation();
   const isCanvasTarget = menu.target.kind === 'canvas';
@@ -90,6 +98,50 @@ export function CanvasContextMenu({
               icon: Trash2,
               danger: true,
               onSelect: () => actions.deleteEdge(edgeId),
+            },
+          ],
+        },
+      ];
+    }
+
+    if (menu.target.kind === 'nodes') {
+      const { nodeIds, anchorId } = menu.target;
+      return [
+        {
+          id: 'multi',
+          entries: [
+            {
+              id: 'link-all',
+              label: t('canvas.menu.link_all_to_this', { count: nodeIds.length - 1 }),
+              icon: Link2,
+              disabled: nodeIds.length < 2,
+              onSelect: () => actions.linkNodesToHub(nodeIds, anchorId),
+            },
+            {
+              id: 'synthesize',
+              label: t('canvas.menu.synthesize_selected', { count: nodeIds.length }),
+              icon: PenLine,
+              accent: true,
+              disabled: isSynthesizeDisabled,
+              onSelect: () => actions.synthesizeSelected(),
+            },
+            {
+              id: 'clear-selection',
+              label: t('canvas.menu.clear_selection'),
+              icon: Square,
+              onSelect: () => actions.clearSelection(),
+            },
+          ],
+        },
+        {
+          id: 'multi-danger',
+          entries: [
+            {
+              id: 'delete-selected',
+              label: t('canvas.menu.delete_selected', { count: nodeIds.length }),
+              icon: Trash2,
+              danger: true,
+              onSelect: () => actions.deleteNodes(nodeIds),
             },
           ],
         },
@@ -219,7 +271,7 @@ export function CanvasContextMenu({
     });
 
     return result;
-  }, [menu, t, actions, agentConfigs, nodesById, selectedNodes, pasteable]);
+  }, [menu, t, actions, agentConfigs, nodesById, selectedNodes, pasteable, isSynthesizeDisabled]);
 
   return (
     <ContextMenuSurface

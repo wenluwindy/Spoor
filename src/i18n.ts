@@ -57,7 +57,11 @@ const resources = {
           "select": "Select",
           "unselect": "Deselect",
           "delete_node": "Delete node",
-          "delete_edge": "Delete connection"
+          "delete_edge": "Delete connection",
+          "link_all_to_this": "Connect all to this node ({{count}})",
+          "synthesize_selected": "Synthesize into an article ({{count}})",
+          "clear_selection": "Deselect all",
+          "delete_selected": "Delete {{count}} nodes"
         }
       },
       "nodes": {
@@ -396,7 +400,11 @@ const resources = {
           "select": "选中",
           "unselect": "取消选中",
           "delete_node": "删除节点",
-          "delete_edge": "删除连线"
+          "delete_edge": "删除连线",
+          "link_all_to_this": "全部连到此节点（{{count}} 条）",
+          "synthesize_selected": "合成长文（{{count}} 张）",
+          "clear_selection": "全部取消选中",
+          "delete_selected": "批量删除（{{count}} 张）"
         }
       },
       "nodes": {
