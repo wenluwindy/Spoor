@@ -11,6 +11,7 @@ import {
 import { commitCanvasInlineEditing } from './utils/commitCanvasInlineEditing';
 import { registerCanvasUnloadFlush } from './utils/registerCanvasUnloadFlush';
 import { getCanvasNodeContextText } from './utils/canvasNodeContextText';
+import { screenToCanvasPosition } from './utils/canvas';
 import { nodeSupportsCycleLayout } from './constants/nodeCapabilities';
 import { NOTE_LAYOUT_COUNT } from './constants/noteLayouts';
 import { CanvasEdgeLines } from './components/canvas/CanvasEdgeLines';
@@ -407,11 +408,12 @@ export default function App() {
               });
             }
             if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-              const t = canvasTransform;
-              const rect = e.currentTarget.getBoundingClientRect();
-
-              const ox = ((e.clientX - rect.left) - t.x) / t.scale;
-              const oy = ((e.clientY - rect.top) - t.y) / t.scale;
+              const { x: ox, y: oy } = screenToCanvasPosition(
+                e.clientX,
+                e.clientY,
+                e.currentTarget.getBoundingClientRect(),
+                canvasTransform,
+              );
 
               for (let index = 0; index < Array.from(e.dataTransfer.files).length; index++) {
                 const file = e.dataTransfer.files[index];

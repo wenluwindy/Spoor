@@ -91,6 +91,8 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
         }
       }}
       onPointerDown={(e) => {
+        // 右键/中键交给画布右键菜单与平移逻辑；否则右键按住会把节点拖走。
+        if (e.button !== 0) return;
         const target = e.target as HTMLElement;
         if (
           onStickyActivate &&

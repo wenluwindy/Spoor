@@ -42,7 +42,13 @@ const resources = {
         "link_note": "Link to another note",
         "cycle_layout": "Cycle Layout",
         "change_color": "Change Color",
-        "change_font": "Change Font"
+        "change_font": "Change Font",
+        "upload_file": "Upload file",
+        "menu": {
+          "insert_image": "Insert image…",
+          "insert_video": "Insert video…",
+          "insert_document": "Insert document…"
+        }
       },
       "nodes": {
         "theme": "Core Theme",
@@ -365,7 +371,13 @@ const resources = {
         "link_note": "链接到其他节点",
         "cycle_layout": "切换布局",
         "change_color": "更改颜色",
-        "change_font": "更改字体"
+        "change_font": "更改字体",
+        "upload_file": "上传文件",
+        "menu": {
+          "insert_image": "插入图片…",
+          "insert_video": "插入视频…",
+          "insert_document": "插入文档…"
+        }
       },
       "nodes": {
         "theme": "核心主题",

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
 import { DraggableNode } from '../../src/components/canvas/DraggableNode';
 
@@ -69,5 +69,53 @@ describe('DraggableNode', () => {
     const { container } = renderNode({ isEditing: false, isSelected: true });
     const root = container.firstElementChild as HTMLElement;
     expect(root.className).toContain('ring-2');
+  });
+
+  describe('仅主键触发拖拽（右键留给上下文菜单）', () => {
+    it('左键按下并移动会拖走节点', () => {
+      const { container } = renderNode({ initialX: 100, initialY: 50 });
+      const root = container.firstElementChild as HTMLElement;
+
+      fireEvent.pointerDown(root, { button: 0, clientX: 0, clientY: 0 });
+      fireEvent.pointerMove(window, { clientX: 200, clientY: 30 });
+
+      expect(root.style.left).toBe('300px');
+      expect(root.style.top).toBe('80px');
+    });
+
+    it('右键按下并移动不会拖走节点', () => {
+      const { container } = renderNode({ initialX: 100, initialY: 50 });
+      const root = container.firstElementChild as HTMLElement;
+
+      fireEvent.pointerDown(root, { button: 2, clientX: 0, clientY: 0 });
+      fireEvent.pointerMove(window, { clientX: 200, clientY: 30 });
+
+      expect(root.style.left).toBe('100px');
+      expect(root.style.top).toBe('50px');
+    });
+
+    it('右键按下不触发连线', () => {
+      const onLink = vi.fn();
+      const { container } = renderNode({ isConnecting: true, onLink });
+      const root = container.firstElementChild as HTMLElement;
+
+      fireEvent.pointerDown(root, { button: 2 });
+      expect(onLink).not.toHaveBeenCalled();
+
+      fireEvent.pointerDown(root, { button: 0 });
+      expect(onLink).toHaveBeenCalledWith('n1');
+    });
+
+    it('右键按下不改变 Ctrl+C 的便签焦点', () => {
+      const onStickyActivate = vi.fn();
+      const { container } = renderNode({ onStickyActivate });
+      const root = container.firstElementChild as HTMLElement;
+
+      fireEvent.pointerDown(root, { button: 2 });
+      expect(onStickyActivate).not.toHaveBeenCalled();
+
+      fireEvent.pointerDown(root, { button: 0 });
+      expect(onStickyActivate).toHaveBeenCalledWith('n1');
+    });
   });
 });

@@ -15,6 +15,8 @@ export function useDraggable(initialX: number, initialY: number, scale: number =
   }, [pos]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // 仅主键拖拽：右键要留给上下文菜单，中键留给画布平移。
+    if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (
       target.isContentEditable ||
