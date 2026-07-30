@@ -54,6 +54,10 @@ export const en = {
     "new_canvas": "New Canvas",
     "default_name": "Canvas {{number}}",
     "rename": "Rename",
+    "delete_canvas": "Delete canvas",
+    "delete_canvas_confirm": "Delete the canvas \"{{name}}\"?\n\nEvery node and connection on it will be deleted too. This cannot be undone.",
+    "delete_canvas_ok": "Delete",
+    "delete_canvas_last": "At least one canvas must remain",
     "delete_note": "Delete note",
     "select_note": "Select note",
     "link_note": "Link to another note",
@@ -61,6 +65,8 @@ export const en = {
     "change_color": "Change Color",
     "change_font": "Change Font",
     "upload_file": "Upload file",
+    "attach_file": "Attach a file for AI (not added to the canvas)",
+    "remove_attachment": "Remove attachment",
     "menu": {
       "insert_image": "Insert image…",
       "insert_video": "Insert video…",
@@ -203,9 +209,14 @@ export const en = {
     "provider_custom": "Custom endpoint"
   },
   "ai": {
-    "input_placeholder": "Ask AI to draft some ideas or paragraphs...",
+    "input_placeholder": "Ask AI to draft ideas — or say \"create three notes about…\"",
     "loading": "AI is thinking...",
     "generated_article_title": "Generated Synthesis",
+    "attachment_context_label": "[Attachment: {{name}}]",
+    "node_plan": {
+      "system": "You work inside a spatial notes canvas. Decide whether the user is asking to **create nodes on the canvas**, and if so, say which ones.\n\nOnly two node types exist:\n- \"text\": a sticky note holding one concrete piece of content (a sentence to a short paragraph).\n- \"theme\": a theme card holding only a short title (a few words) that heads a group of notes.\n\nReply with ONLY valid JSON (no markdown fences, no commentary):\n{\"action\": \"answer\"}\nor\n{\"action\": \"create\", \"nodes\": [{\"type\": \"text\", \"content\": \"…\"}]}\n\nRules:\n- Use create ONLY when the user is asking to put content onto the canvas (create/add/write/turn into notes, cards, nodes…). Questions, chat, requests to explain, and requests for long-form writing all get answer.\n- Create as many nodes as the user asked for; if no count is given, split the content where it naturally splits.\n- Write content in the user's own language. Put the content itself in the field — no \"Note 1:\" prefixes, no markdown headings.\n- If the user gives only a topic and no body, write the body for them. Never emit empty nodes.",
+      "user": "Create at most {{max}} nodes this time.\n\nUser message:\n---\n{{text}}\n---"
+    },
     "intent": {
       "analyzer_system": "You disambiguate a SHORT or vague user message before a canvas writing assistant answers. Output clarifying QUESTIONS the assistant should use to understand the user — NOT rewritten user messages, NOT instructions to the assistant about what to do.\n\nDecide whether at least two genuinely different clarification angles exist. If one angle clearly dominates, set ambiguous to false.\n\nReply with ONLY valid JSON (no markdown fences, no extra text):\n{\"ambiguous\": false, \"options\": [], \"hint\": \"\"}\nor\n{\"ambiguous\": true, \"options\": [\"…\", \"…\", \"…\"], \"hint\": \"…\"}\n\nRules:\n- ambiguous false → options MUST be [].\n- ambiguous true → exactly three options, SAME language as the user.\n- Each option MUST be a short clarifying question addressed TO the user (second person: you / your). Prefer question marks. Mix open questions (What happened?) and yes/no checks (Are you looking for …?).\n- FORBIDDEN: third-person assistant tasks (\"Comfort the user\", \"Ask the user…\"), first-person rewrites pretending to be the user (\"I want to…\"), or stage directions.\n- Example — input \"I'm upset\": \"What happened?\" / \"Are you looking for practical ways to feel better?\" / \"Do you mainly want to vent, or turn this into writing?\"\n- hint: one short sentence telling the user why the line is vague (shown above the checklist).",
       "analyzer_user": "User message:\n---\n{{text}}\n---",

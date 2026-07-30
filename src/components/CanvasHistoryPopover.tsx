@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { History, Plus, Edit3 } from 'lucide-react';
+import { History, Plus, Edit3, Trash2 } from 'lucide-react';
 import { db } from '../db';
 import type { Canvas } from '../db';
 import { Tooltip } from './ui/Tooltip';
+import { useAppDialog } from './AppDialogProvider';
+import { deleteCanvasWithContents } from '../services/canvasRepository';
 
 export interface CanvasHistoryPopoverProps {
   canvases: Canvas[];
@@ -13,14 +15,35 @@ export interface CanvasHistoryPopoverProps {
 
 export function CanvasHistoryPopover({ canvases, activeCanvasId, setActiveCanvasId }: CanvasHistoryPopoverProps) {
   const { t } = useTranslation();
+  const { confirm } = useAppDialog();
   const [isOpen, setIsOpen] = useState(false);
   const [editingCanvasId, setEditingCanvasId] = useState<string | null>(null);
   const [editingCanvasName, setEditingCanvasName] = useState('');
+  /** 至少留一张画布：删光了应用就没有可显示的画布了。 */
+  const isLastCanvas = canvases.length <= 1;
 
   const renameCanvas = async (id: string, newName: string) => {
     if (!newName.trim()) return;
     await db.canvases.update(id, { name: newName, updatedAt: Date.now() });
     setEditingCanvasId(null);
+  };
+
+  const deleteCanvas = async (canvas: Canvas) => {
+    if (isLastCanvas) return;
+    const ok = await confirm({
+      title: t('canvas.delete_canvas'),
+      message: t('canvas.delete_canvas_confirm', { name: canvas.name }),
+      confirmLabel: t('canvas.delete_canvas_ok'),
+      variant: 'danger',
+    });
+    if (!ok) return;
+
+    // 先挪走再删，避免中途停在一个已经不存在的画布上
+    if (canvas.id === activeCanvasId) {
+      const fallback = canvases.find((c) => c.id !== canvas.id);
+      if (fallback) setActiveCanvasId(fallback.id);
+    }
+    await deleteCanvasWithContents(canvas.id);
   };
 
   const createNewCanvas = async () => {
@@ -83,7 +106,7 @@ export function CanvasHistoryPopover({ canvases, activeCanvasId, setActiveCanvas
                       >
                         {canvas.name}
                       </button>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         <Tooltip label={t('canvas.rename')}>
                           <button
                             onClick={(e) => {
@@ -96,7 +119,25 @@ export function CanvasHistoryPopover({ canvases, activeCanvasId, setActiveCanvas
                             <Edit3 className="w-3 h-3" />
                           </button>
                         </Tooltip>
-                        {activeCanvasId === canvas.id && <div className="w-1.5 h-1.5 rounded-full bg-[#C2410C]" />}
+                        {/* 用 aria-disabled 而非 disabled：禁用的按钮收不到 hover 事件，
+                            「为什么不能删」的提示就永远弹不出来 */}
+                        <Tooltip label={isLastCanvas ? t('canvas.delete_canvas_last') : t('canvas.delete_canvas')}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void deleteCanvas(canvas);
+                            }}
+                            aria-disabled={isLastCanvas}
+                            className={`p-1 transition-opacity ${
+                              isLastCanvas
+                                ? 'cursor-not-allowed opacity-25 group-hover:opacity-25'
+                                : 'opacity-0 group-hover:opacity-100 hover:text-[#C2410C]'
+                            }`}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </Tooltip>
+                        {activeCanvasId === canvas.id && <div className="w-1.5 h-1.5 rounded-full bg-[#C2410C] ml-1" />}
                       </div>
                     </div>
                   )}

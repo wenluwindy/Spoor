@@ -1,22 +1,21 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Plus,
-  Bot,
   Wand2,
   ZoomIn,
   Maximize,
+  Paperclip,
+  Image as ImageIcon,
   FileText as FileTextIcon,
+  X,
   Loader2,
 } from 'lucide-react';
-import type { AgentConfig } from '../db';
-import { db } from '../db';
-import { CANVAS_ALL_FILE_ACCEPT, CANVAS_CREATE_ITEMS } from '../constants/canvasMenuItems';
-import { getCanvasCenterPosition } from '../utils/canvas';
-import { resolveAgentLocalizedName } from '../utils/aiI18n';
 import { IntentClarificationModal } from './IntentClarificationModal';
-import { AgentIcon } from './AgentIcon';
 import { Tooltip } from './ui/Tooltip';
+import {
+  TOOLBAR_ATTACHMENT_ACCEPT,
+  type ToolbarAttachment,
+} from '../constants/toolbarAttachments';
 
 export interface CanvasToolbarProps {
   isToolbarAiLoading: boolean;
@@ -24,16 +23,14 @@ export interface CanvasToolbarProps {
   aiPrompt: string;
   setAiPrompt: (prompt: string) => void;
   handleAiSubmit: () => void;
-  /** 由 `CANVAS_CREATE_ITEMS` 分发，落点用视口中心（右键菜单才用点击处）。 */
-  onCreateNode: (nodeType: 'text' | 'theme') => void;
-  addFileNode: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  agentConfigs: AgentConfig[];
   canvasTransform: { x: number; y: number; scale: number };
   setCanvasTransform: React.Dispatch<React.SetStateAction<{ x: number; y: number; scale: number }>>;
-  transformRef: React.MutableRefObject<{ x: number; y: number; scale: number }>;
-  activeCanvasId: string;
   /** 缩放至适应全部内容（右下角按钮）。 */
   onZoomToFit: () => void;
+  /** 输入栏附件：喂给这一次提问的 AI，不落画布。 */
+  attachments: ToolbarAttachment[];
+  onAddAttachments: (files: File[]) => void;
+  onRemoveAttachment: (id: string) => void;
   intentClarification: {
     original: string;
     options: [string, string, string];
@@ -50,14 +47,12 @@ export function CanvasToolbar({
   aiPrompt,
   setAiPrompt,
   handleAiSubmit,
-  onCreateNode,
-  addFileNode,
-  agentConfigs,
   canvasTransform,
   setCanvasTransform,
-  transformRef,
-  activeCanvasId,
   onZoomToFit,
+  attachments,
+  onAddAttachments,
+  onRemoveAttachment,
   intentClarification,
   isIntentSubmitting,
   onCancelIntentClarification,
@@ -78,90 +73,70 @@ export function CanvasToolbar({
           onCancel={onCancelIntentClarification}
           onConfirm={onConfirmIntentClarification}
         />
-        <div className={`bg-white rounded-2xl shadow-2xl border border-[#E6E4DF] p-2 flex items-center space-x-2 ring-4 ring-[#F4F1ED]/50 transition-all ${isToolbarAiLoading ? 'opacity-80' : ''}`}>
-          <div className="flex items-center gap-1 pl-2 border-r border-[#E6E4DF] pr-3 mr-1 relative group">
-            <div className="relative group/plus">
-              <Tooltip label={t(CANVAS_CREATE_ITEMS[0].labelKey)}>
-                <button
-                  type="button"
-                  onClick={() => onCreateNode(CANVAS_CREATE_ITEMS[0].nodeType)}
-                  className="w-8 h-8 flex items-center justify-center text-[#5a5a54] hover:text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg cursor-pointer transition-colors"
+        <div className={`bg-white rounded-2xl shadow-2xl border border-[#E6E4DF] p-2 ring-4 ring-[#F4F1ED]/50 transition-all ${isToolbarAiLoading ? 'opacity-80' : ''}`}>
+          {attachments.length > 0 && (
+            <ul className="flex flex-wrap gap-1.5 px-2 pt-1 pb-2 border-b border-[#F4F1ED] mb-1">
+              {attachments.map((attachment) => (
+                <li
+                  key={attachment.id}
+                  className="flex items-center gap-1.5 max-w-[14rem] bg-[#F4F1ED] border border-[#E6E4DF] rounded-lg pl-2 pr-1 py-1"
                 >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </Tooltip>
-              <div className="absolute bottom-full left-0 mb-2 w-52 bg-white border border-[#E6E4DF] rounded-xl shadow-xl opacity-0 invisible group-hover/plus:opacity-100 group-hover/plus:visible transition-all flex flex-col p-1 z-50">
-                {/* 与画布右键菜单同一份定义，见 constants/canvasMenuItems.ts */}
-                {CANVAS_CREATE_ITEMS.map((item) => {
-                  const Icon = item.icon;
-                  return (
+                  {attachment.kind === 'image' ? (
+                    <ImageIcon className="w-3 h-3 text-[#C2410C] shrink-0" />
+                  ) : (
+                    <FileTextIcon className="w-3 h-3 text-[#5a5a54] shrink-0" />
+                  )}
+                  <span className="text-[11px] font-sans text-[#1a1a1a] truncate">{attachment.name}</span>
+                  <Tooltip label={t('canvas.remove_attachment')}>
                     <button
-                      key={item.id}
                       type="button"
-                      onClick={() => onCreateNode(item.nodeType)}
-                      className="text-left px-3 py-2 text-sm text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg mb-1 flex items-center gap-2 min-w-0"
+                      onClick={() => onRemoveAttachment(attachment.id)}
+                      className="p-0.5 text-[#8c8a84] hover:text-[#C2410C] transition-colors shrink-0"
                     >
-                      <Icon
-                        className={`w-3.5 h-3.5 shrink-0 ${item.accent ? 'text-[#C2410C]' : 'text-[#5a5a54]'}`}
-                      />
-                      <span className="font-bold truncate">{t(item.labelKey)}</span>
+                      <X className="w-3 h-3" />
                     </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="relative group/agent">
-              <Tooltip label={t('sidebar.agents')}>
-                <button className="w-8 h-8 flex items-center justify-center text-[#5a5a54] hover:text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg cursor-pointer transition-colors">
-                  <Bot className="w-4 h-4" />
-                </button>
-              </Tooltip>
-              {/* Dropdown for agents */}
-              <div className="absolute bottom-full left-0 mb-2 w-48 bg-white border border-[#E6E4DF] rounded-xl shadow-xl opacity-0 invisible group-hover/agent:opacity-100 group-hover/agent:visible transition-all flex flex-col p-1">
-                <div className="px-3 py-2 text-[10px] font-bold text-[#8c8a84] uppercase tracking-wider font-mono">{t('sidebar.agents')}</div>
-                {agentConfigs.map(agent => (
-                  <button key={agent.id} onClick={async () => {
-                    const { x, y } = getCanvasCenterPosition(transformRef.current);
-                    await db.nodes.add({ id: crypto.randomUUID(), canvasId: activeCanvasId, type: 'agent', agentConfigId: agent.id, x, y });
-                  }} className="text-left px-3 py-2 text-sm text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg mb-1 flex items-center gap-2 min-w-0">
-                    <span className="w-5 h-5 rounded-md bg-[#FFF7ED] border border-[#E6E4DF] flex items-center justify-center shrink-0 overflow-hidden">
-                      <AgentIcon
-                        agentId={agent.id}
-                        className="w-full h-full"
-                        imageClassName="scale-[1.32]"
-                        fallbackClassName="text-[#C2410C]"
-                      />
-                    </span>
-                    <span className="font-bold truncate">{resolveAgentLocalizedName(agent)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <Tooltip label={t('canvas.upload_file')}>
-              <label className="w-8 h-8 flex items-center justify-center text-[#5a5a54] hover:text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg cursor-pointer transition-colors m-0">
-                <FileTextIcon className="w-4 h-4" />
-                <input type="file" accept={CANVAS_ALL_FILE_ACCEPT} className="hidden" onChange={addFileNode} />
+                  </Tooltip>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex items-center space-x-2">
+            <Tooltip label={t('canvas.attach_file')}>
+              <label className="w-9 h-9 ml-1 flex items-center justify-center text-[#5a5a54] hover:text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg cursor-pointer transition-colors m-0 shrink-0">
+                <Paperclip className="w-4 h-4" />
+                <input
+                  type="file"
+                  multiple
+                  accept={TOOLBAR_ATTACHMENT_ACCEPT}
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    if (files.length > 0) onAddAttachments(files);
+                    // 同一个文件连选两次也要能触发 change
+                    e.target.value = '';
+                  }}
+                />
               </label>
             </Tooltip>
-          </div>
-          <input 
-            className="flex-1 bg-transparent border-none focus:outline-none focus:ring-0 font-sans text-sm py-3 text-[#1a1a1a] placeholder-[#8c8a84] disabled:opacity-50" 
-            placeholder={t('ai.input_placeholder')} 
-            type="text"
-            value={aiPrompt}
-            onChange={e => setAiPrompt(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleAiSubmit()}
-            disabled={isInputDisabled}
-          />
-          <Tooltip label={t('ai.submit')}>
-            <button
-              onClick={handleAiSubmit}
+            <input
+              className="flex-1 bg-transparent border-none focus:outline-none focus:ring-0 font-sans text-sm py-3 text-[#1a1a1a] placeholder-[#8c8a84] disabled:opacity-50"
+              placeholder={t('ai.input_placeholder')}
+              type="text"
+              value={aiPrompt}
+              onChange={e => setAiPrompt(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAiSubmit()}
               disabled={isInputDisabled}
-              className="bg-[#C2410C] text-white p-2.5 rounded-xl font-sans text-sm font-bold shadow-md flex items-center justify-center hover:bg-[#a0350a] transition-colors disabled:opacity-75 shrink-0"
-            >
-              {isToolbarAiLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
-            </button>
-          </Tooltip>
+            />
+            <Tooltip label={t('ai.submit')}>
+              <button
+                onClick={handleAiSubmit}
+                disabled={isInputDisabled}
+                className="bg-[#C2410C] text-white p-2.5 rounded-xl font-sans text-sm font-bold shadow-md flex items-center justify-center hover:bg-[#a0350a] transition-colors disabled:opacity-75 shrink-0"
+              >
+                {isToolbarAiLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
+              </button>
+            </Tooltip>
+          </div>
         </div>
       </div>
 

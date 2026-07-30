@@ -4,27 +4,15 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { CanvasToolbar } from '../../src/components/CanvasToolbar';
 import {
-  CANVAS_ALL_FILE_ACCEPT,
-  CANVAS_CREATE_ITEMS,
-} from '../../src/constants/canvasMenuItems';
+  TOOLBAR_ATTACHMENT_ACCEPT,
+  type ToolbarAttachment,
+} from '../../src/constants/toolbarAttachments';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key,
     i18n: { language: 'zh', changeLanguage: vi.fn() },
   }),
-}));
-
-vi.mock('../../src/db', () => ({
-  db: { nodes: { add: vi.fn() } },
-}));
-
-vi.mock('../../src/utils/aiI18n', () => ({
-  resolveAgentLocalizedName: (a: { name: string }) => a.name,
-}));
-
-vi.mock('../../src/utils/canvas', () => ({
-  getCanvasCenterPosition: () => ({ x: 0, y: 0 }),
 }));
 
 vi.mock('lucide-react', async (importOriginal) => {
@@ -38,19 +26,30 @@ const defaultProps = () => ({
   aiPrompt: '',
   setAiPrompt: vi.fn(),
   handleAiSubmit: vi.fn(),
-  onCreateNode: vi.fn(),
   onZoomToFit: vi.fn(),
-  addFileNode: vi.fn(),
-  agentConfigs: [],
   canvasTransform: { x: 0, y: 0, scale: 1 },
   setCanvasTransform: vi.fn(),
-  transformRef: { current: { x: 0, y: 0, scale: 1 } },
-  activeCanvasId: 'default',
+  attachments: [] as ToolbarAttachment[],
+  onAddAttachments: vi.fn(),
+  onRemoveAttachment: vi.fn(),
   intentClarification: null,
   isIntentSubmitting: false,
   onCancelIntentClarification: vi.fn(),
   onConfirmIntentClarification: vi.fn(),
 });
+
+const imageAttachment: ToolbarAttachment = {
+  id: 'a1',
+  name: '封面.png',
+  kind: 'image',
+  dataUrl: 'data:image/png;base64,AAAA',
+};
+const textAttachment: ToolbarAttachment = {
+  id: 'a2',
+  name: '大纲.md',
+  kind: 'text',
+  text: '# 大纲',
+};
 
 describe('CanvasToolbar', () => {
   beforeEach(() => {
@@ -105,59 +104,89 @@ describe('CanvasToolbar', () => {
     expect(screen.getByPlaceholderText('ai.input_placeholder')).toBeDisabled();
   });
 
-  describe('+ 菜单与右键菜单同源', () => {
-    it('逐项渲染 CANVAS_CREATE_ITEMS 的文案', () => {
-      render(<CanvasToolbar {...defaultProps()} />);
-      for (const item of CANVAS_CREATE_ITEMS) {
-        expect(screen.getAllByText(item.labelKey).length).toBeGreaterThan(0);
-      }
-    });
+  it('右下角有「缩放至适应全部内容」按钮并回调', async () => {
+    const user = userEvent.setup();
+    const onZoomToFit = vi.fn();
+    render(<CanvasToolbar {...defaultProps()} onZoomToFit={onZoomToFit} />);
 
-    it('每项按自己的 nodeType 调用 onCreateNode', async () => {
-      const user = userEvent.setup();
-      const onCreateNode = vi.fn();
-      render(<CanvasToolbar {...defaultProps()} onCreateNode={onCreateNode} />);
+    const btn = screen.getByRole('button', { name: 'canvas.zoom_to_fit' });
+    await user.click(btn);
+    expect(onZoomToFit).toHaveBeenCalledTimes(1);
+  });
 
-      for (const item of CANVAS_CREATE_ITEMS) {
-        const entry = screen.getAllByText(item.labelKey).at(-1)!.closest('button')!;
-        await user.click(entry);
-        expect(onCreateNode).toHaveBeenLastCalledWith(item.nodeType);
-      }
-      expect(onCreateNode).toHaveBeenCalledTimes(CANVAS_CREATE_ITEMS.length);
-    });
-
-    it('+ 图标本身触发列表首项', async () => {
-      const user = userEvent.setup();
-      const onCreateNode = vi.fn();
-      const { container } = render(<CanvasToolbar {...defaultProps()} onCreateNode={onCreateNode} />);
-
-      const plusButton = container.querySelector('button[aria-label="sidebar.new_note"]')!;
-      await user.click(plusButton);
-      expect(onCreateNode).toHaveBeenCalledWith(CANVAS_CREATE_ITEMS[0].nodeType);
-    });
-
-    it('上传输入框的 accept 用统一常量', () => {
+  describe('新建节点改走自然语言：按钮已撤掉', () => {
+    it('不再有「+ 新建」下拉', () => {
       const { container } = render(<CanvasToolbar {...defaultProps()} />);
-      expect(container.querySelector('input[type="file"]')).toHaveAttribute(
-        'accept',
-        CANVAS_ALL_FILE_ACCEPT,
+      expect(container.querySelector('[data-testid="icon-Plus"]')).toBeNull();
+      expect(screen.queryByText('sidebar.new_note')).toBeNull();
+      expect(screen.queryByText('sidebar.new_theme_card')).toBeNull();
+    });
+
+    it('不再有「角色」下拉', () => {
+      const { container } = render(<CanvasToolbar {...defaultProps()} />);
+      expect(container.querySelector('[data-testid="icon-Bot"]')).toBeNull();
+      expect(screen.queryByText('sidebar.agents')).toBeNull();
+    });
+  });
+
+  describe('上传改为输入栏附件', () => {
+    it('文件选择器可多选，accept 不含视频', () => {
+      const { container } = render(<CanvasToolbar {...defaultProps()} />);
+      const input = container.querySelector('input[type="file"]')!;
+      expect(input).toHaveAttribute('accept', TOOLBAR_ATTACHMENT_ACCEPT);
+      expect(input).toHaveAttribute('multiple');
+      expect(TOOLBAR_ATTACHMENT_ACCEPT).not.toContain('video');
+    });
+
+    it('提示文案说明附件不会放到画布上', () => {
+      const { container } = render(<CanvasToolbar {...defaultProps()} />);
+      expect(container.querySelector('label[aria-label="canvas.attach_file"]')).toBeTruthy();
+      expect(container.querySelector('label[aria-label="canvas.upload_file"]')).toBeNull();
+    });
+
+    it('选中文件后把 File 数组交给 onAddAttachments', () => {
+      const onAddAttachments = vi.fn();
+      const { container } = render(
+        <CanvasToolbar {...defaultProps()} onAddAttachments={onAddAttachments} />,
       );
+      const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+      const file = new File(['x'], '大纲.md', { type: 'text/markdown' });
+      fireEvent.change(input, { target: { files: [file] } });
+
+      expect(onAddAttachments).toHaveBeenCalledTimes(1);
+      expect(onAddAttachments.mock.calls[0][0]).toEqual([file]);
     });
 
-    it('右下角有「缩放至适应全部内容」按钮并回调', async () => {
+    it('没有附件时不渲染附件区', () => {
+      render(<CanvasToolbar {...defaultProps()} />);
+      expect(screen.queryByRole('list')).toBeNull();
+    });
+
+    it('列出附件文件名，图片与文档用不同图标', () => {
+      render(
+        <CanvasToolbar {...defaultProps()} attachments={[imageAttachment, textAttachment]} />,
+      );
+      expect(screen.getByText('封面.png')).toBeInTheDocument();
+      expect(screen.getByText('大纲.md')).toBeInTheDocument();
+      expect(screen.getByTestId('icon-Image')).toBeInTheDocument();
+      expect(screen.getByTestId('icon-FileText')).toBeInTheDocument();
+    });
+
+    it('点 ✕ 按 id 移除对应附件', async () => {
       const user = userEvent.setup();
-      const onZoomToFit = vi.fn();
-      render(<CanvasToolbar {...defaultProps()} onZoomToFit={onZoomToFit} />);
+      const onRemoveAttachment = vi.fn();
+      render(
+        <CanvasToolbar
+          {...defaultProps()}
+          attachments={[imageAttachment, textAttachment]}
+          onRemoveAttachment={onRemoveAttachment}
+        />,
+      );
 
-      const btn = screen.getByRole('button', { name: 'canvas.zoom_to_fit' });
-      await user.click(btn);
-      expect(onZoomToFit).toHaveBeenCalledTimes(1);
-    });
-
-    it('上传按钮的提示已汉化（不再是硬编码 Upload File）', () => {
-      const { container } = render(<CanvasToolbar {...defaultProps()} />);
-      expect(container.querySelector('label[aria-label="canvas.upload_file"]')).toBeTruthy();
-      expect(container.querySelector('label[aria-label="Upload File"]')).toBeNull();
+      const removeButtons = screen.getAllByRole('button', { name: 'canvas.remove_attachment' });
+      expect(removeButtons).toHaveLength(2);
+      await user.click(removeButtons[1]);
+      expect(onRemoveAttachment).toHaveBeenCalledWith('a2');
     });
   });
 });

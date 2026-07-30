@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, act, waitFor } from '@testing-library/react';
+import { render, screen, act, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { db } from '../src/db';
 import i18n from '../src/i18n';
@@ -187,6 +187,17 @@ vi.mock('motion', () => ({
 
 // 导入被测组件
 import App from '../src/App';
+
+/**
+ * 新建便签：底部工具栏的 `+` 已撤掉（改走输入栏自然语言），
+ * 现在剩下的入口是画布右键菜单。
+ */
+async function createNoteViaContextMenu(user: ReturnType<typeof userEvent.setup>) {
+  const main = document.querySelector('main')!;
+  fireEvent.contextMenu(main, { clientX: 400, clientY: 300 });
+  const item = await screen.findByText('新建便签');
+  await user.click(item.closest('button')!);
+}
 
 describe('App 组件', () => {
   beforeEach(async () => {
@@ -406,9 +417,7 @@ describe('App 组件', () => {
         render(<App />);
       });
 
-      // "新建便签" 是 title 属性，不是可见文本
-      const newNoteBtn = screen.getAllByLabelText('新建便签')[0];
-      await user.click(newNoteBtn);
+      await createNoteViaContextMenu(user);
 
       // 验证数据库中有新节点
       const nodes = await db.nodes.toArray();
@@ -1050,8 +1059,7 @@ describe('App 组件', () => {
     it('新建便签按钮在数据库中创建 text 类型节点', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
-      const newNoteBtn = screen.getAllByLabelText('新建便签')[0];
-      await user.click(newNoteBtn);
+      await createNoteViaContextMenu(user);
       const nodes = await db.nodes.toArray();
       const textNodes = nodes.filter(n => n.type === 'text');
       expect(textNodes.length).toBeGreaterThanOrEqual(1);
@@ -1061,8 +1069,7 @@ describe('App 组件', () => {
     it('新建便签的节点有正确的 canvasId', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
-      const newNoteBtn = screen.getAllByLabelText('新建便签')[0];
-      await user.click(newNoteBtn);
+      await createNoteViaContextMenu(user);
       const nodes = await db.nodes.toArray();
       const textNode = nodes.find(n => n.type === 'text');
       expect(textNode?.canvasId).toBe('default');
@@ -1121,8 +1128,7 @@ describe('App 组件', () => {
         await new Promise(resolve => setTimeout(resolve, 200));
       });
 
-      const newNoteBtn = screen.getAllByLabelText('新建便签')[0];
-      await user.click(newNoteBtn);
+      await createNoteViaContextMenu(user);
 
       const nodes = await db.nodes.toArray();
       const newNode = nodes.find(n => n.type === 'text');
@@ -1155,7 +1161,7 @@ describe('App 组件', () => {
 
       let selectBtns = screen.queryAllByLabelText('选择便签');
       if (selectBtns.length === 0) {
-        await user.click(screen.getAllByLabelText('新建便签')[0]);
+        await createNoteViaContextMenu(user);
         await act(async () => {
           await new Promise((resolve) => setTimeout(resolve, 150));
         });

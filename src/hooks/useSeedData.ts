@@ -22,8 +22,9 @@ async function migrateLegacyAgentPrompts() {
 export function useSeedData() {
   useEffect(() => {
     const seed = async () => {
-      const defaultCanvas = await db.canvases.get('default');
-      if (!defaultCanvas) {
+      // 只在一张画布都没有时补默认画布：用户删掉 'default' 后不该在下次启动时被复活
+      const canvasCount = await db.canvases.count();
+      if (canvasCount === 0) {
         await db.canvases.add({
           id: 'default',
           name: i18n.t('seed.canvas_name'),

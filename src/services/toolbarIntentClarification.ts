@@ -3,26 +3,11 @@ import type { AIConfig } from '../components/AISettingsModal';
 import { callUniversalAI } from './ai';
 import { combineSystemParts, getLocaleDirective } from '../utils/aiI18n';
 import { intentOptionsAreInvalidClarification } from '../utils/intentOptionSanitize';
+import { extractFirstJsonObject } from '../utils/extractJsonObject';
 
 export type ToolbarIntentAnalysis =
   | { ambiguous: false }
   | { ambiguous: true; options: [string, string, string]; hint?: string };
-
-function extractFirstJsonObject(raw: string): unknown {
-  const t = raw.trim();
-  const fence = /^```(?:json)?\s*([\s\S]*?)```/m.exec(t);
-  const body = fence ? fence[1].trim() : t;
-  try {
-    return JSON.parse(body);
-  } catch {
-    const start = body.indexOf('{');
-    const end = body.lastIndexOf('}');
-    if (start >= 0 && end > start) {
-      return JSON.parse(body.slice(start, end + 1));
-    }
-    throw new Error('intent_json');
-  }
-}
 
 function normalizeAnalysis(parsed: unknown): ToolbarIntentAnalysis {
   if (!parsed || typeof parsed !== 'object') return { ambiguous: false };

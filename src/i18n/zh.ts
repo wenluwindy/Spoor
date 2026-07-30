@@ -54,6 +54,10 @@ export const zh = {
     "new_canvas": "新建画布",
     "default_name": "画布 {{number}}",
     "rename": "重命名",
+    "delete_canvas": "删除画布",
+    "delete_canvas_confirm": "删除画布「{{name}}」？\n\n画布上的所有节点与连线会一并删除，且无法恢复。",
+    "delete_canvas_ok": "删除",
+    "delete_canvas_last": "至少要保留一张画布",
     "delete_note": "删除便签",
     "select_note": "选择便签",
     "link_note": "链接到其他节点",
@@ -61,6 +65,8 @@ export const zh = {
     "change_color": "更改颜色",
     "change_font": "更改字体",
     "upload_file": "上传文件",
+    "attach_file": "添加附件（供 AI 参考，不会放到画布上）",
+    "remove_attachment": "移除附件",
     "menu": {
       "insert_image": "插入图片…",
       "insert_video": "插入视频…",
@@ -203,9 +209,14 @@ export const zh = {
     "provider_custom": "自定义端点"
   },
   "ai": {
-    "input_placeholder": "让 AI 构思一些想法或段落...",
+    "input_placeholder": "让 AI 构思想法，或直接说「建三个便签…」",
     "loading": "AI 思考中...",
     "generated_article_title": "生成的合成稿",
+    "attachment_context_label": "【附件：{{name}}】",
+    "node_plan": {
+      "system": "你在一个空间笔记画布里工作，负责判断用户这句话是不是要**在画布上新建节点**，是的话直接给出要建哪些。\n\n可建的节点只有两种：\n- \"text\"：便签，写一条具体内容（一句话到一小段）。\n- \"theme\"：主题卡，只写一个简短主题名（几个字），用来统领一组便签。\n\n只输出合法 JSON（不要 Markdown 代码块、不要解释）：\n{\"action\": \"answer\"}\n或\n{\"action\": \"create\", \"nodes\": [{\"type\": \"text\", \"content\": \"…\"}]}\n\n规则：\n- 只有用户在**要求把内容放到画布上**（建/加/写/整理成 便签、卡片、节点…）时才用 create。提问、闲聊、要求解释或写长文，一律 answer。\n- 用户说了数量就建几个；没说就按内容自然拆分。\n- content 与用户原话同语言，直接写内容本身，不要加「便签 1：」这类前缀，也不要用 Markdown 标题。\n- 用户只给了题目没给具体内容时，帮他把内容写出来，不要建空节点。",
+      "user": "本次最多新建 {{max}} 个节点。\n\n用户消息：\n---\n{{text}}\n---"
+    },
     "intent": {
       "analyzer_system": "你在画布写作助手回复前，对用户**过短或模糊**的一句话做「意图消歧」。输出的是**向用户提出的澄清问句**（帮助弄清诉求），不是替用户改写的长句，也不是给助手的第三人称任务说明。\n\n判断是否存在至少两种**实质不同**的澄清角度（同义改写不算）。若一种角度明显占主导，则 ambiguous 为 false。\n\n只输出合法 JSON（不要 Markdown 代码块、不要解释）：\n{\"ambiguous\": false, \"options\": [], \"hint\": \"\"}\n或\n{\"ambiguous\": true, \"options\": [\"…\", \"…\", \"…\"], \"hint\": \"…\"}\n\n规则：\n- ambiguous 为 false 时，options 必须为 []。\n- ambiguous 为 true 时，必须恰好三条，与用户原话**同一语言**。\n- 每条必须是**对用户（你）说的短问句**，尽量带问号；可混用开放式（你遇到了什么事情？）和确认式（你是想寻求解决苦恼的方法吗？）。\n- **禁止**：第三人称助手任务（「安慰用户」「询问用户…」「帮助用户撰写…」）、第一人称替用户表态（「我想…」「我最近…」）、给 AI 的操作指令。\n- 示例：用户输入「我很苦恼」→ 「你遇到了什么事情？」「你是想寻求解决苦恼的方法吗？」「你主要是想倾诉情绪，还是想把感受写成文字？」\n- hint：一句话说明原话为何含糊（展示在清单上方，对用户说）。",
       "analyzer_user": "用户原话：\n---\n{{text}}\n---",

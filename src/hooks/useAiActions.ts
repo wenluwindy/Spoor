@@ -9,6 +9,15 @@ import { deriveSearchQueryFromNoteText, spawnWebSearchCardsFromPages } from '../
 import { parseThreadWebSearchIntent } from '../utils/webSearchCommand';
 import { shouldPreflightToolbarIntent } from '../utils/toolbarIntentGate';
 import { analyzeToolbarIntentPreflight } from '../services/toolbarIntentClarification';
+import { looksLikeCanvasNodeRequest } from '../utils/canvasNodeRequestGate';
+import { planCanvasNodes, type PlannedCanvasNode } from '../services/canvasNodePlanner';
+import { layoutPlannedNodes } from '../utils/planNodePlacement';
+import {
+  buildAttachmentContextText,
+  collectAttachmentImages,
+  fileToToolbarAttachment,
+} from '../utils/toolbarAttachments';
+import type { ToolbarAttachment } from '../constants/toolbarAttachments';
 import { getCanvasCenterPosition } from '../utils/canvas';
 import { buildAgentSystemInstruction, combineSystemParts, getLocaleDirective } from '../utils/aiI18n';
 import { collectAiThreadChain, formatAgentThreadDialogueHistory } from '../utils/agentThreadContext';
@@ -76,9 +85,30 @@ export function useAiActions({
     hint?: string;
   } | null>(null);
   const [isToolbarIntentPreflight, setIsToolbarIntentPreflight] = useState(false);
+  const [attachments, setAttachments] = useState<ToolbarAttachment[]>([]);
   const followUpGuardRef = useRef(false);
 
   const THREAD_GAP = 24;
+
+  /** 输入栏附件：只作为这一次提问的上下文，不落画布。发送成功后清空。 */
+  const addAttachments = async (files: File[]) => {
+    for (const file of files) {
+      try {
+        const attachment = await fileToToolbarAttachment(file);
+        setAttachments((prev) => [...prev, attachment]);
+      } catch (e) {
+        void appAlert({ message: resolveErrorMessage(e, t) });
+      }
+    }
+  };
+
+  const removeAttachment = (id: string) =>
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+
+  const clearAttachments = () => setAttachments([]);
+
+  const attachmentContextText = () =>
+    buildAttachmentContextText(attachments, (name) => t('ai.attachment_context_label', { name }));
 
   const isAnyAiBusy =
     isPublishing ||
@@ -203,6 +233,13 @@ export function useAiActions({
   const runToolbarAiGeneration = async (request: string) => {
     const { x, y } = getCanvasCenterPosition(transformRef.current);
     const newNodeId = crypto.randomUUID();
+    // 附件是这一次提问的上下文：图片走多模态入参，文档正文拼进提示词
+    const attachmentImages = collectAttachmentImages(attachments);
+    const attachmentText = attachmentContextText();
+    const images = attachmentImages.length > 0 ? attachmentImages : undefined;
+    const withAttachments = (prompt: string) =>
+      attachmentText ? `${attachmentText}\n\n${prompt}` : prompt;
+
     await db.nodes.add({
       id: newNodeId,
       canvasId: activeCanvasId,
@@ -212,6 +249,11 @@ export function useAiActions({
       y,
     });
     setStreamingAiNodeId(newNodeId);
+
+    const onSent = () => {
+      setAiPrompt('');
+      clearAttachments();
+    };
 
     try {
       if (selectedNodes.size === 0) {
@@ -224,11 +266,12 @@ export function useAiActions({
                 t('ai.prompts.toolbarBarePersona'),
                 getLocaleDirective(),
               ),
-              prompt: request,
+              prompt: withAttachments(request),
+              images,
               onStreamChunk,
             }),
         });
-        if (text) setAiPrompt('');
+        if (text) onSent();
         return;
       }
 
@@ -250,13 +293,63 @@ export function useAiActions({
               t('ai.prompts.toolbarWithNotesSystem'),
               getLocaleDirective(),
             ),
-            prompt: t('ai.prompts.toolbarWithNotesUser', { context: contextText, request }),
+            prompt: withAttachments(
+              t('ai.prompts.toolbarWithNotesUser', { context: contextText, request }),
+            ),
+            images,
             onStreamChunk,
           }),
       });
-      if (text) setAiPrompt('');
+      if (text) onSent();
     } finally {
       setStreamingAiNodeId(null);
+    }
+  };
+
+  /** 把规划出来的节点排成网格落库。 */
+  const createPlannedNodes = async (planned: PlannedCanvasNode[]) => {
+    const center = getCanvasCenterPosition(transformRef.current);
+    const points = layoutPlannedNodes(planned.length, center);
+    await db.nodes.bulkAdd(
+      planned.map((node, index) => ({
+        id: crypto.randomUUID(),
+        canvasId: activeCanvasId,
+        type: node.type,
+        content: node.content,
+        x: points[index].x,
+        y: points[index].y,
+      })),
+    );
+  };
+
+  /**
+   * 先试着把输入当成「建节点」指令。
+   * 返回 true 表示已经建完，调用方不该再走问答流程。
+   */
+  const tryCreateNodesFromRequest = async (request: string): Promise<boolean> => {
+    if (!looksLikeCanvasNodeRequest(request)) return false;
+
+    setIsToolbarAiLoading(true);
+    try {
+      const plan = await planCanvasNodes({
+        text: request,
+        config: aiConfig,
+        t,
+        images: collectAttachmentImages(attachments),
+        attachmentText: attachmentContextText(),
+      });
+      if (plan.action !== 'create') return false;
+
+      await createPlannedNodes(plan.nodes);
+      setAiPrompt('');
+      clearAttachments();
+      return true;
+    } catch (e) {
+      // 规划这一步失败不该挡住用户：退回普通问答，真出错了那边还会再报一次
+      console.error('[Spoor] canvas node planning failed', formatAiError(e));
+      return false;
+    } finally {
+      setIsToolbarAiLoading(false);
     }
   };
 
@@ -280,6 +373,9 @@ export function useAiActions({
         setIsToolbarAiLoading(false);
       }
     };
+
+    // 「建三个便签…」这类指令直接落节点，不生成 AI 卡
+    if (await tryCreateNodesFromRequest(raw)) return;
 
     if (!shouldPreflightToolbarIntent(raw)) {
       await runWithLoading(raw);
@@ -563,5 +659,8 @@ export function useAiActions({
     isToolbarIntentPreflight,
     cancelIntentClarification,
     confirmIntentClarification,
+    attachments,
+    addAttachments,
+    removeAttachment,
   };
 }

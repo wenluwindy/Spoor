@@ -168,13 +168,6 @@ export function useNodeActions({
     }
   };
 
-  const addFileNode = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      await insertFilesAt([e.target.files[0]]);
-      e.target.value = '';
-    }
-  };
-
   /** 复制一个节点的全部内容到旁边（不复制它的连线）。 */
   const duplicateNode = async (id: string) => {
     const node = await db.nodes.get(id);
@@ -223,7 +216,6 @@ export function useNodeActions({
     removeNodeId,
     addTextNode,
     addThemeNode,
-    addFileNode,
     createNodeAt,
     addAgentNodeAt,
     insertFilesAt,

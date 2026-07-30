@@ -294,7 +294,7 @@ export default function App() {
 
   // Node actions (CRUD, selection, linking)
   const {
-    toggleNodeSelection, handleLink, deleteEdge, removeNodeId, addFileNode,
+    toggleNodeSelection, handleLink, deleteEdge, removeNodeId,
     createNodeAt, addAgentNodeAt, insertFilesAt, duplicateNode, cycleNodeLayout, pasteStickyAt,
     clearSelection, deleteNodes, linkNodesToHub,
   } = useNodeActions({
@@ -339,6 +339,9 @@ export default function App() {
     intentClarification,
     cancelIntentClarification,
     confirmIntentClarification,
+    attachments,
+    addAttachments,
+    removeAttachment,
   } = useAiActions({
     aiConfig, agentConfigs, activeCanvasId, nodesRef, transformRef,
     dynamicNodes, edges, selectedNodes, setSelectedNodes, setActiveReferenceId, setActiveTab,
@@ -625,11 +628,13 @@ export default function App() {
           isToolbarAiLoading={isToolbarAiLoading || isToolbarIntentPreflight}
           isInputDisabled={isAnyAiBusy}
           aiPrompt={aiPrompt} setAiPrompt={setAiPrompt}
-          handleAiSubmit={handleAiSubmit} onCreateNode={(nodeType) => void createNodeAt(nodeType)} addFileNode={addFileNode}
-          agentConfigs={agentConfigs} canvasTransform={canvasTransform}
-          setCanvasTransform={setCanvasTransform} transformRef={transformRef}
-          activeCanvasId={activeCanvasId}
+          handleAiSubmit={handleAiSubmit}
+          canvasTransform={canvasTransform}
+          setCanvasTransform={setCanvasTransform}
           onZoomToFit={handleZoomToFit}
+          attachments={attachments}
+          onAddAttachments={(files) => void addAttachments(files)}
+          onRemoveAttachment={removeAttachment}
           intentClarification={intentClarification}
           isIntentSubmitting={isToolbarAiLoading}
           onCancelIntentClarification={cancelIntentClarification}
