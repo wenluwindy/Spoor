@@ -53,13 +53,11 @@ Selected notes can be synthesized into longer article-style output. This helps u
 
 Spoor stores canvas data locally through IndexedDB. In the desktop app, data lives inside the local Tauri WebView storage. User API keys are saved locally in settings.
 
-### Web and Desktop Builds
+### Desktop Application
 
-Spoor runs as a web app and as a Windows desktop application. The desktop version is packaged with Tauri and can optionally work with local GGUF inference through llama.cpp.
+Spoor ships as a Windows desktop application packaged with Tauri, and can optionally work with local GGUF inference through llama.cpp. The browser build has been retired: local file storage, image generation and direct access to model providers all rely on the desktop shell. Opening the built assets in a browser shows a download page instead of the app.
 
 ## Demo
-
-Web demo: https://scribe-ai-canvas.netlify.app/
 
 Desktop release: https://github.com/iimorning/spoor/releases/latest
 
@@ -76,7 +74,6 @@ Repository: https://github.com/iimorning/spoor
 - IndexedDB
 - Tailwind CSS
 - i18next
-- Netlify
 - llama.cpp / GGUF optional local inference
 - Gemini, OpenAI-compatible, MiMo, Anthropic-style, and custom provider paths
 
@@ -94,19 +91,19 @@ Install dependencies:
 npm install
 ```
 
-Run the web app:
-
-```bash
-npm run dev
-```
-
 Run the desktop app:
 
 ```bash
 npm run tauri:dev
 ```
 
-Build the web app:
+Run the Vite dev server on its own (browser debugging; the desktop shell also drives this):
+
+```bash
+npm run dev
+```
+
+Build the frontend bundle that the desktop app embeds:
 
 ```bash
 npm run build

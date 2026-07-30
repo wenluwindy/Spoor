@@ -5,9 +5,13 @@ import App from './App.tsx';
 import { AppDialogProvider } from './components/AppDialogProvider';
 import './index.css';
 import { registerDevBuiltinAgentReset } from './dev/resetBuiltinAgents';
+import { DesktopOnlyNotice } from './components/DesktopOnlyNotice';
+import { shouldRenderFullApp } from './utils/appRuntimeGate';
 import logoUrl from '../LOGO.png';
 
 registerDevBuiltinAgentReset();
+
+const canRunFullApp = shouldRenderFullApp();
 
 document.title = 'Spoor';
 
@@ -20,7 +24,7 @@ if (!favicon.parentNode) document.head.appendChild(favicon);
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppDialogProvider>
-      <App />
+      {canRunFullApp ? <App /> : <DesktopOnlyNotice />}
     </AppDialogProvider>
   </StrictMode>,
 );

@@ -8,12 +8,6 @@
 
 Place notes, screenshots, documents, research findings, and AI responses on one infinite canvas. Then use different AI personas to question, connect, rewrite, and research your ideas.
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Netlify-00C7B7?style=for-the-badge)](https://scribe-ai-canvas.netlify.app/)
-[![Windows Download](https://img.shields.io/badge/Windows-Releases-C2410C?style=for-the-badge)](https://github.com/iimorning/spoor/releases/latest)
-[![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue?style=flat-square)](LICENSE)
-
-[Live Demo](https://scribe-ai-canvas.netlify.app/) · [Windows Release](https://github.com/iimorning/spoor/releases/latest) · [Issues](https://github.com/iimorning/spoor/issues)
-
 </div>
 
 ---
@@ -32,7 +26,7 @@ Spoor 是一个带 AI 的无限便签画布。你可以把想法、资料、截�
 - **Research Lab** — 把研究问题拆成计划，收集资料，生成报告，再沉淀回画布。
 - **长文综合** — 把多张便签整理成文章草稿、项目说明或研究总结。
 - **本地优先** — 画布数据保存在本机 IndexedDB，API Key 保存在本地设置中。
-- **网页和 Windows 桌面版** — 可在线试用，也可安装桌面版长期使用。
+- **Windows 桌面应用** — 通过 Tauri 打包，本地文件存储与直连模型服务都依赖桌面端能力。
 
 ### 一个例子
 
@@ -42,9 +36,10 @@ Spoor 是一个带 AI 的无限便签画布。你可以把想法、资料、截�
 
 | 方式 | 适合谁 | 怎么做 |
 |------|--------|--------|
-| **网页版** | 想马上体验 | 打开 **[scribe-ai-canvas.netlify.app](https://scribe-ai-canvas.netlify.app/)** |
-| **Windows 桌面** | 日常主力、本机数据 | 从 **[Releases](https://github.com/iimorning/spoor/releases/latest)** 下载 `Spoor_*_x64-setup.exe` 并安装 |
-| **本地开发** | 贡献者 / 二次开发 | 见上方 Developers |
+| **Windows 桌面** | 所有使用者 | 从 **[Releases](https://github.com/iimorning/spoor/releases/latest)** 下载 `Spoor_*_x64-setup.exe` 并安装 |
+| **本地开发** | 贡献者 / 二次开发 | `npm install` → `npm run tauri:dev` |
 
-首次使用：打开应用，进入 **Settings / 设置**，选择 AI 服务商并填入 API Key。密钥不会上传到 Spoor 自己的服务器。
+> 网页版已停止维护。浏览器打开构建产物只会看到桌面版引导页；`npm run dev` 仍可用于开发调试。
+
+首次使用：打开应用，进入 **设置 → 模型服务**，添加一个服务商并填入 API Key。密钥只保存在本机。
 
