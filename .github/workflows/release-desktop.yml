@@ -1,0 +1,52 @@
+# Build Windows NSIS installer and publish to GitHub Releases on v* tags.
+# Docs: https://v2.tauri.app/distribute/pipelines/github/
+
+name: Release Desktop (Windows)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-tauri:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Spoor 雪泥 ${{ github.ref_name }}
+          releaseBody: |
+            ## Windows 安装（推荐）
+
+            下载 **`Spoor_*_x64-setup.exe`**，双击安装，从开始菜单打开 **Spoor / 雪泥**。
+
+            - 系统：Windows 10/11，64 位
+            - 首次使用：在应用 **设置** 中配置 AI 服务商与 API Key（仅存本机）
+            - 本地 GGUF 可选，见 [LOCAL_LLM.md](https://github.com/iimorning/spoor/blob/master/docs/LOCAL_LLM.md)
+
+            完整说明：[docs/RELEASE_v0.1.0.md](https://github.com/iimorning/spoor/blob/master/docs/RELEASE_v0.1.0.md) · [DESKTOP_INSTALL.md](https://github.com/iimorning/spoor/blob/master/docs/DESKTOP_INSTALL.md)
+          releaseDraft: false
+          prerelease: false
+          tauriScript: npm run tauri

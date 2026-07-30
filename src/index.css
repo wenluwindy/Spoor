@@ -1,0 +1,302 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Newsreader:opsz,wght@6..72,400..800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-newsreader: 'Newsreader', ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+}
+
+@layer base {
+  /* Hide scrollbars while keeping wheel / touch / keyboard scroll (WebView + desktop). */
+  * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer utilities {
+  .paper-texture {
+    background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBeFUe1Z_LYXcdCYLvjT4ouawVQVL-V44Q0SMo_g3m0iP3sb14qgm5KqL8D5fd6kuWSWK_UvHWGk5y6Db6_h_CKdqaRTMt41n9H_LXcZxA7k06ELWjOfB9ywZ7TUx7IG5Avy4ZPmyo5W0WDoTluv9KFzK1vs4fW6UTiSgbk6O_WIeMi74RWOEqDLr9_P_sAIOUR-KShB8ZpGNPpv2-Y5Z_hWMxVpF5Z1QkqRGXQtM8EFeEUq3S00rn18UXLIO5dNbnrdBvvfGWP5rQ');
+    background-blend-mode: soft-light;
+  }
+  .canvas-grid {
+    background-size: 24px 24px;
+    background-image: radial-gradient(#d1cfca 1px, transparent 1px);
+  }
+  .node-connector {
+    stroke: #d1cfca;
+    opacity: 1;
+    stroke-width: 2;
+  }
+  
+  /* Style the node itself if it has background or allow children to override */
+  /* Opaque palette on the draggable root — except glass notes: solid bg kills backdrop-filter (blur would only see flat color). */
+  [style*="--node-bg"]:not([data-glass-surface]), [style*="--node-bg"] .bg-white, [style*="--node-bg"] .bg-\[\#F4F1ED\], [style*="--node-bg"] .bg-\[\#EAE7E2\], [style*="--node-bg"] .bg-\[\#fcf8f9\] {
+    background-color: var(--node-bg) !important;
+    border-color: var(--node-border, currentColor) !important;
+  }
+
+  [style*="--node-bg"] .neo-brut-surface {
+    border-color: color-mix(in srgb, var(--node-border, #1b1b1c) 38%, #1b1b1c) !important;
+  }
+
+  .note-surface-receipt {
+    --note-paper: color-mix(in srgb, var(--node-bg, #fcf8f9) 88%, white 12%);
+  }
+
+  /* Frosted pane samples the canvas behind the node; tint comes from semi-transparent --node-bg / --node-border (see data-glass-surface on root). */
+  .note-surface-glass {
+    -webkit-backdrop-filter: blur(14px) saturate(1.35);
+    backdrop-filter: blur(14px) saturate(1.35);
+    background-color: color-mix(in srgb, var(--node-bg, #ffffff) 24%, rgba(255, 255, 255, 0.42)) !important;
+    box-shadow:
+      0 0 34px color-mix(in srgb, var(--node-border, #c2410c) 34%, transparent),
+      0 0 16px color-mix(in srgb, var(--node-bg, #c2410c) 16%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, var(--node-border, #c2410c) 34%, transparent);
+  }
+
+  .note-glass-wash {
+    background: linear-gradient(
+      to bottom right,
+      color-mix(in srgb, var(--node-bg, #c2410c) 38%, transparent),
+      color-mix(
+        in srgb,
+        color-mix(in srgb, var(--node-bg, #fdba74) 40%, white) 28%,
+        transparent
+      ),
+      transparent 68%
+    );
+    opacity: 0.82;
+    mix-blend-mode: overlay;
+  }
+
+  /* Dark presets: keep hue from the palette without flattening the frost. */
+  [data-node-tone="dark"] .note-glass-wash {
+    background: linear-gradient(
+      to bottom right,
+      color-mix(in srgb, var(--node-border, var(--node-bg)) 52%, transparent),
+      color-mix(in srgb, var(--node-bg) 22%, rgba(255, 255, 255, 0.14)),
+      transparent 72%
+    );
+    opacity: 0.78;
+    mix-blend-mode: overlay;
+  }
+
+  .note-glass-hotspot {
+    background: radial-gradient(
+      ellipse at top left,
+      color-mix(in srgb, color-mix(in srgb, var(--node-bg, #ffedd5) 50%, white) 48%, transparent),
+      transparent 65%
+    );
+  }
+
+  [data-node-tone="dark"] .note-glass-hotspot {
+    background: radial-gradient(
+      ellipse at top left,
+      color-mix(in srgb, var(--node-border) 36%, rgba(255, 255, 255, 0.18)),
+      transparent 70%
+    );
+  }
+
+  /* Canvas toolbar intent checklist — frosted float above input */
+  .intent-clarify-glass {
+    -webkit-backdrop-filter: blur(18px) saturate(1.45);
+    backdrop-filter: blur(18px) saturate(1.45);
+    background: color-mix(in srgb, #faf9f6 28%, rgba(255, 255, 255, 0.48));
+    border: 1px solid color-mix(in srgb, #e6e4df 42%, rgba(255, 255, 255, 0.75));
+    box-shadow:
+      0 8px 32px rgba(26, 26, 26, 0.07),
+      0 2px 8px rgba(26, 26, 26, 0.04),
+      inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  }
+
+  .intent-clarify-glass-wash {
+    background: linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.55) 0%,
+      rgba(255, 247, 237, 0.22) 38%,
+      transparent 72%
+    );
+    opacity: 0.9;
+    mix-blend-mode: overlay;
+  }
+
+  .intent-clarify-glass-hotspot {
+    background: radial-gradient(
+      ellipse 80% 60% at 12% 0%,
+      rgba(255, 255, 255, 0.65),
+      transparent 68%
+    );
+    opacity: 0.85;
+  }
+
+  .note-receipt-paper {
+    background-color: var(--note-paper) !important;
+  }
+
+  .note-chrome {
+    color: #c2410c;
+  }
+
+  [data-node-tone="dark"] .note-chrome {
+    color: rgb(255 237 213 / 0.93) !important;
+  }
+
+  [data-node-tone="dark"] .note-chrome.neo-brut-badge {
+    color: #ffffff !important;
+  }
+
+  .note-receipt-chrome {
+    color: #2c281f;
+    text-shadow: 0 0 1px rgba(44, 40, 31, 0.2);
+    border-color: color-mix(in srgb, var(--node-border, #c7c5d4) 70%, #c7c5d4) !important;
+  }
+
+  [data-node-tone="dark"] .note-receipt-chrome {
+    color: rgb(255 250 245 / 0.9) !important;
+    text-shadow: none;
+    border-color: rgb(255 255 255 / 0.22) !important;
+  }
+
+  [data-node-tone="dark"] .receipt-barcode {
+    filter: invert(1) brightness(1.05);
+    opacity: 0.75;
+  }
+
+  .receipt-jagged-top {
+    height: 12px;
+    width: 100%;
+    background: linear-gradient(-45deg, transparent 6px, var(--note-paper, #fcf8f9) 6px) bottom left,
+      linear-gradient(45deg, transparent 6px, var(--note-paper, #fcf8f9) 6px) bottom left;
+    background-size: 12px 12px;
+    background-repeat: repeat-x;
+  }
+  .receipt-jagged-bottom {
+    height: 12px;
+    width: 100%;
+    background: linear-gradient(-45deg, var(--note-paper, #fcf8f9) 6px, transparent 6px) top right,
+      linear-gradient(45deg, var(--note-paper, #fcf8f9) 6px, transparent 6px) top right;
+    background-size: 12px 12px;
+    background-repeat: repeat-x;
+  }
+
+  [style*="--node-text"] *:not(.node-palette):not(.node-palette *):not(.note-chrome):not(.note-chrome *) {
+    color: var(--node-text) !important;
+  }
+
+  .note-chrome-muted {
+    color: #8c8a84;
+  }
+
+  [data-node-tone="dark"] .note-chrome-muted {
+    color: rgb(255 255 255 / 0.58) !important;
+  }
+
+  .note-chrome.neo-brut-badge {
+    background-color: #1b1b1c !important;
+    color: #ffffff !important;
+  }
+
+  [data-node-tone="dark"] .note-glass-markdown .markdown-body,
+  [data-node-tone="dark"] .note-glass-markdown .markdown-body :where(h1, h2, h3) {
+    color: var(--node-text) !important;
+    text-shadow: none;
+  }
+
+  [data-node-tone="dark"] .note-receipt-markdown .markdown-body,
+  [data-node-tone="dark"] .note-receipt-markdown .markdown-body :where(h1, h2, h3) {
+    color: var(--node-text) !important;
+    text-shadow: none;
+  }
+
+  [data-node-tone="dark"] .note-receipt-watermark {
+    color: rgb(255 255 255 / 0.08) !important;
+  }
+
+  [style*="--node-font"], [style*="--node-font"] *:not(.node-palette):not(.node-palette *) {
+    font-family: var(--node-font) !important;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .markdown-body h1 { @apply text-2xl font-bold mb-4 mt-6; }
+  .markdown-body h2 { @apply text-xl font-bold mb-3 mt-5; }
+  .markdown-body h3 { @apply text-lg font-bold mb-2 mt-4; }
+  .markdown-body p { @apply mb-3 leading-relaxed; }
+  .markdown-body ul { @apply list-disc pl-5 mb-3; }
+  .markdown-body ol { @apply list-decimal pl-5 mb-3; }
+  .markdown-body li { @apply mb-1; }
+  .markdown-body code { @apply bg-black/5 rounded px-1 font-mono text-[0.9em]; }
+  .markdown-body pre { @apply bg-black/5 rounded p-3 mb-3 overflow-x-auto; }
+  .markdown-body blockquote { @apply border-l-4 border-black/10 pl-4 italic mb-3; }
+
+  .note-glass-markdown .markdown-body {
+    @apply font-sans text-[18px] font-normal leading-[1.6] text-[#464652];
+  }
+  .note-glass-markdown .markdown-body :where(h1, h2, h3) {
+    @apply text-[#1b1b1c] font-newsreader;
+  }
+  .note-glass-markdown .markdown-body h1 { @apply text-2xl font-semibold mb-3 mt-0; }
+  .note-glass-markdown .markdown-body h2 { @apply text-xl font-semibold mb-2 mt-4; }
+  .note-glass-markdown .markdown-body h3 { @apply text-lg font-semibold mb-2 mt-3; }
+
+  .note-receipt-markdown .markdown-body {
+    @apply font-mono text-[13px] leading-[1.4] text-[#2c281f];
+    text-shadow: 0 0 1px rgba(44, 40, 31, 0.2);
+  }
+  .note-receipt-markdown .markdown-body :where(h1, h2, h3) {
+    @apply font-semibold text-[#1b1b1c];
+    text-shadow: 0 0 1px rgba(44, 40, 31, 0.2);
+  }
+  .note-receipt-markdown .markdown-body h1 { @apply text-lg mb-2 mt-1; }
+  .note-receipt-markdown .markdown-body h2 { @apply text-base mb-2 mt-3; }
+  .note-receipt-markdown .markdown-body h3 { @apply text-sm mb-1 mt-2; }
+  .note-receipt-markdown .markdown-body p { @apply mb-3 leading-relaxed; }
+  .note-receipt-markdown .markdown-body a { @apply text-[#44664e] underline; }
+
+  .receipt-note-shadow {
+    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.1), 0 10px 15px -5px rgba(0, 0, 0, 0.05),
+      5px 0 15px -5px rgba(0, 0, 0, 0.02), -5px 0 15px -5px rgba(0, 0, 0, 0.02);
+  }
+  .receipt-barcode {
+    height: 40px;
+    width: 100%;
+    background-image: repeating-linear-gradient(
+      90deg,
+      #1b1b1c,
+      #1b1b1c 2px,
+      transparent 2px,
+      transparent 4px,
+      #1b1b1c 4px,
+      #1b1b1c 5px,
+      transparent 5px,
+      transparent 8px,
+      #1b1b1c 8px,
+      #1b1b1c 12px,
+      transparent 12px,
+      transparent 14px
+    );
+  }
+
+  .doc-content h1 { font-size: 1.5em; font-weight: bold; margin: 0.8em 0 0.4em; }
+  .doc-content h2 { font-size: 1.3em; font-weight: bold; margin: 0.6em 0 0.3em; }
+  .doc-content h3 { font-size: 1.1em; font-weight: bold; margin: 0.5em 0 0.2em; }
+  .doc-content p { margin: 0 0 0.8em; line-height: 1.7; }
+  .doc-content ul { list-style: disc; padding-left: 1.5em; margin: 0 0 0.8em; }
+  .doc-content ol { list-style: decimal; padding-left: 1.5em; margin: 0 0 0.8em; }
+  .doc-content li { margin: 0.2em 0; }
+  .doc-content table { border-collapse: collapse; width: 100%; margin: 0 0 0.8em; }
+  .doc-content th, .doc-content td { border: 1px solid #E6E4DF; padding: 0.4em 0.6em; text-align: left; }
+  .doc-content th { background: #F4F1ED; font-weight: bold; }
+  .doc-content blockquote { border-left: 3px solid #E6E4DF; padding-left: 1em; margin: 0 0 0.8em; font-style: italic; }
+  .doc-content a { color: #C2410C; text-decoration: underline; }
+}

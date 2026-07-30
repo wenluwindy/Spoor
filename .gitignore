@@ -1,0 +1,73 @@
+# Dependencies
+node_modules/
+
+# Build output
+build/
+dist/
+
+# Tauri build & desktop installers
+src-tauri/target/
+release/
+
+# --- Promo / Remotion (local only; not submitted) ---
+remotion-kit/
+scripts/remotion-server.mjs
+docs/PROMO_SPOOR.md
+docs/SPOOR_PROMO_ZH_SUBTITLES.md
+docs/MINIMAX_SPOOR_EN_SYNC.md
+output/
+*.mp4
+*.mov
+*.webm
+*.mkv
+/*.wav
+/en.wav
+/en2.wav
+/zh.wav
+/* Icon - Orange Theme.png
+git-log.txt
+
+# Local toolchain (LLVM installer + extracted libclang for bindgen); do not commit
+.build-tools/
+.llvm-min/
+
+# Vendored llama-cpp-sys-2 patched for MSVC (copy from local cargo registry); optional to commit — large
+src-tauri/third_party/
+
+# Temp scripts
+generate-icons.cjs
+
+# Test & coverage
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+scripts/cuda-build-log.txt
+
+# Stray binary file accidentally created by old PowerShell copy-target scripts
+/binaries
+
+# Deprecated debug script for the abandoned source-CUDA build path (kept locally only)
+scripts/debug-cuda-build.cmd
+
+# Environment
+.env*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local metadata (optional, remove this line if you want to track it)
+# metadata.json
+
+# Local Netlify folder
+.netlify

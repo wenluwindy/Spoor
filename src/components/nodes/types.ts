@@ -1,0 +1,23 @@
+import type { AgentConfig, CanvasNode } from '../../db';
+
+export interface NodeContentProps {
+  node: CanvasNode;
+  editingNodeId: string | null;
+  setEditingNodeId: (id: string | null) => void;
+}
+
+export interface AgentNodeProps extends NodeContentProps {
+  agentConfigs: AgentConfig[];
+  isAnalyzing?: boolean;
+  onRunAnalysis?: () => void;
+  /** When true, Run analysis is disabled (e.g. another AI task is in progress). */
+  isAgentAnalysisActionDisabled?: boolean;
+}
+
+export interface AiNodeProps extends NodeContentProps {
+  onSubmitFollowUp?: (message: string) => void;
+  isFollowUpLoading?: boolean;
+  isFollowUpDisabled?: boolean;
+  /** While model output is streaming into this card, render plain text (not Markdown). */
+  isContentStreaming?: boolean;
+}
