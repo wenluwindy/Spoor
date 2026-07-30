@@ -3,26 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { AlertTriangle, FolderOpen, HardDrive, Loader2 } from 'lucide-react';
 import { mediaOpenRoot, mediaStoreInfo, type MediaStoreInfo } from '../../services/mediaStore';
 import { isTauriRuntime } from '../../utils/isTauriRuntime';
+import { formatBytes } from './formatBytes';
+import { MediaAssetManager } from './MediaAssetManager';
 
-/** 字节数转人读的大小。用 1024 进制，与资源管理器显示一致。 */
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value.toFixed(value >= 100 ? 0 : 1)} ${units[unit]}`;
-}
-
-/**
- * 存储页。
- *
- * 这一版只做「数据目录在哪、占了多少、打开它」。逐文件的缩略图网格、
- * 未被引用筛选与批量删除是 S30 的事。
- */
+/** 存储页：数据目录概览 + 资产管理器。 */
 export function StorageSettingsTab() {
   const { t } = useTranslation();
   const [info, setInfo] = useState<MediaStoreInfo | null>(null);
@@ -95,6 +79,8 @@ export function StorageSettingsTab() {
           {t('settings.storage_open_folder')}
         </button>
       </div>
+
+      <MediaAssetManager />
 
       <p className="text-[10px] text-[#8c8a84] leading-relaxed">{t('settings.storage_blurb')}</p>
     </div>

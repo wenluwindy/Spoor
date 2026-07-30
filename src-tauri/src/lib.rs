@@ -1,3 +1,4 @@
+mod imagegen;
 mod local_llama;
 mod media;
 
@@ -240,7 +241,9 @@ pub fn run() {
       media::media_delete,
       media::media_reveal,
       media::media_open_root,
-      media::media_gc
+      media::media_gc,
+      imagegen::image_generate,
+      imagegen::image_generate_cancel
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

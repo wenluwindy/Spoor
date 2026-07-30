@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Copy, Link2, Pencil, PenLine, RotateCcw, SlidersHorizontal, Square, SquareCheckBig, Trash2 } from 'lucide-react';
+import { Bot, Copy, ImageDown, Link2, Pencil, PenLine, RotateCcw, SlidersHorizontal, Square, SquareCheckBig, Trash2 } from 'lucide-react';
 import type { AgentConfig, CanvasNode } from '../../db';
 import { CANVAS_CREATE_ITEMS, CANVAS_INSERT_ITEMS } from '../../constants/canvasMenuItems';
 import { nodeSupportsCycleLayout, nodeSupportsInlineEdit } from '../../constants/nodeCapabilities';
@@ -19,7 +19,7 @@ export interface CanvasPoint {
 
 /** 菜单只发意图，具体落库由 `useNodeActions` / App 负责。 */
 export interface CanvasContextMenuActions {
-  createNode: (nodeType: 'text' | 'theme', at: CanvasPoint) => void;
+  createNode: (nodeType: 'text' | 'theme' | 'imagegen', at: CanvasPoint) => void;
   insertFile: (accept: string, at: CanvasPoint) => void;
   addAgentNode: (agentConfigId: string, at: CanvasPoint) => void;
   pasteSticky: (payload: StickyClipboardPayloadV1, at: CanvasPoint) => void;
@@ -33,6 +33,8 @@ export interface CanvasContextMenuActions {
   deleteEdge: (edgeId: string) => void;
   /** 星型连线：除 `hubId` 外的选中节点全部连向它。 */
   linkNodesToHub: (nodeIds: string[], hubId: string) => void;
+  /** 生图节点：把当前结果输出成独立的 image 节点并连线。 */
+  outputAsImageNode: (nodeId: string) => void;
   synthesizeSelected: () => void;
   clearSelection: () => void;
   deleteNodes: (nodeIds: string[]) => void;
@@ -177,6 +179,15 @@ export function CanvasContextMenu({
           onSelect: () => actions.startLink(nodeId),
         },
       );
+      // 生图节点：把当前结果固化成一个普通图片节点，方便当作下游参考图或导出
+      if (nodeType === 'imagegen' && (node?.imageGenResults?.length ?? 0) > 0) {
+        primary.push({
+          id: 'output-as-image',
+          label: t('imagegen.output_as_image'),
+          icon: ImageDown,
+          onSelect: () => actions.outputAsImageNode(nodeId),
+        });
+      }
       if (nodeSupportsCycleLayout(nodeType)) {
         primary.push({
           id: 'cycle-layout',

@@ -131,9 +131,23 @@ export function useNodeActions({
     });
   };
 
+  /** 生图节点：建出来是空的，连上图片/文本或直接填提示词后再生成。 */
+  const addImageGenNode = async (at?: CanvasPoint) => {
+    const { x, y } = resolvePosition(at);
+    await db.nodes.add({
+      id: crypto.randomUUID(),
+      canvasId: activeCanvasId,
+      type: 'imagegen',
+      x,
+      y,
+      width: 340,
+    });
+  };
+
   /** 供右键菜单按 `CanvasCreateItemDef.nodeType` 统一分发。 */
-  const createNodeAt = async (nodeType: 'text' | 'theme', at?: CanvasPoint) => {
+  const createNodeAt = async (nodeType: 'text' | 'theme' | 'imagegen', at?: CanvasPoint) => {
     if (nodeType === 'theme') await addThemeNode(at);
+    else if (nodeType === 'imagegen') await addImageGenNode(at);
     else await addTextNode(at);
   };
 
@@ -255,6 +269,7 @@ export function useNodeActions({
     removeNodeId,
     addTextNode,
     addThemeNode,
+    addImageGenNode,
     createNodeAt,
     addAgentNodeAt,
     insertFilesAt,

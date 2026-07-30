@@ -33,6 +33,27 @@ export interface CanvasNode {
   threadAgentConfigId?: string;
   /** Agent 分析链：首轮附带的多模态图片节点 id（便签/Agent 邻接 image）；子卡从父卡复制 */
   threadContextImageNodeIds?: string[];
+
+  // ── type === 'imagegen' ──
+  /** 用哪个服务商/模型生图；为空时用设置里的全局默认。 */
+  imageGenProviderId?: string;
+  imageGenModelId?: string;
+  /** 节点自己的提示词，会拼在上游文本之后。 */
+  imageGenPrompt?: string;
+  /** 只用节点自己的提示词，忽略连过来的文本节点。 */
+  imageGenIgnoreUpstreamText?: boolean;
+  imageGenParams?: { size?: string; n?: number };
+  /**
+   * 结果图相对路径，**最新在前**，不设上限（决策 11：历史永久保留，
+   * 由用户在设置 → 存储里自行管理）。
+   */
+  imageGenResults?: string[];
+  imageGenActiveIndex?: number;
+  /** 被用户点掉、不参与本次生成的参考图节点 id。 */
+  imageGenExcludedRefIds?: string[];
+  /** 上次失败的错误码，用于重新打开画布时仍显示错误态。 */
+  imageGenErrorCode?: string;
+  imageGenErrorDetail?: string;
 }
 
 export interface Canvas {

@@ -41,6 +41,7 @@ import { useNodeActions } from './hooks/useNodeActions';
 import { pickFiles } from './utils/filePicker';
 import { useAiActions } from './hooks/useAiActions';
 import { useNativeFileDrop } from './hooks/useNativeFileDrop';
+import { useImageGenActions } from './hooks/useImageGenActions';
 import { migrateBase64MediaNodes } from './services/migrateBase64Media';
 import {
   emptyAiConfigV2,
@@ -310,6 +311,22 @@ export default function App() {
     onDrop: handleNativeFileDrop,
   });
 
+  // 生图节点：状态放内存，生成中不入库（重启后不会卡在转圈上）
+  const {
+    generatingNodeIds: generatingImageNodeIds,
+    generate: generateImage,
+    cancel: cancelImage,
+    deleteResult: deleteImageResult,
+    setActiveIndex: setImageActiveIndex,
+    patchNode: patchImageGenNode,
+    outputAsImageNode,
+  } = useImageGenActions({
+    aiConfig: aiConfigV2,
+    activeCanvasId,
+    nodes: dynamicNodes,
+    edges,
+  });
+
   // Right-click menu (canvas / node / nodes / edge)
   const { menu: contextMenu, openContextMenu, closeContextMenu } = useCanvasContextMenu(mainRef, transformRef);
 
@@ -380,11 +397,12 @@ export default function App() {
       synthesizeSelected: () => void handlePublish(),
       clearSelection: () => clearSelection(),
       deleteNodes: (nodeIds) => void deleteNodes(nodeIds),
+      outputAsImageNode: (nodeId) => void outputAsImageNode(nodeId),
     }),
     [
       createNodeAt, insertFilesAt, insertPathsAt, addAgentNodeAt, pasteStickyAt, setCanvasTransform,
       duplicateNode, handleLink, cycleNodeLayout, toggleNodeSelection, removeNodeId, deleteEdge,
-      linkNodesToHub, handlePublish, clearSelection, deleteNodes,
+      linkNodesToHub, handlePublish, clearSelection, deleteNodes, outputAsImageNode,
     ],
   );
 
@@ -615,6 +633,15 @@ export default function App() {
                     followUpLoadingNodeId={followUpParentId}
                     streamingAiNodeId={streamingAiNodeId}
                     isFollowUpGloballyDisabled={isAnyAiBusy}
+                    aiConfig={aiConfigV2}
+                    allNodes={dynamicNodes}
+                    edges={edges}
+                    generatingImageNodeIds={generatingImageNodeIds}
+                    onImageGenGenerate={(id) => void generateImage(id)}
+                    onImageGenCancel={(id) => void cancelImage(id)}
+                    onImageGenPatch={(id, patch) => void patchImageGenNode(id, patch)}
+                    onImageGenDeleteResult={(id, index) => void deleteImageResult(id, index)}
+                    onImageGenSetActiveIndex={(id, index) => void setImageActiveIndex(id, index)}
                   />
                 </DraggableNode>
               );
