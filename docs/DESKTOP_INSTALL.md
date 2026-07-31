@@ -1,11 +1,11 @@
-# 雪泥 · Spoor — 桌面版安装（Windows）
+# 踪迹 · Spoor — 桌面版安装（Windows）
 
 ## 普通用户：一键安装
 
 1. 打开 GitHub Releases：  
    **https://github.com/wenluwindy/Spoor/releases**
 2. 下载最新版的 **`Spoor_*_x64-setup.exe`**（NSIS 安装程序）。
-3. 双击运行安装向导 → 完成 → 从开始菜单或桌面打开 **Spoor** / **雪泥**。
+3. 双击运行安装向导 → 完成 → 从开始菜单或桌面打开 **Spoor** / **踪迹**。
 4. 首次使用：在应用内 **设置** 中配置 AI 服务商与 API Key（与网页版相同，密钥只存在本机）。
 
 > **说明：** 安装包不包含本地 GGUF 模型。若要用本机 `llama.cpp` 推理，请另按 [LOCAL_LLM.md](./LOCAL_LLM.md) 放置二进制与模型文件。

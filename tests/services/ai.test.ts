@@ -407,6 +407,95 @@ describe('callUniversalAI', () => {
     });
   });
 
+  // --- 采样参数写死的模型 ---
+  describe('固定采样参数的模型', () => {
+    const okBody = JSON.stringify({ choices: [{ message: { content: 'ok' } }] });
+    const okResponse = () => ({
+      ok: true,
+      text: async () => okBody,
+      json: async () => JSON.parse(okBody),
+    });
+    const rejectSampling = () => ({
+      ok: false,
+      status: 400,
+      text: async () =>
+        JSON.stringify({
+          error: {
+            message: 'invalid temperature: only 1 is allowed for this model',
+            type: 'invalid_request_error',
+          },
+        }),
+    });
+
+    const kimi = {
+      ...baseConfig,
+      provider: 'custom',
+      apiKey: 'sk-kimi',
+      baseUrl: 'https://api.moonshot.cn/v1',
+      model: 'kimi-k2.5',
+    };
+
+    it('名单里的模型第一次就不带 temperature / top_p', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(okResponse()));
+      await callUniversalAI({ config: kimi, prompt: 'ping' });
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      const body = JSON.parse((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string);
+      expect(body.model).toBe('kimi-k2.5');
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('top_p');
+    });
+
+    it('名单外的模型被拒后去掉采样参数重试一次', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn()
+          .mockResolvedValueOnce(rejectSampling())
+          .mockResolvedValueOnce(okResponse()),
+      );
+
+      const result = await callUniversalAI({
+        config: { ...kimi, model: 'glm-5-brand-new' },
+        prompt: 'ping',
+      });
+
+      expect(result).toBe('ok');
+      expect(fetch).toHaveBeenCalledTimes(2);
+      const first = JSON.parse((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string);
+      const second = JSON.parse((vi.mocked(fetch).mock.calls[1][1] as RequestInit).body as string);
+      expect(first.temperature).toBe(0.7);
+      expect(second).not.toHaveProperty('temperature');
+      expect(second).not.toHaveProperty('top_p');
+    });
+
+    it('不是采样参数的报错不重试，原样抛出', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 401,
+          text: async () => JSON.stringify({ error: { message: 'Invalid API key' } }),
+        }),
+      );
+
+      await expect(
+        callUniversalAI({ config: { ...kimi, model: 'moonshot-v1-8k' }, prompt: 'ping' }),
+      ).rejects.toThrow(
+        expect.objectContaining({ code: 'ai.http', detail: expect.stringContaining('Invalid API key') }),
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('去掉采样参数后仍然失败时只重试一次，不无限循环', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(rejectSampling()));
+
+      await expect(
+        callUniversalAI({ config: { ...kimi, model: 'glm-5-brand-new' }, prompt: 'ping' }),
+      ).rejects.toThrow(expect.objectContaining({ code: 'ai.http' }));
+      expect(fetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
   // --- Custom provider (same as OpenAI) ---
   describe('Custom provider', () => {
     it('custom provider 走 OpenAI 兼容路径', async () => {
@@ -523,6 +612,94 @@ describe('callUniversalAI', () => {
           prompt: 'Hello',
         })
       ).rejects.toThrow(expect.objectContaining({ code: 'ai.http', detail: expect.stringContaining('Forbidden') }));
+    });
+
+    it('浏览器直连要带 anthropic-dangerous-direct-browser-access，否则 CORS 预检就死了', async () => {
+      await callUniversalAI({
+        config: { ...baseConfig, provider: 'anthropic', apiKey: 'sk-ant-test' },
+        prompt: 'Hello',
+      });
+      expect(fetch).toHaveBeenCalledWith(
+        'https://api.anthropic.com/v1/messages',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'anthropic-dangerous-direct-browser-access': 'true',
+          }),
+        }),
+      );
+    });
+
+    it('自定义 Base URL：不含 /v1 的站点根会自动补上', async () => {
+      await callUniversalAI({
+        config: {
+          ...baseConfig,
+          provider: 'anthropic',
+          apiKey: 'sk-ant-test',
+          baseUrl: 'https://relay.example.com',
+        },
+        prompt: 'Hello',
+      });
+      expect(fetch).toHaveBeenCalledWith(
+        'https://relay.example.com/v1/messages',
+        expect.anything(),
+      );
+    });
+
+    it('自定义 Base URL：已经含 /v1 的不重复追加', async () => {
+      await callUniversalAI({
+        config: {
+          ...baseConfig,
+          provider: 'anthropic',
+          apiKey: 'sk-ant-test',
+          baseUrl: 'https://relay.example.com/v1/',
+        },
+        prompt: 'Hello',
+      });
+      expect(fetch).toHaveBeenCalledWith(
+        'https://relay.example.com/v1/messages',
+        expect.anything(),
+      );
+    });
+
+    it('网络层直接失败时归为 ai.network，而不是含糊的 ai.http', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+      await expect(
+        callUniversalAI({
+          config: { ...baseConfig, provider: 'anthropic', apiKey: 'sk-ant-test' },
+          prompt: 'Hello',
+        }),
+      ).rejects.toThrow(expect.objectContaining({ code: 'ai.network' }));
+    });
+
+    it('桌面端走 Rust 命令，绕开 CORS，完全不碰 fetch', async () => {
+      const saved = (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+      (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = { __mock: true };
+      mockInvoke.mockReset();
+      mockInvoke.mockResolvedValue(JSON.stringify({ content: [{ text: 'from rust' }] }));
+      try {
+        const result = await callUniversalAI({
+          config: {
+            ...baseConfig,
+            provider: 'anthropic',
+            apiKey: 'sk-ant-test',
+            baseUrl: 'https://relay.example.com',
+          },
+          prompt: 'Hello',
+        });
+        expect(result).toBe('from rust');
+        expect(fetch).not.toHaveBeenCalled();
+        expect(mockInvoke).toHaveBeenCalledWith('anthropic_messages', {
+          apiKey: 'sk-ant-test',
+          url: 'https://relay.example.com/v1/messages',
+          body: expect.objectContaining({ model: 'gemini-1.5-flash' }),
+        });
+      } finally {
+        if (saved === undefined) {
+          delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+        } else {
+          (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = saved;
+        }
+      }
     });
   });
 

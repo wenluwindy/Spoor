@@ -20,7 +20,7 @@ copy src-tauri\target\release\bundle\nsis\Spoor_0.1.0_x64-setup.exe release\
 
 1. 打开：https://github.com/wenluwindy/Spoor/releases/new  
 2. **Choose a tag:** `v0.1.0`（已存在）  
-3. **Release title:** `Spoor 雪泥 v0.1.0`  
+3. **Release title:** `Spoor 踪迹 v0.1.0`  
 4. **Description:** 复制 [`docs/RELEASE_v0.1.0.md`](../docs/RELEASE_v0.1.0.md) 正文  
 5. **Attach binaries:** 拖入 `release\Spoor_0.1.0_x64-setup.exe`  
 6. 点击 **Publish release**
@@ -36,6 +36,6 @@ https://github.com/wenluwindy/Spoor/releases/latest
 ```powershell
 git push origin :refs/tags/v0.1.0
 git tag -d v0.1.0
-git tag -a v0.1.0 -m "Spoor 雪泥 v0.1.0"
+git tag -a v0.1.0 -m "Spoor 踪迹 v0.1.0"
 git push origin v0.1.0
 ```

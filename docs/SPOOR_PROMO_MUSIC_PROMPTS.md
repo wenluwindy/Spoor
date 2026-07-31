@@ -1,4 +1,4 @@
-# Spoor / 雪泥 宣传片 · AI 配乐提示词（Claude 风格）
+# Spoor / 踪迹 宣传片 · AI 配乐提示词（Claude 风格）
 
 **用途：** Suno / Udio / Stable Audio 等生成约 **58–60s** 横屏产品片配乐。  
 **原则：** 氛围电影配乐，不是广告歌；无鼓点、无 drop、持续情绪。
@@ -92,7 +92,7 @@ Ultra-minimal ambient cinematic bed. Warm synth pads only, occasional soft piano
 Ambient cinematic score with wide reverberant pads, soft piano, very subtle high-frequency shimmer like distant light. Slow 65 BPM feel, evolving texture, no percussion. Quietly futuristic, intelligent, warm. 60 second product film instrumental.
 ```
 
-### C · 带一点「纸感 / 书房」（贴合雪泥米色 UI）
+### C · 带一点「纸感 / 书房」（贴合踪迹米色 UI）
 
 ```
 Warm minimal cinematic ambient. Felt piano, soft string pad synthesized, light room tone, parchment-warm mid frequencies. No beat, no drop, sustained contemplative mood. Memory, notes, and trace — gentle and private. 58s instrumental.

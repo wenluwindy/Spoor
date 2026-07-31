@@ -2,7 +2,9 @@ import { GoogleGenAI } from '@google/genai';
 import { MIMO_TOKEN_PLAN_BASE_URL } from '../constants/mimo';
 import { DOUBAO_ARK_BASE_URL } from '../constants/doubao';
 import { DEEPSEEK_BASE_URL, DEEPSEEK_DEFAULT_MODEL } from '../constants/deepseek';
-import { AppError } from './appError';
+import { ANTHROPIC_BASE_URL } from '../constants/aiProviderPresets';
+import { looksLikeSamplingRejection, modelRejectsSampling } from '../utils/samplingParams';
+import { AppError, isAppError } from './appError';
 
 const LOG_PREFIX = '[Scribe AI]';
 
@@ -117,6 +119,18 @@ function buildAnthropicUserContent(
     }
   }
   return blocks;
+}
+
+/**
+ * 拼出 Anthropic Messages 的完整地址。
+ *
+ * 两种写法都要收：我们的预设存的是含 `/v1` 的完整前缀，而 Claude Code 生态
+ * （cc-switch、各种中转站）里的 `ANTHROPIC_BASE_URL` 存的是站点根，`/v1` 由
+ * 客户端补。判断放在这一处，导入配置时就不用猜着改用户填的地址。
+ */
+export function anthropicMessagesUrl(baseUrl: string | undefined): string {
+  const base = (baseUrl ?? '').trim().replace(/\/+$/, '') || ANTHROPIC_BASE_URL;
+  return /\/v\d+$/.test(base) ? `${base}/messages` : `${base}/v1/messages`;
 }
 
 type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
@@ -279,6 +293,12 @@ async function postOpenAiCompatibleChatWithOptionalStream(
         body: streamBody,
         streamId,
       });
+    } catch (e) {
+      // 与非流式那条路一致地包成 AppError：调用方要按 code + detail 判断
+      // 能不能重试（例如模型拒收采样参数），裸字符串在这里就断链了。
+      const msg = formatAiError(e);
+      console.error(`${LOG_PREFIX} Tauri invoke openai_compatible_chat_stream failed`, msg);
+      throw new AppError('ai.http', msg);
     } finally {
       unlisten();
     }
@@ -493,51 +513,106 @@ export async function callUniversalAI({
         config.provider === 'doubao' ? 'ai.doubao_needs_endpoint' : 'ai.no_model',
       );
     }
-    const body = {
+    const buildBody = (withSampling: boolean) => ({
       model,
       messages: [
         ...(systemInstruction ? [{ role: 'system' as const, content: systemInstruction }] : []),
         { role: 'user' as const, content: buildOpenAiUserContent(prompt, images) }
       ],
-      temperature,
-      top_p: topP
-    };
+      ...(withSampling ? { temperature, top_p: topP } : {}),
+    });
 
-    return postOpenAiCompatibleChatWithOptionalStream(apiKeyTrimmed, chatUrl, body, {
-      provider: config.provider,
-      model,
-    }, onStreamChunk);
+    const meta = { provider: config.provider, model };
+    const knownFixed = modelRejectsSampling(model);
+
+    try {
+      return await postOpenAiCompatibleChatWithOptionalStream(
+        apiKeyTrimmed, chatUrl, buildBody(!knownFixed), meta, onStreamChunk,
+      );
+    } catch (e) {
+      // 已经不带采样参数了还失败，那就不是采样参数的问题，原样抛。
+      // 否则：报错点名了 temperature/top_p 就去掉重试一次——名单永远追不上
+      // 新模型，让用户卡在一条看不懂的 400 上比多花一个来回糟糕得多。
+      const retryable =
+        !knownFixed && isAppError(e) && e.code === 'ai.http' && looksLikeSamplingRejection(e.detail);
+      if (!retryable) throw e;
+      console.warn(`${LOG_PREFIX} model rejected sampling params, retrying without them`, {
+        model,
+        detail: e.detail?.slice(0, 200),
+      });
+      return await postOpenAiCompatibleChatWithOptionalStream(
+        apiKeyTrimmed, chatUrl, buildBody(false), meta, onStreamChunk,
+      );
+    }
   }
 
   if (config.provider === 'anthropic') {
+    const model = config.model || 'claude-3-5-sonnet-20240620';
+    const url = anthropicMessagesUrl(config.baseUrl);
     console.info(`${LOG_PREFIX} Anthropic messages`, {
-      model: config.model || 'claude-3-5-sonnet-20240620',
+      model,
+      url,
+      runtime: isTauriRuntime() ? 'tauri' : 'web',
       apiKey: maskApiKeyForLog(apiKeyTrimmed),
     });
-    const response = await fetch(`https://api.anthropic.com/v1/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKeyTrimmed,
-        'anthropic-version': '2023-06-01',
-        'dangerouslyAllowBrowser': 'true'
-      },
-      body: JSON.stringify({
-        model: config.model || 'claude-3-5-sonnet-20240620',
-        system: systemInstruction,
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: buildAnthropicUserContent(prompt, images) }],
-        temperature
-      })
-    });
+    const requestBody = {
+      model,
+      system: systemInstruction,
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: buildAnthropicUserContent(prompt, images) }],
+      temperature
+    };
 
-    if (!response.ok) {
-      const raw = await response.text();
-      const msg = parseOpenAiStyleErrorBody(raw, response.status);
-      console.error(`${LOG_PREFIX} Anthropic HTTP error`, response.status, raw.slice(0, 2000));
-      throw new AppError('ai.http', msg);
+    let rawText: string;
+    if (isTauriRuntime()) {
+      // 走 Rust。api.anthropic.com 不发 CORS 头，webview 里直接 fetch 只会拿到
+      // 一条没有任何信息的 "Failed to fetch"——连状态码都看不到。
+      const { invoke } = await import('@tauri-apps/api/core');
+      try {
+        rawText = await invoke<string>('anthropic_messages', {
+          apiKey: apiKeyTrimmed,
+          url,
+          body: requestBody,
+        });
+      } catch (e) {
+        const msg = formatAiError(e);
+        console.error(`${LOG_PREFIX} Tauri invoke anthropic_messages failed`, msg);
+        throw new AppError('ai.http', msg);
+      }
+    } else {
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKeyTrimmed,
+            'anthropic-version': '2023-06-01',
+            // 浏览器里直连必须显式开这个，官方才会回 CORS 头
+            'anthropic-dangerous-direct-browser-access': 'true'
+          },
+          body: JSON.stringify(requestBody)
+        });
+      } catch (e) {
+        console.error(`${LOG_PREFIX} Anthropic network/fetch failed`, { url, error: formatAiError(e) });
+        throw new AppError('ai.network', formatAiError(e));
+      }
+
+      rawText = await response.text();
+      if (!response.ok) {
+        const msg = parseOpenAiStyleErrorBody(rawText, response.status);
+        console.error(`${LOG_PREFIX} Anthropic HTTP error`, response.status, rawText.slice(0, 2000));
+        throw new AppError('ai.http', msg);
+      }
     }
-    const data = await response.json();
+
+    let data: { content?: unknown };
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      console.error(`${LOG_PREFIX} invalid Anthropic JSON response`, rawText.slice(0, 2000));
+      throw new AppError('ai.bad_response');
+    }
     const blocks = data.content as Array<{ type?: string; text?: string }>;
     if (!Array.isArray(blocks) || blocks.length === 0) {
       console.error(`${LOG_PREFIX} unexpected Anthropic response`, data);

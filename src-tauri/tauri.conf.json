@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "雪泥 · Spoor — Local First",
+        "title": "踪迹 · Spoor — Local First",
         "width": 1200,
         "height": 800,
         "resizable": true,
@@ -27,7 +27,7 @@
     "active": true,
     "targets": ["nsis"],
     "shortDescription": "Local-first spatial notes and AI thinking canvas",
-    "longDescription": "Spoor (雪泥) — canvas notes, personas, research lab. Data stays on your device (IndexedDB).",
+    "longDescription": "Spoor (踪迹) — canvas notes, personas, research lab. Data stays on your device (IndexedDB).",
     "category": "Productivity",
     "copyright": "Copyright (c) wenluwindy. PolyForm Noncommercial License 1.0.0.",
     "windows": {

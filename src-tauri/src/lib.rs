@@ -137,6 +137,46 @@ async fn openai_compatible_chat_stream(
   Ok(full)
 }
 
+/// Anthropic Messages API proxy.
+///
+/// Same reason as [`openai_compatible_chat`]: api.anthropic.com sends no CORS
+/// headers, so a direct fetch from the webview fails as an opaque
+/// "Failed to fetch" with no status code to show the user.
+///
+/// Returns the raw response body rather than the extracted text — the block
+/// joining lives in `services/ai.ts` and is shared with the web path; doing it
+/// twice in two languages would be two places to get it wrong.
+#[tauri::command]
+async fn anthropic_messages(api_key: String, url: String, body: Value) -> Result<String, String> {
+  let client = reqwest::Client::builder()
+    .build()
+    .map_err(|e| e.to_string())?;
+
+  let response = client
+    .post(&url)
+    .header("x-api-key", api_key)
+    .header("anthropic-version", "2023-06-01")
+    .header("Content-Type", "application/json")
+    .json(&body)
+    .send()
+    .await
+    .map_err(|e| {
+      eprintln!("[Spoor] anthropic_messages network error: {e} (url={url})");
+      e.to_string()
+    })?;
+
+  let status = response.status();
+  let text = response.text().await.map_err(|e| e.to_string())?;
+
+  if !status.is_success() {
+    let preview: String = text.chars().take(800).collect();
+    eprintln!("[Spoor] anthropic_messages HTTP {status} url={url} body_preview={preview}");
+    return Err(text);
+  }
+
+  Ok(text)
+}
+
 /// Metaso (秘塔) search API proxy.
 /// POST https://metaso.cn/api/v1/search — bypasses browser CORS in Tauri webview.
 #[tauri::command]
@@ -229,6 +269,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       openai_compatible_chat,
       openai_compatible_chat_stream,
+      anthropic_messages,
       metaso_search,
       open_external_url,
       local_llama_chat,

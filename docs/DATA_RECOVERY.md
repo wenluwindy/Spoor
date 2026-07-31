@@ -2,7 +2,7 @@
 
 ## 原因（已确认）
 
-项目曾用 Tauri 标识 **`com.spatialnodes.app`**（产品名 SpatialNotes），后改为 **`com.spoor.app`**（雪泥 / Spoor）。
+项目曾用 Tauri 标识 **`com.spatialnodes.app`**（产品名 SpatialNotes），后改为 **`com.spoor.app`**（踪迹 / Spoor）。
 
 Windows 上 WebView2 数据按标识分目录存放：
 

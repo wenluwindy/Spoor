@@ -36,11 +36,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: Spoor 雪泥 ${{ github.ref_name }}
+          releaseName: Spoor 踪迹 ${{ github.ref_name }}
           releaseBody: |
             ## Windows 安装（推荐）
 
-            下载 **`Spoor_*_x64-setup.exe`**，双击安装，从开始菜单打开 **Spoor / 雪泥**。
+            下载 **`Spoor_*_x64-setup.exe`**，双击安装，从开始菜单打开 **Spoor / 踪迹**。
 
             - 系统：Windows 10/11，64 位
             - 首次使用：在应用 **设置** 中配置 AI 服务商与 API Key（仅存本机）

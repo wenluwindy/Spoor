@@ -1,4 +1,4 @@
-# Spoor 雪泥 v0.1.0 — Release notes
+# Spoor 踪迹 v0.1.0 — Release notes
 
 ## Download (Windows)
 
