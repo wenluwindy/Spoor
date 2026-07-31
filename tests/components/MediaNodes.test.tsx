@@ -80,6 +80,59 @@ describe('ImageNode', () => {
     render(<ImageNode {...props(base({ description: '会议白板.png' }))} />);
     expect(screen.getByText('会议白板.png')).toBeInTheDocument();
   });
+
+  it('普通图片卡有类型标题，且没有「查看详情」入口', () => {
+    render(<ImageNode {...props(base({ filePath: 'media/uploaded/a.png' }))} />);
+    expect(screen.getByText('nodes.image_label')).toBeInTheDocument();
+    expect(screen.queryByLabelText('imagegen.meta_view')).toBeNull();
+  });
+
+  it('生图结果卡标题为「结果」并给出「查看详情」', () => {
+    render(
+      <ImageNode
+        {...props(
+          base({
+            filePath: 'media/generated/x.png',
+            imageGenMeta: {
+              prompt: '一只在雨里的猫',
+              providerName: 'Provider',
+              modelName: 'Model 1',
+              size: '1024x1024',
+              refPaths: [],
+              createdAt: 0,
+            },
+          }),
+        )}
+      />,
+    );
+    expect(screen.getByText('nodes.image_result_label')).toBeInTheDocument();
+    expect(screen.getByLabelText('imagegen.meta_view')).toBeInTheDocument();
+  });
+
+  it('点「查看详情」弹出生成详情，含提示词与模型', () => {
+    render(
+      <ImageNode
+        {...props(
+          base({
+            filePath: 'media/generated/x.png',
+            imageGenMeta: {
+              prompt: '一只在雨里的猫',
+              providerName: 'Provider',
+              modelName: 'Model 1',
+              size: '1024x1024',
+              refPaths: ['media/uploaded/ref.png'],
+              createdAt: 0,
+            },
+          }),
+        )}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText('imagegen.meta_view'));
+    expect(screen.getByText('imagegen.meta_title')).toBeInTheDocument();
+    expect(screen.getByText('一只在雨里的猫')).toBeInTheDocument();
+    expect(screen.getByText('Model 1')).toBeInTheDocument();
+    expect(screen.getByText('imagegen.meta_refs')).toBeInTheDocument();
+  });
 });
 
 describe('VideoNode', () => {

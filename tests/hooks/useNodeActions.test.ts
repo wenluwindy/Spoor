@@ -160,38 +160,58 @@ describe('useNodeActions', () => {
     });
   });
 
-  describe('cycleNodeLayout', () => {
-    it('便签在 0..4 之间轮换并回环', async () => {
-      await db.nodes.add({ id: 'n1', canvasId: 'default', type: 'text', layout: 4, x: 0, y: 0 });
+  describe('createNodeAtLinkedFrom', () => {
+    it('建卡的同时补一条来自源节点的边', async () => {
+      await db.nodes.add({ id: 'src', canvasId: 'default', type: 'text', x: 0, y: 0 });
       const { result } = renderHook(() => useTestNodeActions());
 
+      let created: string | undefined;
       await act(async () => {
-        await result.current.cycleNodeLayout('n1');
+        created = await result.current.createNodeAtLinkedFrom('text', { x: 300, y: 200 }, 'src');
       });
 
-      expect((await db.nodes.get('n1'))!.layout).toBe(0);
+      const node = await db.nodes.get(created!);
+      expect(node).toMatchObject({ type: 'text', x: 300, y: 200 });
+
+      const edges = await db.edges.toArray();
+      expect(edges).toHaveLength(1);
+      expect(edges[0]).toMatchObject({ from: 'src', to: created });
     });
 
-    it('主题卡在 0..3 之间轮换并回环', async () => {
-      await db.nodes.add({ id: 't1', canvasId: 'default', type: 'theme', layout: 3, x: 0, y: 0 });
+    it('主题卡与生图节点同样落在指定坐标并连线', async () => {
+      await db.nodes.add({ id: 'src', canvasId: 'default', type: 'text', x: 0, y: 0 });
       const { result } = renderHook(() => useTestNodeActions());
 
       await act(async () => {
-        await result.current.cycleNodeLayout('t1');
+        await result.current.createNodeAtLinkedFrom('theme', { x: 10, y: 20 }, 'src');
+        await result.current.createNodeAtLinkedFrom('imagegen', { x: 30, y: 40 }, 'src');
       });
 
-      expect((await db.nodes.get('t1'))!.layout).toBe(0);
+      const types = (await db.nodes.toArray()).map((n) => n.type).sort();
+      expect(types).toEqual(['imagegen', 'text', 'theme']);
+      expect(await db.edges.count()).toBe(2);
+    });
+  });
+
+  describe('linkNodes', () => {
+    it('同一对端点不会重复连线（含反向）', async () => {
+      const { result } = renderHook(() => useTestNodeActions());
+
+      await act(async () => {
+        await result.current.linkNodes('a', 'b');
+        await result.current.linkNodes('a', 'b');
+        await result.current.linkNodes('b', 'a');
+      });
+
+      expect(await db.edges.count()).toBe(1);
     });
 
-    it('不支持版式轮换的类型不受影响', async () => {
-      await db.nodes.add({ id: 'i1', canvasId: 'default', type: 'image', layout: 1, x: 0, y: 0 });
+    it('不给自己连自己', async () => {
       const { result } = renderHook(() => useTestNodeActions());
-
       await act(async () => {
-        await result.current.cycleNodeLayout('i1');
+        await result.current.linkNodes('a', 'a');
       });
-
-      expect((await db.nodes.get('i1'))!.layout).toBe(1);
+      expect(await db.edges.count()).toBe(0);
     });
   });
 

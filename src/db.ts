@@ -54,6 +54,22 @@ export interface CanvasNode {
   /** 上次失败的错误码，用于重新打开画布时仍显示错误态。 */
   imageGenErrorCode?: string;
   imageGenErrorDetail?: string;
+
+  // ── type === 'image' 且由生图产出（结果卡片）──
+  /**
+   * 这张图是怎么生成的。只有生图产出的结果卡片带它，手动导入的图片节点没有。
+   * 存快照而非引用生图节点：生图节点被删或参数被改后，结果卡上的记录仍应如实反映
+   * 当时那一次生成。
+   */
+  imageGenMeta?: {
+    prompt: string;
+    providerName: string;
+    modelName: string;
+    size?: string;
+    /** 本次用到的参考图相对路径（无参考图时为空数组）。 */
+    refPaths: string[];
+    createdAt: number;
+  };
 }
 
 export interface Canvas {

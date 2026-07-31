@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { AgentConfig, CanvasNode } from '../../src/db';
 import {
   CanvasContextMenu,
@@ -27,7 +27,7 @@ vi.mock('react-i18next', () => ({
         'canvas.menu.unselect': '取消选中',
         'canvas.menu.delete_node': '删除节点',
         'canvas.menu.delete_edge': '删除连线',
-          'canvas.cycle_layout': '切换布局',
+        'canvas.menu.save_as': '另存为…',
           'canvas.menu.clear_selection': '全部取消选中',
           'canvas.menu.link_all_to_this': '全部连到此节点（{{count}} 条）',
           'canvas.menu.synthesize_selected': '合成长文（{{count}} 张）',
@@ -36,6 +36,11 @@ vi.mock('react-i18next', () => ({
       return opts?.count === undefined ? raw : raw.replace('{{count}}', String(opts.count));
     },
   }),
+}));
+
+let tauriRuntime = true;
+vi.mock('../../src/utils/isTauriRuntime', () => ({
+  isTauriRuntime: () => tauriRuntime,
 }));
 
 vi.mock('../../src/utils/aiI18n', () => ({
@@ -52,7 +57,6 @@ function makeActions(): CanvasContextMenuActions {
     editNode: vi.fn(),
     duplicateNode: vi.fn(),
     startLink: vi.fn(),
-    cycleLayout: vi.fn(),
     toggleSelect: vi.fn(),
     deleteNode: vi.fn(),
     deleteEdge: vi.fn(),
@@ -60,7 +64,10 @@ function makeActions(): CanvasContextMenuActions {
     synthesizeSelected: vi.fn(),
     clearSelection: vi.fn(),
     deleteNodes: vi.fn(),
-  outputAsImageNode: vi.fn(),
+    outputAsImageNode: vi.fn(),
+    saveNodeMediaAs: vi.fn(),
+    createNodeLinkedFrom: vi.fn(),
+    insertFileLinkedFrom: vi.fn(),
   };
 }
 
@@ -228,23 +235,20 @@ describe('CanvasContextMenu', () => {
         '编辑内容',
         '创建副本',
         '开始连线',
-        '切换布局',
         '选中',
         '删除节点',
       ]);
     });
 
-    it('图片节点没有「编辑内容」与「切换布局」', () => {
+    it('图片节点没有「编辑内容」', () => {
       renderMenu({ target: { kind: 'node', nodeId: 'n2' }, nodes: [imageNode] });
       expect(screen.queryByText('编辑内容')).toBeNull();
-      expect(screen.queryByText('切换布局')).toBeNull();
       expect(screen.getByText('创建副本')).toBeInTheDocument();
     });
 
     it('AI 卡可编辑但不参与版式轮换', () => {
       renderMenu({ target: { kind: 'node', nodeId: 'n3' }, nodes: [aiNode] });
       expect(screen.getByText('编辑内容')).toBeInTheDocument();
-      expect(screen.queryByText('切换布局')).toBeNull();
     });
 
     it('已选中的节点显示「取消选中」', () => {
@@ -261,7 +265,6 @@ describe('CanvasContextMenu', () => {
       ['编辑内容', 'editNode'],
       ['创建副本', 'duplicateNode'],
       ['开始连线', 'startLink'],
-      ['切换布局', 'cycleLayout'],
       ['选中', 'toggleSelect'],
       ['删除节点', 'deleteNode'],
     ] as const)('%s 调用 %s', (label, action) => {
@@ -412,4 +415,93 @@ describe('CanvasContextMenu', () => {
       expect(onClose).not.toHaveBeenCalled();
     });
   });
+  describe('另存为', () => {
+    it('图片节点有 filePath 时出现', () => {
+      renderMenu({
+        target: { kind: 'node', nodeId: 'img' },
+        nodes: [{ id: 'img', type: 'image', x: 0, y: 0, filePath: 'media/uploaded/a.png' } as CanvasNode],
+      });
+      expect(screen.getByText('另存为…')).toBeInTheDocument();
+    });
+
+    it('图片只有旧 data URL（不在文件存储里）时不出现', () => {
+      renderMenu({
+        target: { kind: 'node', nodeId: 'img' },
+        nodes: [{ id: 'img', type: 'image', x: 0, y: 0, content: 'data:image/png;base64,X' } as CanvasNode],
+      });
+      expect(screen.queryByText('另存为…')).toBeNull();
+    });
+
+    it('生图节点有结果时出现，没结果时不出现', () => {
+      renderMenu({
+        target: { kind: 'node', nodeId: 'gen' },
+        nodes: [{ id: 'gen', type: 'imagegen', x: 0, y: 0, imageGenResults: ['media/generated/a.png'] } as CanvasNode],
+      });
+      expect(screen.getByText('另存为…')).toBeInTheDocument();
+
+      cleanup();
+      renderMenu({
+        target: { kind: 'node', nodeId: 'gen' },
+        nodes: [{ id: 'gen', type: 'imagegen', x: 0, y: 0 } as CanvasNode],
+      });
+      expect(screen.queryByText('另存为…')).toBeNull();
+    });
+
+    it('便签没有原件，不出现', () => {
+      renderMenu({
+        target: { kind: 'node', nodeId: 'n1' },
+        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0 } as CanvasNode],
+      });
+      expect(screen.queryByText('另存为…')).toBeNull();
+    });
+
+    it('浏览器下没有文件存储，一律不出现', () => {
+      tauriRuntime = false;
+      try {
+        renderMenu({
+          target: { kind: 'node', nodeId: 'img' },
+          nodes: [{ id: 'img', type: 'image', x: 0, y: 0, filePath: 'media/uploaded/a.png' } as CanvasNode],
+        });
+        expect(screen.queryByText('另存为…')).toBeNull();
+      } finally {
+        tauriRuntime = true;
+      }
+    });
+
+    it('点击后带节点 id 回调', () => {
+      const actions = makeActions();
+      renderMenu({
+        target: { kind: 'node', nodeId: 'img' },
+        nodes: [{ id: 'img', type: 'image', x: 0, y: 0, filePath: 'media/uploaded/a.png' } as CanvasNode],
+        actions,
+      });
+      fireEvent.pointerDown(screen.getByText('另存为…'));
+      expect(actions.saveNodeMediaAs).toHaveBeenCalledWith('img');
+    });
+  });
+
+  describe('link-drop（连线拖到空白处）', () => {
+    it('给出建卡与插入文件两组，且不含节点操作项', () => {
+      renderMenu({ target: { kind: 'link-drop', fromId: 'src' } });
+      expect(screen.getByText('新建便签')).toBeInTheDocument();
+      expect(screen.getByText('插入图片…')).toBeInTheDocument();
+      expect(screen.queryByText('重置视图')).toBeNull();
+      expect(screen.queryByText('粘贴便签')).toBeNull();
+    });
+
+    it('选建卡时带上源节点 id 与落点', () => {
+      const actions = makeActions();
+      renderMenu({ target: { kind: 'link-drop', fromId: 'src' }, actions });
+      fireEvent.pointerDown(screen.getByText('新建便签'));
+      expect(actions.createNodeLinkedFrom).toHaveBeenCalledWith('text', { x: 40, y: 25 }, 'src');
+    });
+
+    it('选插入文件时同样带上源节点 id', () => {
+      const actions = makeActions();
+      renderMenu({ target: { kind: 'link-drop', fromId: 'src' }, actions });
+      fireEvent.pointerDown(screen.getByText('插入图片…'));
+      expect(actions.insertFileLinkedFrom).toHaveBeenCalledWith('image/*', { x: 40, y: 25 }, 'src');
+    });
+  });
+
 });

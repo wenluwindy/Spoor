@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Download, Monitor } from 'lucide-react';
-import logoUrl from '../../LOGO.png';
+import logoUrl from '../assets/LOGO.png';
 import { DESKTOP_RELEASE_URL } from '../constants/desktopRelease';
 import { openExternalUrl } from '../utils/openExternal';
 
@@ -14,23 +14,23 @@ export function DesktopOnlyNotice() {
   const { t, i18n } = useTranslation();
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[#FAF9F6] p-8 font-serif text-[#1a1a1a] paper-texture">
-      <div className="flex w-full max-w-md flex-col items-center gap-6 rounded-2xl border border-[#E6E4DF] bg-white p-10 text-center shadow-xl">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-app-surface p-8 font-serif text-app-text paper-texture">
+      <div className="flex w-full max-w-md flex-col items-center gap-6 rounded-2xl border border-app-border bg-app-surface-raised p-10 text-center shadow-xl">
         <img src={logoUrl} alt="Spoor" className="h-20 w-20" />
 
         <div className="space-y-3">
-          <div className="flex items-center justify-center gap-2 text-[#C2410C]">
+          <div className="flex items-center justify-center gap-2 text-app-accent">
             <Monitor className="h-4 w-4" />
             <span className="font-sans text-[10px] font-bold uppercase tracking-widest">Spoor</span>
           </div>
           <h1 className="text-2xl font-bold">{t('desktop_only.title')}</h1>
-          <p className="text-[13px] leading-relaxed text-[#5a5a54]">{t('desktop_only.blurb')}</p>
+          <p className="text-[13px] leading-relaxed text-app-text-muted">{t('desktop_only.blurb')}</p>
         </div>
 
         <button
           type="button"
           onClick={() => void openExternalUrl(DESKTOP_RELEASE_URL)}
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#C2410C] px-4 font-sans text-sm font-bold text-white shadow-sm shadow-[#C2410C]/20 transition-colors hover:bg-[#9A3412]"
+          className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-app-accent px-4 font-sans text-sm font-bold text-white shadow-sm shadow-app-accent/20 transition-colors hover:bg-app-accent-deep"
         >
           <Download className="h-4 w-4" />
           {t('desktop_only.download')}
@@ -43,7 +43,7 @@ export function DesktopOnlyNotice() {
             void i18n.changeLanguage(next);
             localStorage.setItem('app_language', next);
           }}
-          className="font-sans text-[11px] text-[#8c8a84] underline decoration-dotted transition-colors hover:text-[#C2410C]"
+          className="font-sans text-[11px] text-app-text-faint underline decoration-dotted transition-colors hover:text-app-accent"
         >
           {i18n.language === 'zh' ? 'English' : '中文'}
         </button>

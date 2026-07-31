@@ -25,7 +25,7 @@ vi.mock('../../src/services/ai', () => ({
 }));
 
 vi.mock('../../src/services/search', () => ({
-  metasoSearch: vi.fn().mockResolvedValue({
+  webSearch: vi.fn().mockResolvedValue({
     credits: 0,
     total: 0,
     webpages: [],
@@ -42,7 +42,7 @@ vi.mock('../../src/services/toolbarIntentClarification', () => ({
 }));
 
 import { callUniversalAI } from '../../src/services/ai';
-import { metasoSearch } from '../../src/services/search';
+import { webSearch } from '../../src/services/search';
 import i18n from '../../src/i18n';
 
 function mockCallUniversalAIWithStream(finalText: string) {
@@ -60,7 +60,7 @@ const baseAiConfig: AIConfig = {
   apiKey: 'test',
   baseUrl: '',
   model: 'gemini-1.5-flash',
-  metasoApiKey: 'metaso-k',
+  searchApiKey: 'metaso-k',
 };
 
 function useTestAiActions(opts?: {
@@ -106,8 +106,8 @@ describe('useAiActions', () => {
     await i18n.changeLanguage('en');
     vi.mocked(callUniversalAI).mockClear();
     mockCallUniversalAIWithStream('AI generated text');
-    vi.mocked(metasoSearch).mockClear();
-    vi.mocked(metasoSearch).mockResolvedValue({
+    vi.mocked(webSearch).mockClear();
+    vi.mocked(webSearch).mockResolvedValue({
       credits: 0,
       total: 0,
       webpages: [],
@@ -517,7 +517,7 @@ describe('useAiActions', () => {
     });
 
     it('「联网搜索」时调用秘塔并生成子节点与资料卡，不调用对话模型', async () => {
-      vi.mocked(metasoSearch).mockResolvedValueOnce({
+      vi.mocked(webSearch).mockResolvedValueOnce({
         credits: 0,
         total: 1,
         webpages: [{ title: 'T', snippet: 'S', link: 'https://ex.com', score: '', date: '' }],
@@ -543,7 +543,7 @@ describe('useAiActions', () => {
       });
 
       expect(callUniversalAI).not.toHaveBeenCalled();
-      expect(metasoSearch).toHaveBeenCalledWith('上一轮 AI 正文', { apiKey: 'metaso-k' });
+      expect(webSearch).toHaveBeenCalledWith('上一轮 AI 正文', { kind: 'metaso', apiKey: 'metaso-k' });
 
       const allNodes = await db.nodes.toArray();
       expect(allNodes).toHaveLength(3);
@@ -559,7 +559,7 @@ describe('useAiActions', () => {
     });
 
     it('「联网搜索」且父卡带 Agent 链字段时子 AI 卡复制 threadContextImageNodeIds', async () => {
-      vi.mocked(metasoSearch).mockResolvedValueOnce({
+      vi.mocked(webSearch).mockResolvedValueOnce({
         credits: 0,
         total: 1,
         webpages: [{ title: 'T', snippet: 'S', link: 'https://ex.com', score: '', date: '' }],
@@ -594,7 +594,7 @@ describe('useAiActions', () => {
     });
 
     it('「联网搜索 主题」用后面的词作为检索词', async () => {
-      vi.mocked(metasoSearch).mockResolvedValueOnce({
+      vi.mocked(webSearch).mockResolvedValueOnce({
         credits: 0,
         total: 1,
         webpages: [{ title: 'T', snippet: 'S', link: 'https://ex.com', score: '', date: '' }],
@@ -616,7 +616,7 @@ describe('useAiActions', () => {
         await result.current.submitAiThreadFollowUp('parent-ai', '联网搜索 仅用这个');
       });
 
-      expect(metasoSearch).toHaveBeenCalledWith('仅用这个', { apiKey: 'metaso-k' });
+      expect(webSearch).toHaveBeenCalledWith('仅用这个', { kind: 'metaso', apiKey: 'metaso-k' });
     });
 
     it('无秘塔 Key 时不调用检索', async () => {
@@ -625,7 +625,7 @@ describe('useAiActions', () => {
       const { result } = renderHook(() =>
         useTestAiActions({
           dynamicNodes: [parentCard],
-          aiConfigOverrides: { metasoApiKey: '' },
+          aiConfigOverrides: { searchApiKey: '' },
         })
       );
 
@@ -633,7 +633,7 @@ describe('useAiActions', () => {
         await result.current.submitAiThreadFollowUp('parent-ai', '联网搜索');
       });
 
-      expect(metasoSearch).not.toHaveBeenCalled();
+      expect(webSearch).not.toHaveBeenCalled();
       expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 

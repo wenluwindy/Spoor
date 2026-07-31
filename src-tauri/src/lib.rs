@@ -2,6 +2,7 @@ mod cc_switch;
 mod imagegen;
 mod local_llama;
 mod media;
+mod updater;
 
 use futures_util::StreamExt;
 use serde_json::Value;
@@ -216,6 +217,47 @@ async fn metaso_search(api_key: String, query: String) -> Result<String, String>
     Ok(text)
 }
 
+/// Tavily search API proxy.
+/// POST https://api.tavily.com/search — 同 [`metaso_search`]，绕开 webview 的 CORS。
+///
+/// `search_depth: basic` 是刻意的：advanced 一次要扣 2 个额度，而这里只是给模型
+/// 补一段网页上下文，basic 的摘要已经够用。
+#[tauri::command]
+async fn tavily_search(api_key: String, query: String) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let body = serde_json::json!({
+        "query": query,
+        "max_results": 5,
+        "search_depth": "basic",
+    });
+
+    let response = client
+        .post("https://api.tavily.com/search")
+        .header("Authorization", format!("Bearer {}", api_key.trim()))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| {
+            eprintln!("[Spoor] tavily_search network error: {e}");
+            e.to_string()
+        })?;
+
+    let status = response.status();
+    let text = response.text().await.map_err(|e| e.to_string())?;
+
+    if !status.is_success() {
+        let preview: String = text.chars().take(800).collect();
+        eprintln!("[Spoor] tavily_search HTTP {status} body_preview={preview}");
+        return Err(text);
+    }
+
+    Ok(text)
+}
+
 /// Open an http(s) URL in the system default browser. Webview `target=_blank` is unreliable in Tauri.
 #[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
@@ -272,7 +314,11 @@ pub fn run() {
       openai_compatible_chat_stream,
       anthropic_messages,
       metaso_search,
+      tavily_search,
       open_external_url,
+      updater::check_for_update,
+      updater::download_update,
+      updater::install_update,
       local_llama_chat,
       get_local_llama_log_path,
       cc_switch::cc_switch_read_config,

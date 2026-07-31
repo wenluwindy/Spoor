@@ -12,9 +12,7 @@ release/
 # --- Promo / Remotion (local only; not submitted) ---
 remotion-kit/
 scripts/remotion-server.mjs
-docs/PROMO_SPOOR.md
-docs/SPOOR_PROMO_ZH_SUBTITLES.md
-docs/MINIMAX_SPOOR_EN_SYNC.md
+docs/promo/
 output/
 *.mp4
 *.mov
@@ -24,8 +22,6 @@ output/
 /en.wav
 /en2.wav
 /zh.wav
-/* Icon - Orange Theme.png
-git-log.txt
 
 # Local toolchain (LLVM installer + extracted libclang for bindgen); do not commit
 .build-tools/
@@ -65,9 +61,6 @@ desktop.ini
 .idea/
 *.swp
 *.swo
-
-# Local metadata (optional, remove this line if you want to track it)
-# metadata.json
 
 # Local Netlify folder
 .netlify

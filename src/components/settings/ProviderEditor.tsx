@@ -9,11 +9,20 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
-import type { AIConfigV2, AIProviderProfile, ProviderKind } from '../../types/aiConfig';
+import type {
+  AIConfigV2,
+  AIProviderProfile,
+  ImageApiKind,
+  ProviderKind,
+} from '../../types/aiConfig';
 import {
   PRESET_IMAGE_MODELS,
+  PRESET_IMAGE_MODELS_BY_API_KIND,
+  RIGHTAPI_DRAW_BASE_URL,
+  SELECTABLE_IMAGE_API_KINDS,
   supportsImageGeneration,
 } from '../../constants/aiProviderPresets';
+import { resolveImageApiKind } from '../../services/aiConfig';
 import {
   addChatModel,
   addImageModel,
@@ -42,9 +51,9 @@ const PROVIDER_KINDS: ProviderKind[] = [
 ];
 
 const FIELD =
-  'w-full h-9 px-3 bg-[#FAF9F6] border border-[#E6E4DF] rounded-lg text-sm outline-none focus:border-[#C2410C] focus:ring-1 focus:ring-[#C2410C] transition-all';
+  'w-full h-9 px-3 bg-app-surface border border-app-border rounded-lg text-sm outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent transition-all';
 const META_LABEL =
-  'text-[10px] font-mono font-bold text-[#8c8a84] uppercase tracking-wider';
+  'text-[10px] font-mono font-bold text-app-text-faint uppercase tracking-wider';
 
 export interface ProviderEditorProps {
   config: AIConfigV2;
@@ -66,7 +75,29 @@ export function ProviderEditor({
 
   const isLocal = provider.kind === 'local_llama';
   const canGenerateImages = supportsImageGeneration(provider.kind);
-  const imagePresets = PRESET_IMAGE_MODELS[provider.kind] ?? [];
+  const imageApiKind = resolveImageApiKind(provider);
+  // 自定义端点的协议由用户选，其余由 kind 唯一确定，没得选也就不用露出来
+  const canPickImageApiKind = provider.kind === 'custom';
+  const imagePresets =
+    (imageApiKind && PRESET_IMAGE_MODELS_BY_API_KIND[imageApiKind]) ??
+    PRESET_IMAGE_MODELS[provider.kind] ??
+    [];
+
+  /**
+   * 换生图协议。Base URL 还空着时顺手填上该协议的默认地址——RightAPI 的绘图基址
+   * （`rightapi.ai`，不是 `right.ai`）不好猜，让用户手打就是在等他打错。
+   * 已经填过的一律不动。
+   */
+  const changeImageApiKind = (next: ImageApiKind) => {
+    const defaultBaseUrl = next === 'rightapi_draw' ? RIGHTAPI_DRAW_BASE_URL : '';
+    const fillBaseUrl = defaultBaseUrl && provider.baseUrl.trim() === '';
+    onChange(
+      updateProvider(config, provider.id, {
+        imageApiKind: next,
+        ...(fillBaseUrl ? { baseUrl: defaultBaseUrl } : {}),
+      }),
+    );
+  };
 
   const runTest = async (modelId: string, modelName: string) => {
     setTestingModelId(modelId);
@@ -76,24 +107,24 @@ export function ProviderEditor({
   };
 
   return (
-    <div className="border border-[#E6E4DF] rounded-xl overflow-hidden bg-white">
-      <div className="flex items-center gap-2 px-3 py-2.5 bg-[#FAF9F6] border-b border-[#E6E4DF]">
+    <div className="border border-app-border rounded-xl overflow-hidden bg-app-surface-raised">
+      <div className="flex items-center gap-2 px-3 py-2.5 bg-app-surface border-b border-app-border">
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-label={expanded ? t('settings.collapse_provider') : t('settings.expand_provider')}
-          className="p-1 text-[#8c8a84] hover:text-[#1a1a1a] transition-colors"
+          className="p-1 text-app-text-faint hover:text-app-text transition-colors"
         >
           {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
         <input
-          className="flex-1 min-w-0 bg-transparent text-sm font-bold text-[#1a1a1a] outline-none focus:bg-white rounded px-1 py-0.5 transition-colors"
+          className="flex-1 min-w-0 bg-transparent text-sm font-bold text-app-text outline-none focus:bg-app-surface-raised rounded px-1 py-0.5 transition-colors"
           value={provider.name}
           aria-label={t('settings.provider_name')}
           onChange={(e) => onChange(updateProvider(config, provider.id, { name: e.target.value }))}
         />
         {config.activeChat.providerId === provider.id && (
-          <span className="text-[10px] font-mono text-[#C2410C] border border-[#C2410C]/30 rounded px-1.5 py-0.5 shrink-0">
+          <span className="text-[10px] font-mono text-app-accent border border-app-accent/30 rounded px-1.5 py-0.5 shrink-0">
             {t('settings.badge_active_chat')}
           </span>
         )}
@@ -101,7 +132,7 @@ export function ProviderEditor({
           <button
             type="button"
             onClick={() => onRequestDelete(provider)}
-            className="p-1 text-[#8c8a84] hover:text-[#C2410C] transition-colors shrink-0"
+            className="p-1 text-app-text-faint hover:text-app-accent transition-colors shrink-0"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -160,10 +191,10 @@ export function ProviderEditor({
                   onChange(updateProvider(config, provider.id, { localGgufPath: e.target.value }))
                 }
               />
-              <label className="flex items-center gap-2 text-[11px] text-[#5a5a54] cursor-pointer">
+              <label className="flex items-center gap-2 text-[11px] text-app-text-muted cursor-pointer">
                 <input
                   type="checkbox"
-                  className="rounded border-[#E6E4DF]"
+                  className="rounded border-app-border"
                   checked={provider.localEnableThinking ?? false}
                   onChange={(e) =>
                     onChange(
@@ -196,12 +227,12 @@ export function ProviderEditor({
           {/* ── 对话模型 ── */}
           <section className="space-y-2 pt-1">
             <div className="flex items-center gap-1.5">
-              <MessageSquare className="w-3.5 h-3.5 text-[#5a5a54]" />
+              <MessageSquare className="w-3.5 h-3.5 text-app-text-muted" />
               <span className={META_LABEL}>{t('settings.chat_models')}</span>
             </div>
 
             {provider.kind === 'doubao' && (
-              <p className="text-[10px] text-[#8c8a84] leading-relaxed">
+              <p className="text-[10px] text-app-text-faint leading-relaxed">
                 {t('settings.doubao_model_hint')}
               </p>
             )}
@@ -233,8 +264,8 @@ export function ProviderEditor({
                       onClick={() => onChange(setActiveChat(config, provider.id, model.id))}
                       className={`h-9 px-2.5 rounded-lg text-[11px] font-bold border transition-colors shrink-0 ${
                         isActive
-                          ? 'border-[#C2410C] bg-[#C2410C]/5 text-[#C2410C]'
-                          : 'border-[#E6E4DF] text-[#5a5a54] hover:border-[#C2410C]/40'
+                          ? 'border-app-accent bg-app-accent/5 text-app-accent'
+                          : 'border-app-border text-app-text-muted hover:border-app-accent/40'
                       }`}
                     >
                       {isActive ? t('settings.is_default') : t('settings.set_default')}
@@ -243,7 +274,7 @@ export function ProviderEditor({
                       type="button"
                       onClick={() => void runTest(model.id, model.modelName)}
                       disabled={testingModelId !== null}
-                      className="h-9 px-2.5 rounded-lg text-[11px] font-bold border border-[#E6E4DF] text-[#5a5a54] hover:border-[#C2410C]/40 transition-colors shrink-0 disabled:opacity-50 flex items-center gap-1"
+                      className="h-9 px-2.5 rounded-lg text-[11px] font-bold border border-app-border text-app-text-muted hover:border-app-accent/40 transition-colors shrink-0 disabled:opacity-50 flex items-center gap-1"
                     >
                       {testingModelId === model.id ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
@@ -254,7 +285,7 @@ export function ProviderEditor({
                       <button
                         type="button"
                         onClick={() => onChange(removeChatModel(config, provider.id, model.id))}
-                        className="p-1.5 text-[#8c8a84] hover:text-[#C2410C] transition-colors shrink-0"
+                        className="p-1.5 text-app-text-faint hover:text-app-accent transition-colors shrink-0"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -266,7 +297,7 @@ export function ProviderEditor({
                     </p>
                   )}
                   {result?.ok === false && (
-                    <p className="text-[10px] leading-relaxed text-[#C2410C]">
+                    <p className="text-[10px] leading-relaxed text-app-accent">
                       {t('settings.test_failed')}
                       {resolveErrorMessage(result.error, t)}
                     </p>
@@ -278,7 +309,7 @@ export function ProviderEditor({
             <button
               type="button"
               onClick={() => onChange(addChatModel(config, provider.id))}
-              className="flex items-center gap-1.5 text-[11px] font-bold text-[#C2410C] hover:underline"
+              className="flex items-center gap-1.5 text-[11px] font-bold text-app-accent hover:underline"
             >
               <Plus className="w-3.5 h-3.5" />
               {t('settings.add_chat_model')}
@@ -287,11 +318,36 @@ export function ProviderEditor({
 
           {/* ── 生图模型 ── */}
           {canGenerateImages && (
-            <section className="space-y-2 pt-1 border-t border-[#F4F1ED]">
+            <section className="space-y-2 pt-1 border-t border-app-surface-subtle">
               <div className="flex items-center gap-1.5 pt-2">
-                <ImageIcon className="w-3.5 h-3.5 text-[#5a5a54]" />
+                <ImageIcon className="w-3.5 h-3.5 text-app-text-muted" />
                 <span className={META_LABEL}>{t('settings.image_models')}</span>
               </div>
+
+              {canPickImageApiKind && (
+                <div className="space-y-1.5">
+                  <label className={META_LABEL} htmlFor={`imgkind-${provider.id}`}>
+                    {t('settings.image_api_kind')}
+                  </label>
+                  <select
+                    id={`imgkind-${provider.id}`}
+                    className={FIELD}
+                    value={imageApiKind ?? 'custom_openai_images'}
+                    onChange={(e) => changeImageApiKind(e.target.value as ImageApiKind)}
+                  >
+                    {SELECTABLE_IMAGE_API_KINDS.map((kind) => (
+                      <option key={kind} value={kind}>
+                        {t(`settings.image_api_kind_option.${kind}`)}
+                      </option>
+                    ))}
+                  </select>
+                  {imageApiKind === 'rightapi_draw' && (
+                    <p className="text-[10px] text-app-text-faint leading-relaxed">
+                      {t('settings.rightapi_draw_hint')}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {provider.imageModels.map((model) => {
                 const isDefault =
@@ -318,8 +374,8 @@ export function ProviderEditor({
                       onClick={() => onChange(setDefaultImage(config, provider.id, model.id))}
                       className={`h-9 px-2.5 rounded-lg text-[11px] font-bold border transition-colors shrink-0 ${
                         isDefault
-                          ? 'border-[#C2410C] bg-[#C2410C]/5 text-[#C2410C]'
-                          : 'border-[#E6E4DF] text-[#5a5a54] hover:border-[#C2410C]/40'
+                          ? 'border-app-accent bg-app-accent/5 text-app-accent'
+                          : 'border-app-border text-app-text-muted hover:border-app-accent/40'
                       }`}
                     >
                       {isDefault ? t('settings.is_default') : t('settings.set_default')}
@@ -328,7 +384,7 @@ export function ProviderEditor({
                       <button
                         type="button"
                         onClick={() => onChange(removeImageModel(config, provider.id, model.id))}
-                        className="p-1.5 text-[#8c8a84] hover:text-[#C2410C] transition-colors shrink-0"
+                        className="p-1.5 text-app-text-faint hover:text-app-accent transition-colors shrink-0"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -341,7 +397,7 @@ export function ProviderEditor({
                 <button
                   type="button"
                   onClick={() => onChange(addImageModel(config, provider.id))}
-                  className="flex items-center gap-1.5 text-[11px] font-bold text-[#C2410C] hover:underline"
+                  className="flex items-center gap-1.5 text-[11px] font-bold text-app-accent hover:underline"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   {t('settings.add_image_model')}
@@ -351,7 +407,7 @@ export function ProviderEditor({
                     key={preset.modelName}
                     type="button"
                     onClick={() => onChange(addImageModel(config, provider.id, preset))}
-                    className="text-[11px] text-[#5a5a54] hover:text-[#C2410C] hover:underline"
+                    className="text-[11px] text-app-text-muted hover:text-app-accent hover:underline"
                   >
                     + {preset.label}
                   </button>

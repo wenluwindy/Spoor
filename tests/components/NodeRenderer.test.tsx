@@ -3,6 +3,7 @@ import { render } from '@testing-library/react';
 import React from 'react';
 import { NodeRenderer } from '../../src/components/nodes/NodeRenderer';
 import type { CanvasNode, AgentConfig } from '../../src/db';
+import { APP_THEME_STORAGE_KEY, resetAppThemeStoreForTests } from '../../src/services/appTheme';
 
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-i18next')>();
@@ -15,23 +16,9 @@ vi.mock('react-i18next', async (importOriginal) => {
   };
 });
 
-vi.mock('lucide-react', () => {
-  const iconNames = [
-    'MessageSquare', 'Terminal', 'Network', 'Search', 'Bell', 'Settings', 'Plus',
-    'BookOpen', 'Users', 'Library', 'Microscope', 'Sparkles', 'Maximize2', 'Minimize2',
-    'Quote', 'Brain', 'Bot', 'Coffee', 'Wand2', 'Send', 'SlidersHorizontal', 'History', 'ZoomIn',
-    'Focus', 'Image', 'FilePlus', 'Trash2', 'Link2', 'X', 'Camera', 'ChevronLeft',
-    'ChevronRight', 'Check', 'Cpu', 'ArrowRight', 'ListChecks', 'CheckCircle2',
-    'Loader2', 'PenLine', 'Edit3', 'FileText', 'Play',
-  ];
-  const icons: Record<string, React.FC> = {};
-  for (const name of iconNames) {
-    icons[name] = (props: Record<string, unknown>) => {
-      const { createElement } = require('react');
-      return createElement('svg', { 'data-testid': `icon-${name}`, ...props });
-    };
-  }
-  return icons;
+vi.mock('lucide-react', async (importOriginal) => {
+  const { lucideIconMock } = await import('../lucideMock');
+  return lucideIconMock(importOriginal as () => Promise<Record<string, unknown>>);
 });
 
 vi.mock('react-markdown', () => ({
@@ -62,6 +49,8 @@ const makeNode = (type: string, overrides?: Partial<CanvasNode>): CanvasNode => 
 describe('NodeRenderer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.setItem(APP_THEME_STORAGE_KEY, 'paper');
+    resetAppThemeStoreForTests();
   });
 
   it('type="theme" 渲染 ThemeNode', () => {
@@ -103,10 +92,12 @@ describe('NodeRenderer', () => {
     expect(getByText('围绕创业意义展开研究')).toBeInTheDocument();
   });
 
-  it('theme 节点 layout=3 时默认页脚取潜空间文案', () => {
+  it('neo 主题（themeLayout=3）下 theme 节点默认页脚取潜空间文案', () => {
+    localStorage.setItem(APP_THEME_STORAGE_KEY, 'neo');
+    resetAppThemeStoreForTests();
     const { getByText } = render(
       <NodeRenderer
-        node={makeNode('theme', { layout: 3 })}
+        node={makeNode('theme')}
         editingNodeId={null}
         setEditingNodeId={vi.fn()}
         agentConfigs={mockAgentConfigs}

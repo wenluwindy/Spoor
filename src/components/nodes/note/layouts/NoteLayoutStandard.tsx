@@ -21,13 +21,13 @@ export function NoteLayoutStandard({
   const isGlass = layout === 1;
 
   const standardOuter = `note-surface-standard relative w-full h-full ${NOTE_SHELL_TRANSITION} border-2 flex flex-col rounded-none outline-none ring-0 ${
-    layout === 3 ? 'shadow-[4px_4px_0px_0px_#1b1b1c]' : 'shadow-lg'
+    layout === 3 ? 'shadow-[4px_4px_0px_0px_var(--color-app-ink)]' : 'shadow-lg'
   } ${
     layout === 2
-      ? 'p-4 bg-[#F4F1ED] border-transparent shadow-sm'
+      ? 'p-4 bg-app-surface-subtle border-transparent shadow-sm'
       : layout === 3
-        ? 'neo-brut-surface p-6 gap-4 bg-[#fcf8f9] border-[#1b1b1c]'
-        : 'p-5 bg-white border-[#E6E4DF]'
+        ? 'neo-brut-surface p-6 gap-4 bg-[#fcf8f9] border-app-ink'
+        : 'p-5 bg-app-surface-raised border-app-border'
   }`;
 
   const glassOuter = `note-surface-glass isolate relative flex h-full w-full flex-col overflow-hidden rounded-xl ${NOTE_SHELL_TRANSITION} [transform:translateZ(0)] border-2 border-transparent shadow-none p-0 outline-none ring-0`;
@@ -37,18 +37,18 @@ export function NoteLayoutStandard({
   const editTypography = isGlass
     ? 'font-sans text-[18px] font-normal leading-[1.6] text-[#464652]'
     : layout === 2
-      ? 'text-xs font-mono leading-5 text-[#5a5a54]'
+      ? 'text-xs font-mono leading-5 text-app-text-muted'
       : layout === 3
-        ? 'font-newsreader text-[24px] font-medium leading-[1.3] tracking-[-0.02em] text-[#1b1b1c] pt-2'
-        : 'text-sm font-serif leading-relaxed text-[#4a4a44]';
+        ? 'font-newsreader text-[24px] font-medium leading-[1.3] tracking-[-0.02em] text-app-ink pt-2'
+        : 'text-sm font-serif leading-relaxed text-app-text-soft';
 
   const viewTypography = isGlass
     ? 'markdown-body font-sans text-[18px] font-normal leading-[1.6] text-[#464652]'
     : layout === 2
-      ? 'markdown-body text-xs font-mono leading-5 text-[#5a5a54]'
+      ? 'markdown-body text-xs font-mono leading-5 text-app-text-muted'
       : layout === 3
-        ? 'markdown-body font-newsreader text-[24px] font-medium leading-[1.3] tracking-[-0.02em] text-[#1b1b1c] pt-2'
-        : 'markdown-body text-sm font-serif leading-relaxed text-[#4a4a44]';
+        ? 'markdown-body font-newsreader text-[24px] font-medium leading-[1.3] tracking-[-0.02em] text-app-ink pt-2'
+        : 'markdown-body text-sm font-serif leading-relaxed text-app-text-soft';
 
   const emptyBefore = isGlass ? 'empty:before:text-gray-300/80' : 'empty:before:text-gray-300';
   const editClassName = `focus:outline-none rounded px-1 -mx-1 transition-[color,font-size,line-height,font-family] duration-500 cursor-text min-h-[50px] select-text empty:before:content-['${t('nodes.type_something')}'] ${emptyBefore} ${editTypography}`;
@@ -77,7 +77,7 @@ export function NoteLayoutStandard({
           <span
             className={`note-chrome font-sans uppercase tracking-wider transition-[color,background-color,padding,font-size] duration-500 ${
               layout === 3
-                ? 'neo-brut-badge bg-[#1b1b1c] px-2 py-1 text-[12px] font-semibold leading-none'
+                ? 'neo-brut-badge bg-app-ink px-2 py-1 text-[12px] font-semibold leading-none'
                 : 'note-chrome-muted text-[10px] font-bold'
             }`}
           >

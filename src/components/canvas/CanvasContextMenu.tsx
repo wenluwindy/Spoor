@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Copy, ImageDown, Link2, Pencil, PenLine, RotateCcw, SlidersHorizontal, Square, SquareCheckBig, Trash2 } from 'lucide-react';
+import { Bot, Copy, Download, ImageDown, Link2, Pencil, PenLine, RotateCcw, Square, SquareCheckBig, Trash2 } from 'lucide-react';
 import type { AgentConfig, CanvasNode } from '../../db';
+import { isTauriRuntime } from '../../utils/isTauriRuntime';
 import { CANVAS_CREATE_ITEMS, CANVAS_INSERT_ITEMS } from '../../constants/canvasMenuItems';
-import { nodeSupportsCycleLayout, nodeSupportsInlineEdit } from '../../constants/nodeCapabilities';
+import { nodeSupportsInlineEdit } from '../../constants/nodeCapabilities';
 import { resolveAgentLocalizedName } from '../../utils/aiI18n';
 import {
   parseStickyClipboardPayload,
@@ -17,6 +18,19 @@ export interface CanvasPoint {
   y: number;
 }
 
+/**
+ * 这个节点有没有可另存的原件。
+ *
+ * 图片/视频看 `filePath`（`content` 里的旧 data URL 不在文件存储里，导不出去）；
+ * 生图节点看当前是否已有结果。浏览器下没有文件存储，一律不给入口。
+ */
+export function canSaveNodeMedia(node: CanvasNode | undefined): boolean {
+  if (!node || !isTauriRuntime()) return false;
+  if (node.type === 'image' || node.type === 'video') return Boolean(node.filePath);
+  if (node.type === 'imagegen') return (node.imageGenResults?.length ?? 0) > 0;
+  return false;
+}
+
 /** 菜单只发意图，具体落库由 `useNodeActions` / App 负责。 */
 export interface CanvasContextMenuActions {
   createNode: (nodeType: 'text' | 'theme' | 'imagegen', at: CanvasPoint) => void;
@@ -27,7 +41,6 @@ export interface CanvasContextMenuActions {
   editNode: (nodeId: string) => void;
   duplicateNode: (nodeId: string) => void;
   startLink: (nodeId: string) => void;
-  cycleLayout: (nodeId: string) => void;
   toggleSelect: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
   deleteEdge: (edgeId: string) => void;
@@ -35,6 +48,16 @@ export interface CanvasContextMenuActions {
   linkNodesToHub: (nodeIds: string[], hubId: string) => void;
   /** 生图节点：把当前结果输出成独立的 image 节点并连线。 */
   outputAsImageNode: (nodeId: string) => void;
+  /** 图片/视频/生图结果：另存到用户选定的位置。 */
+  saveNodeMediaAs: (nodeId: string) => void;
+  /** 连线拖到空白处：建一张卡并从 `fromId` 连过去。 */
+  createNodeLinkedFrom: (
+    nodeType: 'text' | 'theme' | 'imagegen',
+    at: CanvasPoint,
+    fromId: string,
+  ) => void;
+  /** 连线拖到空白处：插入文件建卡并从 `fromId` 连过去。 */
+  insertFileLinkedFrom: (accept: string, at: CanvasPoint, fromId: string) => void;
   synthesizeSelected: () => void;
   clearSelection: () => void;
   deleteNodes: (nodeIds: string[]) => void;
@@ -188,12 +211,13 @@ export function CanvasContextMenu({
           onSelect: () => actions.outputAsImageNode(nodeId),
         });
       }
-      if (nodeSupportsCycleLayout(nodeType)) {
+      // 图片/视频有原件、生图节点有结果时给「另存为」；浏览器下没有文件存储，不出现
+      if (canSaveNodeMedia(node)) {
         primary.push({
-          id: 'cycle-layout',
-          label: t('canvas.cycle_layout'),
-          icon: SlidersHorizontal,
-          onSelect: () => actions.cycleLayout(nodeId),
+          id: 'save-as',
+          label: t('canvas.menu.save_as'),
+          icon: Download,
+          onSelect: () => actions.saveNodeMediaAs(nodeId),
         });
       }
       primary.push({
@@ -216,6 +240,31 @@ export function CanvasContextMenu({
               onSelect: () => actions.deleteNode(nodeId),
             },
           ],
+        },
+      ];
+    }
+
+    if (menu.target.kind === 'link-drop') {
+      const fromId = menu.target.fromId;
+      return [
+        {
+          id: 'link-create',
+          entries: CANVAS_CREATE_ITEMS.map((item) => ({
+            id: `link-create-${item.id}`,
+            label: t(item.labelKey),
+            icon: item.icon,
+            accent: item.accent,
+            onSelect: () => actions.createNodeLinkedFrom(item.nodeType, at, fromId),
+          })),
+        },
+        {
+          id: 'link-insert',
+          entries: CANVAS_INSERT_ITEMS.map((item) => ({
+            id: `link-insert-${item.id}`,
+            label: t(item.labelKey),
+            icon: item.icon,
+            onSelect: () => actions.insertFileLinkedFrom(item.accept, at, fromId),
+          })),
         },
       ];
     }

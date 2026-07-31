@@ -26,27 +26,27 @@ export function StorageSettingsTab() {
 
   if (!inDesktopApp) {
     return (
-      <p className="text-[11px] text-[#8c8a84] leading-relaxed">{t('settings.storage_desktop_only')}</p>
+      <p className="text-[11px] text-app-text-faint leading-relaxed">{t('settings.storage_desktop_only')}</p>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="p-4 rounded-xl border border-[#E6E4DF] bg-[#FAF9F6] space-y-3">
+      <div className="p-4 rounded-xl border border-app-border bg-app-surface space-y-3">
         <div className="flex gap-3">
-          <div className="w-9 h-9 rounded-lg bg-[#C2410C]/10 border border-[#C2410C]/20 flex items-center justify-center text-[#C2410C] shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-app-accent/10 border border-app-accent/20 flex items-center justify-center text-app-accent shrink-0">
             <HardDrive className="w-4 h-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-mono font-bold text-[#8c8a84] uppercase tracking-wider">
+            <p className="text-[10px] font-mono font-bold text-app-text-faint uppercase tracking-wider">
               {t('settings.storage_root')}
             </p>
             {error ? (
-              <p className="text-[11px] text-[#C2410C] mt-1">{t('settings.storage_read_failed')}</p>
+              <p className="text-[11px] text-app-accent mt-1">{t('settings.storage_read_failed')}</p>
             ) : info ? (
               <>
-                <p className="text-[11px] font-mono text-[#1a1a1a] mt-1 break-all">{info.root}</p>
-                <p className="text-[11px] text-[#5a5a54] mt-1">
+                <p className="text-[11px] font-mono text-app-text mt-1 break-all">{info.root}</p>
+                <p className="text-[11px] text-app-text-muted mt-1">
                   {t('settings.storage_usage', {
                     size: formatBytes(info.bytes),
                     count: info.count,
@@ -54,7 +54,7 @@ export function StorageSettingsTab() {
                 </p>
               </>
             ) : (
-              <p className="text-[11px] text-[#8c8a84] mt-1 flex items-center gap-1.5">
+              <p className="text-[11px] text-app-text-faint mt-1 flex items-center gap-1.5">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 {t('settings.storage_loading')}
               </p>
@@ -63,8 +63,8 @@ export function StorageSettingsTab() {
         </div>
 
         {info?.fallback && (
-          <div className="flex gap-2 text-[11px] text-[#5a5a54] leading-relaxed bg-white border border-[#E6E4DF] rounded-lg p-2.5">
-            <AlertTriangle className="w-3.5 h-3.5 text-[#C2410C] shrink-0 mt-0.5" />
+          <div className="flex gap-2 text-[11px] text-app-text-muted leading-relaxed bg-app-surface-raised border border-app-border rounded-lg p-2.5">
+            <AlertTriangle className="w-3.5 h-3.5 text-app-accent shrink-0 mt-0.5" />
             {/* 安装目录写不进去（多半是装到了 Program Files），已回退 */}
             <span>{t('settings.storage_fallback_hint')}</span>
           </div>
@@ -73,7 +73,7 @@ export function StorageSettingsTab() {
         <button
           type="button"
           onClick={() => void mediaOpenRoot()}
-          className="w-full flex items-center justify-center gap-2 h-10 px-4 rounded-lg border border-[#C2410C]/40 bg-[#C2410C]/5 text-[#C2410C] text-sm font-bold hover:bg-[#C2410C]/10 transition-colors"
+          className="w-full flex items-center justify-center gap-2 h-10 px-4 rounded-lg border border-app-accent/40 bg-app-accent/5 text-app-accent text-sm font-bold hover:bg-app-accent/10 transition-colors"
         >
           <FolderOpen className="w-4 h-4" />
           {t('settings.storage_open_folder')}
@@ -82,7 +82,7 @@ export function StorageSettingsTab() {
 
       <MediaAssetManager />
 
-      <p className="text-[10px] text-[#8c8a84] leading-relaxed">{t('settings.storage_blurb')}</p>
+      <p className="text-[10px] text-app-text-faint leading-relaxed">{t('settings.storage_blurb')}</p>
     </div>
   );
 }

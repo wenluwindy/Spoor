@@ -2,12 +2,18 @@ import { useCallback, useEffect, useState, type RefObject } from 'react';
 import { screenToCanvasPosition, type CanvasViewTransform } from '../utils/canvas';
 import { isTextEditingTarget } from '../utils/noteClipboard';
 
-/** 右键落在什么上。`nodes` 为多选态（S5 起使用），`anchorId` 是实际被右键的那个节点。 */
+/**
+ * 右键落在什么上。`nodes` 为多选态（S5 起使用），`anchorId` 是实际被右键的那个节点。
+ *
+ * `link-drop` 不是右键触发的：从卡片出口拖出的连线松手在空白处时复用同一套菜单，
+ * 让用户当场建一张卡并自动连上，而不是让线凭空消失。
+ */
 export type CanvasContextTarget =
   | { kind: 'canvas' }
   | { kind: 'node'; nodeId: string }
   | { kind: 'nodes'; nodeIds: string[]; anchorId: string }
-  | { kind: 'edge'; edgeId: string };
+  | { kind: 'edge'; edgeId: string }
+  | { kind: 'link-drop'; fromId: string };
 
 export interface CanvasContextMenuState {
   /** 视口坐标，用于摆放菜单本身（菜单是 fixed，不受画布 transform 影响）。 */

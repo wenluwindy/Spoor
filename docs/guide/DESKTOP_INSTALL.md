@@ -24,8 +24,8 @@
 ### 方式 A — GitHub Actions（推荐，需账户 Actions 可用）
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 推送 `v*` 标签后，[`.github/workflows/release-desktop.yml`](../.github/workflows/release-desktop.yml) 会自动构建并上传 `Spoor_*_x64-setup.exe`。
@@ -43,7 +43,7 @@ scripts\tauri-build-release.cmd
 
 产物：
 
-- `src-tauri\target\release\bundle\nsis\Spoor_0.1.0_x64-setup.exe`
+- `src-tauri\target\release\bundle\nsis\Spoor_0.2.0_x64-setup.exe`
 
 把该文件上传到 GitHub Releases 即可。
 

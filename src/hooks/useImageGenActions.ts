@@ -16,6 +16,10 @@ import { buildImageGenPrompt, collectImageGenInputs } from '../utils/imageGenInp
  * 那张卡会永远卡在转圈上。放内存里，重启即回到可重试的状态。
  */
 
+/** 结果卡片相对生图节点的落点：右侧一屏宽，多张依次下移。 */
+const RESULT_CARD_OFFSET_X = 380;
+const RESULT_CARD_STAGGER_Y = 300;
+
 export interface UseImageGenActionsParams {
   aiConfig: AIConfigV2;
   activeCanvasId: string;
@@ -90,6 +94,41 @@ export function useImageGenActions({
           imageGenProviderId: target.provider.id,
           imageGenModelId: target.model.id,
         });
+
+        // 每次成功生成都在右侧留一张结果卡片并连线，画布上因此形成一条可见的生成脉络。
+        // 已有几张就往下错开几行，避免叠在一起。
+        const existingResultCards = await db.nodes
+          .where('canvasId')
+          .equals(activeCanvasId)
+          .filter((n) => n.type === 'image' && Boolean(n.imageGenMeta))
+          .toArray();
+        const siblings = existingResultCards.filter((card) =>
+          edges.some((e) => e.from === nodeId && e.to === card.id),
+        ).length;
+
+        const resultId = crypto.randomUUID();
+        await db.nodes.add({
+          id: resultId,
+          canvasId: activeCanvasId,
+          type: 'image',
+          filePath: results[0],
+          x: node.x + RESULT_CARD_OFFSET_X,
+          y: node.y + siblings * RESULT_CARD_STAGGER_Y,
+          imageGenMeta: {
+            prompt,
+            providerName: target.provider.name,
+            modelName: target.model.label || target.model.modelName,
+            size: node.imageGenParams?.size ?? target.model.defaultParams?.size,
+            refPaths: inputs.refImages.map((r) => r.spec),
+            createdAt: Date.now(),
+          },
+        });
+        await db.edges.add({
+          id: crypto.randomUUID(),
+          canvasId: activeCanvasId,
+          from: nodeId,
+          to: resultId,
+        });
       } catch (e) {
         const failure = isImageGenFailure(e) ? e : { code: 'unknown', detail: String(e) };
         await db.nodes.update(nodeId, {
@@ -105,7 +144,7 @@ export function useImageGenActions({
         });
       }
     },
-    [aiConfig, edges, generatingNodeIds, markGenerating, nodes],
+    [activeCanvasId, aiConfig, edges, generatingNodeIds, markGenerating, nodes],
   );
 
   const cancel = useCallback(

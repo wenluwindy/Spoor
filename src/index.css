@@ -5,6 +5,136 @@
   --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-newsreader: 'Newsreader', ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+
+  /*
+   * 应用级设计令牌。默认值 = 「纸感」主题，也就是加入主题系统之前全站硬编码的那套色。
+   *
+   * 这里声明的是 Tailwind 颜色，所以 `bg-app-surface` / `text-app-text` /
+   * `border-app-border` 这类工具类可直接用，透明度修饰符（`bg-app-accent/5`）
+   * 由 Tailwind 自己走 color-mix，不必额外处理。
+   * 换肤靠下面的 `html[data-theme=...]` 覆盖同名变量——工具类引用的是变量本身，
+   * 所以覆盖立即穿透到全站。
+   */
+  --color-app-surface: #FAF9F6;
+  --color-app-surface-subtle: #F4F1ED;
+  --color-app-surface-sunken: #EAE7E2;
+  --color-app-surface-raised: #FFFFFF;
+
+  --color-app-border: #E6E4DF;
+  --color-app-grid: #D1CFCA;
+  --color-app-edge: #B6B2A9;
+  --color-app-ink: #1B1B1C;
+
+  --color-app-text: #1A1A1A;
+  --color-app-text-soft: #4A4A44;
+  --color-app-text-muted: #5A5A54;
+  --color-app-text-faint: #8C8A84;
+  --color-app-text-dim: #B0AEA8;
+
+  --color-app-accent: #C2410C;
+  --color-app-accent-hover: #A0350A;
+  --color-app-accent-deep: #9A3412;
+  --color-app-accent-wash: #FFF7ED;
+
+  /* 毛玻璃罩色：磨砂面板叠在画布之上的那层纱。深色主题下必须换成暗纱，否则整块发白。 */
+  --color-app-glass-veil: rgba(255, 255, 255, 0.42);
+
+  /* 反相面：主按钮、深色主题卡这类「与正文底色相反」的实心块。深色主题下会翻过来。 */
+  --color-app-inverse: #1A1A1A;
+  --color-app-inverse-hover: #333333;
+  --color-app-on-inverse: #FFFFFF;
+}
+
+/*
+ * 主题覆盖。用 `html[data-theme=...]`（0,1,1）而非 `[data-theme=...]`（0,1,0），
+ * 是为了稳压 Tailwind 发到 `:root` 上的默认值，不依赖 CSS 源码顺序。
+ * `syncDocumentTheme` 负责把当前主题写到 <html data-theme>。
+ */
+html[data-theme='midnight'] {
+  --color-app-surface: #17161A;
+  --color-app-surface-subtle: #201F26;
+  --color-app-surface-sunken: #2A2833;
+  --color-app-surface-raised: #232128;
+
+  --color-app-border: #33313D;
+  --color-app-grid: #322F3B;
+  --color-app-edge: #635E75;
+  --color-app-ink: #E8E5F0;
+
+  --color-app-text: #F5F3EF;
+  --color-app-text-soft: #C4C0B8;
+  --color-app-text-muted: #B3AFA7;
+  --color-app-text-faint: #85817A;
+  --color-app-text-dim: #6E6A64;
+
+  --color-app-accent: #E2703A;
+  --color-app-accent-hover: #F08A54;
+  --color-app-accent-deep: #C25A28;
+  --color-app-accent-wash: #2A211C;
+
+  --color-app-glass-veil: rgba(28, 26, 34, 0.58);
+
+  --color-app-inverse: #F5F3EF;
+  --color-app-inverse-hover: #E0DDD6;
+  --color-app-on-inverse: #17161A;
+}
+
+html[data-theme='minimal'] {
+  --color-app-surface: #FFFFFF;
+  --color-app-surface-subtle: #F7F7F8;
+  --color-app-surface-sunken: #EFEFF1;
+  --color-app-surface-raised: #FFFFFF;
+
+  --color-app-border: #E4E4E7;
+  --color-app-grid: #D8D8DC;
+  --color-app-edge: #ACACB5;
+  --color-app-ink: #18181B;
+
+  --color-app-text: #18181B;
+  --color-app-text-soft: #3F3F46;
+  --color-app-text-muted: #52525B;
+  --color-app-text-faint: #A1A1AA;
+  --color-app-text-dim: #C4C4CA;
+
+  --color-app-accent: #3F3F46;
+  --color-app-accent-hover: #27272A;
+  --color-app-accent-deep: #18181B;
+  --color-app-accent-wash: #F4F4F5;
+
+  --color-app-glass-veil: rgba(255, 255, 255, 0.5);
+
+  --color-app-inverse: #18181B;
+  --color-app-inverse-hover: #3F3F46;
+  --color-app-on-inverse: #FFFFFF;
+}
+
+html[data-theme='neo'] {
+  --color-app-surface: #FFFDF5;
+  --color-app-surface-subtle: #FFF4CC;
+  --color-app-surface-sunken: #FFE8A3;
+  --color-app-surface-raised: #FFFFFF;
+
+  --color-app-border: #1B1B1C;
+  --color-app-grid: #D9D3BC;
+  --color-app-edge: #1B1B1C;
+  --color-app-ink: #1B1B1C;
+
+  --color-app-text: #1B1B1C;
+  --color-app-text-soft: #2E2C28;
+  --color-app-text-muted: #3F3D38;
+  --color-app-text-faint: #6B6862;
+  --color-app-text-dim: #918D84;
+
+  --color-app-accent: #E8590C;
+  --color-app-accent-hover: #C2410C;
+  --color-app-accent-deep: #A0350A;
+  --color-app-accent-wash: #FFF0E0;
+
+  --color-app-glass-veil: rgba(255, 255, 255, 0.45);
+
+  --color-app-inverse: #1B1B1C;
+  --color-app-inverse-hover: #3A3A3C;
+  --color-app-on-inverse: #FFFFFF;
 }
 
 @layer base {
@@ -39,47 +169,44 @@
   }
   .canvas-grid {
     background-size: 24px 24px;
-    background-image: radial-gradient(#d1cfca 1px, transparent 1px);
+    background-image: radial-gradient(var(--color-app-grid) 1px, transparent 1px);
   }
   .node-connector {
-    stroke: #d1cfca;
+    stroke: var(--color-app-edge);
     opacity: 1;
     stroke-width: 2;
   }
   
   /* Style the node itself if it has background or allow children to override */
   /* Opaque palette on the draggable root — except glass notes: solid bg kills backdrop-filter (blur would only see flat color). */
-  [style*="--node-bg"]:not([data-glass-surface]), [style*="--node-bg"] .bg-white, [style*="--node-bg"] .bg-\[\#F4F1ED\], [style*="--node-bg"] .bg-\[\#EAE7E2\], [style*="--node-bg"] .bg-\[\#fcf8f9\] {
+  [style*="--node-bg"]:not([data-glass-surface]), [style*="--node-bg"] .bg-app-surface-raised, [style*="--node-bg"] .bg-app-surface-subtle, [style*="--node-bg"] .bg-app-surface-sunken, [style*="--node-bg"] .bg-\[\#fcf8f9\] {
     background-color: var(--node-bg) !important;
     border-color: var(--node-border, currentColor) !important;
   }
 
   [style*="--node-bg"] .neo-brut-surface {
-    border-color: color-mix(in srgb, var(--node-border, #1b1b1c) 38%, #1b1b1c) !important;
+    border-color: color-mix(in srgb, var(--node-border, var(--color-app-ink)) 38%, var(--color-app-ink)) !important;
   }
 
-  .note-surface-receipt {
-    --note-paper: color-mix(in srgb, var(--node-bg, #fcf8f9) 88%, white 12%);
-  }
 
   /* Frosted pane samples the canvas behind the node; tint comes from semi-transparent --node-bg / --node-border (see data-glass-surface on root). */
   .note-surface-glass {
     -webkit-backdrop-filter: blur(14px) saturate(1.35);
     backdrop-filter: blur(14px) saturate(1.35);
-    background-color: color-mix(in srgb, var(--node-bg, #ffffff) 24%, rgba(255, 255, 255, 0.42)) !important;
+    background-color: color-mix(in srgb, var(--node-bg, var(--color-app-surface-raised)) 24%, var(--color-app-glass-veil)) !important;
     box-shadow:
-      0 0 34px color-mix(in srgb, var(--node-border, #c2410c) 34%, transparent),
-      0 0 16px color-mix(in srgb, var(--node-bg, #c2410c) 16%, transparent),
-      inset 0 0 0 1px color-mix(in srgb, var(--node-border, #c2410c) 34%, transparent);
+      0 0 34px color-mix(in srgb, var(--node-border, var(--color-app-accent)) 34%, transparent),
+      0 0 16px color-mix(in srgb, var(--node-bg, var(--color-app-accent)) 16%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, var(--node-border, var(--color-app-accent)) 34%, transparent);
   }
 
   .note-glass-wash {
     background: linear-gradient(
       to bottom right,
-      color-mix(in srgb, var(--node-bg, #c2410c) 38%, transparent),
+      color-mix(in srgb, var(--node-bg, var(--color-app-accent)) 38%, transparent),
       color-mix(
         in srgb,
-        color-mix(in srgb, var(--node-bg, #fdba74) 40%, white) 28%,
+        color-mix(in srgb, var(--node-bg, var(--color-app-accent-hover)) 40%, white) 28%,
         transparent
       ),
       transparent 68%
@@ -103,7 +230,7 @@
   .note-glass-hotspot {
     background: radial-gradient(
       ellipse at top left,
-      color-mix(in srgb, color-mix(in srgb, var(--node-bg, #ffedd5) 50%, white) 48%, transparent),
+      color-mix(in srgb, color-mix(in srgb, var(--node-bg, var(--color-app-accent-wash)) 50%, white) 48%, transparent),
       transparent 65%
     );
   }
@@ -120,8 +247,8 @@
   .intent-clarify-glass {
     -webkit-backdrop-filter: blur(18px) saturate(1.45);
     backdrop-filter: blur(18px) saturate(1.45);
-    background: color-mix(in srgb, #faf9f6 28%, rgba(255, 255, 255, 0.48));
-    border: 1px solid color-mix(in srgb, #e6e4df 42%, rgba(255, 255, 255, 0.75));
+    background: color-mix(in srgb, var(--color-app-surface) 28%, var(--color-app-glass-veil));
+    border: 1px solid color-mix(in srgb, var(--color-app-border) 42%, rgba(255, 255, 255, 0.75));
     box-shadow:
       0 8px 32px rgba(26, 26, 26, 0.07),
       0 2px 8px rgba(26, 26, 26, 0.04),
@@ -148,12 +275,9 @@
     opacity: 0.85;
   }
 
-  .note-receipt-paper {
-    background-color: var(--note-paper) !important;
-  }
 
   .note-chrome {
-    color: #c2410c;
+    color: var(--color-app-accent);
   }
 
   [data-node-tone="dark"] .note-chrome {
@@ -164,46 +288,16 @@
     color: #ffffff !important;
   }
 
-  .note-receipt-chrome {
-    color: #2c281f;
-    text-shadow: 0 0 1px rgba(44, 40, 31, 0.2);
-    border-color: color-mix(in srgb, var(--node-border, #c7c5d4) 70%, #c7c5d4) !important;
-  }
 
-  [data-node-tone="dark"] .note-receipt-chrome {
-    color: rgb(255 250 245 / 0.9) !important;
-    text-shadow: none;
-    border-color: rgb(255 255 255 / 0.22) !important;
-  }
 
-  [data-node-tone="dark"] .receipt-barcode {
-    filter: invert(1) brightness(1.05);
-    opacity: 0.75;
-  }
 
-  .receipt-jagged-top {
-    height: 12px;
-    width: 100%;
-    background: linear-gradient(-45deg, transparent 6px, var(--note-paper, #fcf8f9) 6px) bottom left,
-      linear-gradient(45deg, transparent 6px, var(--note-paper, #fcf8f9) 6px) bottom left;
-    background-size: 12px 12px;
-    background-repeat: repeat-x;
-  }
-  .receipt-jagged-bottom {
-    height: 12px;
-    width: 100%;
-    background: linear-gradient(-45deg, var(--note-paper, #fcf8f9) 6px, transparent 6px) top right,
-      linear-gradient(45deg, var(--note-paper, #fcf8f9) 6px, transparent 6px) top right;
-    background-size: 12px 12px;
-    background-repeat: repeat-x;
-  }
 
   [style*="--node-text"] *:not(.node-palette):not(.node-palette *):not(.note-chrome):not(.note-chrome *) {
     color: var(--node-text) !important;
   }
 
   .note-chrome-muted {
-    color: #8c8a84;
+    color: var(--color-app-text-faint);
   }
 
   [data-node-tone="dark"] .note-chrome-muted {
@@ -211,7 +305,7 @@
   }
 
   .note-chrome.neo-brut-badge {
-    background-color: #1b1b1c !important;
+    background-color: var(--color-app-ink) !important;
     color: #ffffff !important;
   }
 
@@ -221,19 +315,30 @@
     text-shadow: none;
   }
 
-  [data-node-tone="dark"] .note-receipt-markdown .markdown-body,
-  [data-node-tone="dark"] .note-receipt-markdown .markdown-body :where(h1, h2, h3) {
-    color: var(--node-text) !important;
-    text-shadow: none;
-  }
 
-  [data-node-tone="dark"] .note-receipt-watermark {
-    color: rgb(255 255 255 / 0.08) !important;
-  }
 
   [style*="--node-font"], [style*="--node-font"] *:not(.node-palette):not(.node-palette *) {
     font-family: var(--node-font) !important;
   }
+  /*
+   * 夜幕专属修正：这些不是换个颜色变量就能解决的。
+   * - 纸纹用 soft-light 混合，铺在深底上只会把画布洗灰，直接关掉
+   * - Tailwind 的 shadow-* 是黑色投影，在深底上等于不存在；补一圈亮色描边
+   *   让浮层仍与背景分层
+   */
+  html[data-theme='midnight'] .paper-texture {
+    background-image: none;
+  }
+
+  html[data-theme='midnight'] .shadow-md,
+  html[data-theme='midnight'] .shadow-lg,
+  html[data-theme='midnight'] .shadow-xl,
+  html[data-theme='midnight'] .shadow-2xl {
+    box-shadow:
+      0 10px 30px rgba(0, 0, 0, 0.55),
+      0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
@@ -249,57 +354,26 @@
   .markdown-body ul { @apply list-disc pl-5 mb-3; }
   .markdown-body ol { @apply list-decimal pl-5 mb-3; }
   .markdown-body li { @apply mb-1; }
-  .markdown-body code { @apply bg-black/5 rounded px-1 font-mono text-[0.9em]; }
-  .markdown-body pre { @apply bg-black/5 rounded p-3 mb-3 overflow-x-auto; }
-  .markdown-body blockquote { @apply border-l-4 border-black/10 pl-4 italic mb-3; }
+  .markdown-body code { @apply bg-app-ink/5 rounded px-1 font-mono text-[0.9em]; }
+  .markdown-body pre { @apply bg-app-ink/5 rounded p-3 mb-3 overflow-x-auto; }
+  .markdown-body blockquote { @apply border-l-4 border-app-ink/10 pl-4 italic mb-3; }
 
   .note-glass-markdown .markdown-body {
-    @apply font-sans text-[18px] font-normal leading-[1.6] text-[#464652];
+    @apply font-sans text-[18px] font-normal leading-[1.6] text-app-text;
   }
   .note-glass-markdown .markdown-body :where(h1, h2, h3) {
-    @apply text-[#1b1b1c] font-newsreader;
+    @apply text-app-ink font-newsreader;
   }
   .note-glass-markdown .markdown-body h1 { @apply text-2xl font-semibold mb-3 mt-0; }
   .note-glass-markdown .markdown-body h2 { @apply text-xl font-semibold mb-2 mt-4; }
   .note-glass-markdown .markdown-body h3 { @apply text-lg font-semibold mb-2 mt-3; }
 
-  .note-receipt-markdown .markdown-body {
-    @apply font-mono text-[13px] leading-[1.4] text-[#2c281f];
-    text-shadow: 0 0 1px rgba(44, 40, 31, 0.2);
-  }
-  .note-receipt-markdown .markdown-body :where(h1, h2, h3) {
-    @apply font-semibold text-[#1b1b1c];
-    text-shadow: 0 0 1px rgba(44, 40, 31, 0.2);
-  }
-  .note-receipt-markdown .markdown-body h1 { @apply text-lg mb-2 mt-1; }
-  .note-receipt-markdown .markdown-body h2 { @apply text-base mb-2 mt-3; }
-  .note-receipt-markdown .markdown-body h3 { @apply text-sm mb-1 mt-2; }
-  .note-receipt-markdown .markdown-body p { @apply mb-3 leading-relaxed; }
-  .note-receipt-markdown .markdown-body a { @apply text-[#44664e] underline; }
 
-  .receipt-note-shadow {
-    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.1), 0 10px 15px -5px rgba(0, 0, 0, 0.05),
-      5px 0 15px -5px rgba(0, 0, 0, 0.02), -5px 0 15px -5px rgba(0, 0, 0, 0.02);
-  }
-  .receipt-barcode {
-    height: 40px;
-    width: 100%;
-    background-image: repeating-linear-gradient(
-      90deg,
-      #1b1b1c,
-      #1b1b1c 2px,
-      transparent 2px,
-      transparent 4px,
-      #1b1b1c 4px,
-      #1b1b1c 5px,
-      transparent 5px,
-      transparent 8px,
-      #1b1b1c 8px,
-      #1b1b1c 12px,
-      transparent 12px,
-      transparent 14px
-    );
-  }
+
+
+
+
+
 
   .doc-content h1 { font-size: 1.5em; font-weight: bold; margin: 0.8em 0 0.4em; }
   .doc-content h2 { font-size: 1.3em; font-weight: bold; margin: 0.6em 0 0.3em; }
@@ -309,8 +383,8 @@
   .doc-content ol { list-style: decimal; padding-left: 1.5em; margin: 0 0 0.8em; }
   .doc-content li { margin: 0.2em 0; }
   .doc-content table { border-collapse: collapse; width: 100%; margin: 0 0 0.8em; }
-  .doc-content th, .doc-content td { border: 1px solid #E6E4DF; padding: 0.4em 0.6em; text-align: left; }
-  .doc-content th { background: #F4F1ED; font-weight: bold; }
-  .doc-content blockquote { border-left: 3px solid #E6E4DF; padding-left: 1em; margin: 0 0 0.8em; font-style: italic; }
-  .doc-content a { color: #C2410C; text-decoration: underline; }
+  .doc-content th, .doc-content td { border: 1px solid var(--color-app-border); padding: 0.4em 0.6em; text-align: left; }
+  .doc-content th { background: var(--color-app-surface-subtle); font-weight: bold; }
+  .doc-content blockquote { border-left: 3px solid var(--color-app-border); padding-left: 1em; margin: 0 0 0.8em; font-style: italic; }
+  .doc-content a { color: var(--color-app-accent); text-decoration: underline; }
 }

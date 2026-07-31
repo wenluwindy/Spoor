@@ -6,8 +6,6 @@ import { getCanvasCenterPosition } from '../utils/canvas';
 import { readFileContent } from '../utils/file';
 import { importFileToNodeData, importPathToNodeData } from '../services/fileImport';
 import { isTauriRuntime } from '../utils/isTauriRuntime';
-import { nodeSupportsCycleLayout } from '../constants/nodeCapabilities';
-import { NOTE_LAYOUT_COUNT } from '../constants/noteLayouts';
 import { isStickyNoteType, type StickyClipboardPayloadV1 } from '../utils/noteClipboard';
 
 export interface CanvasPoint {
@@ -18,7 +16,6 @@ export interface CanvasPoint {
 /** 同一次插入多个文件时，逐个错开一点，避免完全重叠。 */
 const MULTI_INSERT_STAGGER = 20;
 /** 主题卡以外的版式轮换档数（见 `nodeCapabilities` 注释）。 */
-const THEME_LAYOUT_COUNT = 4;
 
 interface UseNodeActionsParams {
   activeCanvasId: string;
@@ -116,39 +113,71 @@ export function useNodeActions({
 
   const addTextNode = async (at?: CanvasPoint) => {
     const { x, y } = resolvePosition(at);
-    await db.nodes.add({ id: crypto.randomUUID(), canvasId: activeCanvasId, type: 'text', content: '', x, y });
+    const id = crypto.randomUUID();
+    await db.nodes.add({ id, canvasId: activeCanvasId, type: 'text', content: '', x, y });
+    return id;
   };
 
   const addThemeNode = async (at?: CanvasPoint) => {
     const { x, y } = resolvePosition(at);
+    const id = crypto.randomUUID();
     await db.nodes.add({
-      id: crypto.randomUUID(),
+      id,
       canvasId: activeCanvasId,
       type: 'theme',
       content: i18n.t('nodes.new_theme_title'),
       x,
       y,
     });
+    return id;
   };
 
   /** 生图节点：建出来是空的，连上图片/文本或直接填提示词后再生成。 */
   const addImageGenNode = async (at?: CanvasPoint) => {
     const { x, y } = resolvePosition(at);
+    const id = crypto.randomUUID();
     await db.nodes.add({
-      id: crypto.randomUUID(),
+      id,
       canvasId: activeCanvasId,
       type: 'imagegen',
       x,
       y,
       width: 340,
     });
+    return id;
   };
 
-  /** 供右键菜单按 `CanvasCreateItemDef.nodeType` 统一分发。 */
+  /** 供右键菜单按 `CanvasCreateItemDef.nodeType` 统一分发。返回新节点 id。 */
   const createNodeAt = async (nodeType: 'text' | 'theme' | 'imagegen', at?: CanvasPoint) => {
-    if (nodeType === 'theme') await addThemeNode(at);
-    else if (nodeType === 'imagegen') await addImageGenNode(at);
-    else await addTextNode(at);
+    if (nodeType === 'theme') return addThemeNode(at);
+    if (nodeType === 'imagegen') return addImageGenNode(at);
+    return addTextNode(at);
+  };
+
+  /** 从 `fromId` 连一条边到 `toId`；已存在同一对端点的边时跳过。 */
+  const linkNodes = async (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    const exists = await db.edges
+      .filter((e) => (e.from === fromId && e.to === toId) || (e.from === toId && e.to === fromId))
+      .first();
+    if (exists) return;
+    await db.edges.add({ id: crypto.randomUUID(), canvasId: activeCanvasId, from: fromId, to: toId });
+  };
+
+  /**
+   * 连线拖到空白处后选了「新建 X」：建卡并立刻把线接上。
+   *
+   * 这样一次拖拽就完成「我想从这里引出一个新想法」，而不是先取消连线、
+   * 再右键建卡、再重新连一次。
+   */
+  const createNodeAtLinkedFrom = async (
+    nodeType: 'text' | 'theme' | 'imagegen',
+    at: CanvasPoint,
+    fromId: string,
+  ) => {
+    const newId = await createNodeAt(nodeType, at);
+    if (newId) await linkNodes(fromId, newId);
+    return newId;
   };
 
   const addAgentNodeAt = async (agentConfigId: string, at?: CanvasPoint) => {
@@ -177,23 +206,27 @@ export function useNodeActions({
 
   /** 落库多个文件，首个放在 `at`，其余依次错开。 */
   const insertFilesAt = async (files: File[], at?: CanvasPoint) => {
-    if (files.length === 0) return;
+    const created: string[] = [];
+    if (files.length === 0) return created;
     const origin = resolvePosition(at);
     for (let index = 0; index < files.length; index++) {
       const file = files[index];
       try {
         const data = await buildNodeDataForFile(file);
+        const id = crypto.randomUUID();
         await db.nodes.add({
-          id: crypto.randomUUID(),
+          id,
           canvasId: activeCanvasId,
           ...data,
           x: origin.x + index * MULTI_INSERT_STAGGER,
           y: origin.y + index * MULTI_INSERT_STAGGER,
         });
+        created.push(id);
       } catch (err) {
         console.error('Failed to process file:', file.name, err);
       }
     }
+    return created;
   };
 
   /**
@@ -203,22 +236,26 @@ export function useNodeActions({
    * Rust 直接 `fs::copy`，插一个 500MB 的视频也不会卡住界面。
    */
   const insertPathsAt = async (paths: string[], at?: CanvasPoint) => {
-    if (paths.length === 0) return;
+    const created: string[] = [];
+    if (paths.length === 0) return created;
     const origin = resolvePosition(at);
     for (let index = 0; index < paths.length; index++) {
       try {
         const data = await importPathToNodeData(paths[index], i18n.t('nodes.empty_document_body'));
+        const id = crypto.randomUUID();
         await db.nodes.add({
-          id: crypto.randomUUID(),
+          id,
           canvasId: activeCanvasId,
           ...data,
           x: origin.x + index * MULTI_INSERT_STAGGER,
           y: origin.y + index * MULTI_INSERT_STAGGER,
         });
+        created.push(id);
       } catch (err) {
         console.error('Failed to import file:', paths[index], err);
       }
     }
+    return created;
   };
 
   /** 复制一个节点的全部内容到旁边（不复制它的连线）。 */
@@ -233,13 +270,6 @@ export function useNodeActions({
       x: node.x + MULTI_INSERT_STAGGER,
       y: node.y + MULTI_INSERT_STAGGER,
     });
-  };
-
-  const cycleNodeLayout = async (id: string) => {
-    const node = await db.nodes.get(id);
-    if (!node || !nodeSupportsCycleLayout(node.type)) return;
-    const cycleMod = isStickyNoteType(node.type) ? NOTE_LAYOUT_COUNT : THEME_LAYOUT_COUNT;
-    await db.nodes.update(id, { layout: ((node.layout ?? 0) + 1) % cycleMod });
   };
 
   /** 按剪贴板负载建便签；保留多张之间的相对位置，整体落到 `at`。 */
@@ -271,11 +301,12 @@ export function useNodeActions({
     addThemeNode,
     addImageGenNode,
     createNodeAt,
+    createNodeAtLinkedFrom,
+    linkNodes,
     addAgentNodeAt,
     insertFilesAt,
     insertPathsAt,
     duplicateNode,
-    cycleNodeLayout,
     pasteStickyAt,
     clearSelection,
     deleteNodes,

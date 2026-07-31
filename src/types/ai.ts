@@ -1,4 +1,4 @@
-import type { AIConfig } from './components/AISettingsModal';
+import type { AIConfig } from '../components/AISettingsModal';
 
 export type CallAIFn = (params: {
   config: AIConfig;

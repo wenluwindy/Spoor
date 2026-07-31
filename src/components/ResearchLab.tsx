@@ -5,7 +5,9 @@ import { formatAiError } from '../services/ai';
 import { getLocaleDirective } from '../utils/aiI18n';
 import { parseLenientLlmJson } from '../utils/llmJson';
 import { openExternalUrl } from '../utils/openExternal';
-import { metasoSearch, buildSearchContext } from '../services/search';
+import { webSearch, buildSearchContext } from '../services/search';
+import { DEFAULT_SEARCH_PROVIDER } from '../constants/searchProviders';
+import type { SearchProviderKind } from '../types/aiConfig';
 import {
   db,
   type ResearchSession,
@@ -28,7 +30,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import type { CallAIFn } from '../types';
+import type { CallAIFn } from '../types/ai';
 import { useAppDialog } from './AppDialogProvider';
 import { Tooltip } from './ui/Tooltip';
 
@@ -52,7 +54,7 @@ function researchPlanFallback(t: TranslateFn): ResearchPlanStep[] {
 
 const RESEARCH_HISTORY_LIMIT = 50;
 
-function formatSessionListDate(createdAt: number, language: string): string {
+function formatSessionListDateLabel(createdAt: number, language: string): string {
   const d = new Date(createdAt);
   const now = Date.now();
   const diffMs = now - d.getTime();
@@ -132,7 +134,9 @@ export interface ResearchLabProps {
     apiKey: string;
     baseUrl: string;
     model: string;
-    metasoApiKey?: string;
+    /** 当前启用的搜索服务与它的 Key，由 `resolveSearchConfig` 压进扁平配置。 */
+    searchProvider?: SearchProviderKind;
+    searchApiKey?: string;
   };
   callAI: CallAIFn;
 }
@@ -252,11 +256,11 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
   };
 
   /**
-   * If Metaso key is set: run lightweight classifier once per session start; only search when need_web.
+   * If a search key is set: run lightweight classifier once per session start; only search when need_web.
    * If no key: no classifier; returns empty outcome (same as before).
    */
   const resolveWebSearchOutcome = async (searchQuery: string): Promise<WebSearchOutcome> => {
-    const apiKey = aiConfig.metasoApiKey?.trim();
+    const apiKey = aiConfig.searchApiKey?.trim();
     if (!apiKey) {
       return tryWebSearch(searchQuery);
     }
@@ -272,10 +276,10 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
   };
 
   /**
-   * Execute-phase search: reuse session classifier; skip Metaso when model chose reasoning-only.
+   * Execute-phase search: reuse session classifier; skip the search call when model chose reasoning-only.
    */
   const resolveWebSearchForExecute = async (searchQuery: string): Promise<WebSearchOutcome> => {
-    const apiKey = aiConfig.metasoApiKey?.trim();
+    const apiKey = aiConfig.searchApiKey?.trim();
     if (!apiKey) {
       return tryWebSearch(searchQuery);
     }
@@ -289,10 +293,11 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
   };
 
   /**
-   * Attempt a Metaso web search; returns context string and status for prompts and persistence.
+   * Attempt a web search with the active provider; returns context string and status
+   * for prompts and persistence.
    */
   const tryWebSearch = async (searchQuery: string): Promise<WebSearchOutcome> => {
-    const apiKey = aiConfig.metasoApiKey?.trim();
+    const apiKey = aiConfig.searchApiKey?.trim();
     if (!apiKey) {
       setSearchStatus('idle');
       setSourceCount(0);
@@ -302,7 +307,10 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
 
     setSearchStatus('searching');
     try {
-      const results = await metasoSearch(searchQuery, { apiKey });
+      const results = await webSearch(searchQuery, {
+        kind: aiConfig.searchProvider ?? DEFAULT_SEARCH_PROVIDER,
+        apiKey,
+      });
       const context = buildSearchContext(results);
       const webpages = (results.webpages ?? []).map((w) => ({
         title: String(w.title ?? ''),
@@ -497,32 +505,32 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
   };
 
   return (
-    <div className="flex-1 flex min-h-0 bg-[#FAF9F6] paper-texture text-[#1a1a1a] overflow-hidden">
+    <div className="flex-1 flex min-h-0 bg-app-surface paper-texture text-app-text overflow-hidden">
       {/* Side Panel: History & Status */}
-      <div className="w-64 border-r border-[#E6E4DF] flex flex-col bg-[#F4F1ED]/50 z-10 shrink-0">
+      <div className="w-64 border-r border-app-border flex flex-col bg-app-surface-subtle/50 z-10 shrink-0">
         <div className="flex-1 overflow-y-auto p-4">
            {phase === 'idle' ? (
              <>
-               <h3 className="font-sans text-xs font-bold text-[#8c8a84] uppercase tracking-wider mb-4">{t('lab.past_sessions')}</h3>
+               <h3 className="font-sans text-xs font-bold text-app-text-faint uppercase tracking-wider mb-4">{t('lab.past_sessions')}</h3>
                {pastSessions.length === 0 ? (
-                 <p className="text-xs text-[#8c8a84] font-sans leading-relaxed">{t('lab.no_past_sessions')}</p>
+                 <p className="text-xs text-app-text-faint font-sans leading-relaxed">{t('lab.no_past_sessions')}</p>
                ) : (
                  <div className="space-y-2">
                    {pastSessions.map((session) => (
                      <div
                        key={session.id}
-                       className="flex gap-0 rounded-lg border border-[#E6E4DF] bg-white shadow-sm overflow-hidden hover:border-[#C2410C]/45 transition-colors"
+                       className="flex gap-0 rounded-lg border border-app-border bg-app-surface-raised shadow-sm overflow-hidden hover:border-app-accent/45 transition-colors"
                      >
                        <button
                          type="button"
                          data-testid={`research-session-${session.id}`}
                          onClick={() => openHistorySession(session)}
-                         className="flex-1 min-w-0 text-left p-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C2410C]/25"
+                         className="flex-1 min-w-0 text-left p-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-app-accent/25"
                        >
-                         <div className="text-[#8c8a84] text-[10px] mb-1 font-sans">
-                           {formatSessionListDate(session.createdAt, i18n.language)}
+                         <div className="text-app-text-faint text-[10px] mb-1 font-sans">
+                           {formatSessionListDateLabel(session.createdAt, i18n.language)}
                          </div>
-                         <div className="text-sm font-sans font-medium text-[#1a1a1a] line-clamp-3">{session.query}</div>
+                         <div className="text-sm font-sans font-medium text-app-text line-clamp-3">{session.query}</div>
                        </button>
                        <button
                          type="button"
@@ -534,7 +542,7 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
                            e.stopPropagation();
                            void deleteResearchSession(session.id);
                          }}
-                         className="shrink-0 px-2.5 flex items-center justify-center border-l border-[#E6E4DF] text-[#8c8a84] hover:bg-[#FEF2F2] hover:text-[#b91c1c] transition-colors"
+                         className="shrink-0 px-2.5 flex items-center justify-center border-l border-app-border text-app-text-faint hover:bg-[#FEF2F2] hover:text-[#b91c1c] transition-colors"
                        >
                          <Trash2 className="w-4 h-4" aria-hidden />
                        </button>
@@ -546,7 +554,7 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
            ) : (
              <>
                <div className="flex justify-between items-center mb-4">
-                 <span className="font-mono text-xs text-[#8c8a84] uppercase font-bold tracking-wider">{t('lab.sources_utilized')}</span>
+                 <span className="font-mono text-xs text-app-text-faint uppercase font-bold tracking-wider">{t('lab.sources_utilized')}</span>
                  {phase === 'completed' && (
                    <button
                      type="button"
@@ -561,7 +569,7 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
                        labNeedWebRef.current = true;
                        setPlanStreamText('');
                      }}
-                     className="text-[#C2410C] text-xs hover:underline font-bold"
+                     className="text-app-accent text-xs hover:underline font-bold"
                    >
                      {t('lab.new_research')}
                    </button>
@@ -570,19 +578,19 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
 
                {/* Search status indicator */}
                {searchStatus === 'searching' && (
-                 <div className="mb-3 p-2 bg-white border border-[#C2410C]/30 rounded text-xs flex items-center gap-2 text-[#C2410C] font-mono">
+                 <div className="mb-3 p-2 bg-app-surface-raised border border-app-accent/30 rounded text-xs flex items-center gap-2 text-app-accent font-mono">
                    <Globe className="w-3 h-3 animate-pulse" />
                    <span>{t('lab.searching')}</span>
                  </div>
                )}
                {searchStatus === 'found' && (
-                 <div className="mb-3 p-2 bg-white border border-[#4ade80]/30 rounded text-xs flex items-center gap-2 text-[#16a34a] font-mono">
+                 <div className="mb-3 p-2 bg-app-surface-raised border border-[#4ade80]/30 rounded text-xs flex items-center gap-2 text-[#16a34a] font-mono">
                    <Globe className="w-3 h-3" />
                    <span>{t('lab.search_complete', { count: sourceCount })}</span>
                  </div>
                )}
                {searchStatus === 'fallback' && (
-                 <div className="mb-3 p-2 bg-white border border-[#eab308]/30 rounded text-xs flex items-center gap-2 text-[#a16207] font-mono">
+                 <div className="mb-3 p-2 bg-app-surface-raised border border-[#eab308]/30 rounded text-xs flex items-center gap-2 text-[#a16207] font-mono">
                    <AlertTriangle className="w-3 h-3" />
                    <span>{t('lab.search_fallback')}</span>
                  </div>
@@ -592,7 +600,7 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
                  {searchSources.length > 0 ? (
                    searchSources.map((wp, idx) => {
                      const cardShell =
-                       'w-full text-left bg-white border border-[#E6E4DF] p-3 rounded-lg text-sm shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C2410C]/30 hover:border-[#C2410C]/45 hover:shadow-md cursor-pointer';
+                       'w-full text-left bg-app-surface-raised border border-app-border p-3 rounded-lg text-sm shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent/30 hover:border-app-accent/45 hover:shadow-md cursor-pointer';
                      return (
                        <button
                          key={`${wp.link}-${idx}`}
@@ -611,13 +619,13 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
                            {t('lab.processed')}
                          </div>
                          <div className="flex items-start justify-between gap-2">
-                           <span className="text-[#1a1a1a] font-serif font-bold leading-snug line-clamp-3">
+                           <span className="text-app-text font-serif font-bold leading-snug line-clamp-3">
                              {wp.title?.trim() || wp.link || t('lab.source_untitled')}
                            </span>
-                           <ExternalLink className="w-4 h-4 shrink-0 text-[#8c8a84] mt-0.5" aria-hidden />
+                           <ExternalLink className="w-4 h-4 shrink-0 text-app-text-faint mt-0.5" aria-hidden />
                          </div>
                          {wp.snippet?.trim() ? (
-                           <p className="text-[#5a5a54] text-xs mt-2 font-sans leading-relaxed line-clamp-4">
+                           <p className="text-app-text-muted text-xs mt-2 font-sans leading-relaxed line-clamp-4">
                              {wp.snippet.trim()}
                            </p>
                          ) : null}
@@ -625,7 +633,7 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
                      );
                    })
                  ) : (
-                   <p className="text-[11px] text-[#8c8a84] font-sans leading-relaxed px-0.5">{t('lab.sources_none_hint')}</p>
+                   <p className="text-[11px] text-app-text-faint font-sans leading-relaxed px-0.5">{t('lab.sources_none_hint')}</p>
                  )}
                </div>
              </>
@@ -637,62 +645,62 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
       <div className="flex-1 relative overflow-hidden flex flex-col">
          {phase === 'idle' && (
            <div className="flex-1 flex flex-col items-center justify-center p-8 max-w-3xl mx-auto w-full">
-               <div className="w-16 h-16 bg-white border border-[#E6E4DF] shadow-sm rounded-2xl flex items-center justify-center mb-8">
-                <Microscope className="w-8 h-8 text-[#C2410C]" />
+               <div className="w-16 h-16 bg-app-surface-raised border border-app-border shadow-sm rounded-2xl flex items-center justify-center mb-8">
+                <Microscope className="w-8 h-8 text-app-accent" />
               </div>
-              <h1 className="text-4xl font-serif font-bold mb-4 text-center text-[#1a1a1a]">{t('lab.investigate')}</h1>
-              <p className="text-[#5a5a54] text-center mb-8 font-sans text-lg">
+              <h1 className="text-4xl font-serif font-bold mb-4 text-center text-app-text">{t('lab.investigate')}</h1>
+              <p className="text-app-text-muted text-center mb-8 font-sans text-lg">
                  {t('lab.idle_intro')}
               </p>
 
               <form onSubmit={handleStart} className="w-full relative group">
-                 <div className="absolute -inset-1 bg-gradient-to-r from-[#C2410C]/20 to-[#C2410C]/0 rounded-xl blur opacity-0 group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
+                 <div className="absolute -inset-1 bg-gradient-to-r from-app-accent/20 to-app-accent/0 rounded-xl blur opacity-0 group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
                  <input
                    type="text"
                    value={query}
                    onChange={e => setQuery(e.target.value)}
                    placeholder={t('lab.placeholder')}
-                   className="relative w-full bg-white border border-[#E6E4DF] text-[#1a1a1a] pl-6 pr-16 py-4 rounded-xl font-sans focus:outline-none focus:border-[#C2410C] focus:ring-1 focus:ring-[#C2410C] shadow-lg text-lg placeholder-[#8c8a84]"
+                   className="relative w-full bg-app-surface-raised border border-app-border text-app-text pl-6 pr-16 py-4 rounded-xl font-sans focus:outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent shadow-lg text-lg placeholder-app-text-faint"
                    autoFocus
                  />
                  <Tooltip label={t('lab.start_research')}>
                    <button
                      type="submit"
-                     className={`absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-lg flex items-center justify-center transition-all ${query.trim() ? 'bg-[#C2410C] text-white hover:bg-[#a0350a] shadow-md' : 'bg-[#F4F1ED] text-[#8c8a84] cursor-not-allowed border border-[#E6E4DF]'}`}
+                     className={`absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-lg flex items-center justify-center transition-all ${query.trim() ? 'bg-app-accent text-white hover:bg-app-accent-hover shadow-md' : 'bg-app-surface-subtle text-app-text-faint cursor-not-allowed border border-app-border'}`}
                    >
                      <ArrowRight className="w-5 h-5" />
                    </button>
                  </Tooltip>
               </form>
 
-              <div className="mt-8 flex gap-3 text-xs font-mono text-[#5a5a54]">
-                 <span className="bg-white px-3 py-1 rounded-full border border-[#E6E4DF] shadow-sm">{t('lab.suggested_tag_1')}</span>
-                 <span className="bg-white px-3 py-1 rounded-full border border-[#E6E4DF] shadow-sm">{t('lab.suggested_tag_2')}</span>
+              <div className="mt-8 flex gap-3 text-xs font-mono text-app-text-muted">
+                 <span className="bg-app-surface-raised px-3 py-1 rounded-full border border-app-border shadow-sm">{t('lab.suggested_tag_1')}</span>
+                 <span className="bg-app-surface-raised px-3 py-1 rounded-full border border-app-border shadow-sm">{t('lab.suggested_tag_2')}</span>
               </div>
            </div>
          )}
 
          {(phase === 'planning' || phase === 'plan_ready') && (
            <div className="flex-1 p-12 overflow-y-auto w-full max-w-5xl mx-auto">
-              <div className="mb-8 border-b border-[#E6E4DF] pb-8">
-                 <div className="text-[#C2410C] font-mono text-xs mb-2">{t('lab.target_inquiry')}</div>
-                 <h2 className="text-3xl font-serif font-bold text-[#1a1a1a]">{query}</h2>
+              <div className="mb-8 border-b border-app-border pb-8">
+                 <div className="text-app-accent font-mono text-xs mb-2">{t('lab.target_inquiry')}</div>
+                 <h2 className="text-3xl font-serif font-bold text-app-text">{query}</h2>
               </div>
 
-              <div className="bg-white border border-[#E6E4DF] shadow-md rounded-xl p-8 relative overflow-hidden">
+              <div className="bg-app-surface-raised border border-app-border shadow-md rounded-xl p-8 relative overflow-hidden">
                 {phase === 'planning' && (
                   <div className="space-y-4">
                     {planStreamText ? (
                       <div className="space-y-2">
-                        <p className="text-xs text-[#8c8a84] font-sans leading-relaxed">{t('lab.plan_stream_hint')}</p>
-                        <pre className="max-h-[min(420px,55vh)] overflow-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-[#1a1a1a] bg-[#FAF9F6] border border-[#E6E4DF] rounded-lg p-4">
+                        <p className="text-xs text-app-text-faint font-sans leading-relaxed">{t('lab.plan_stream_hint')}</p>
+                        <pre className="max-h-[min(420px,55vh)] overflow-auto whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-app-text bg-app-surface border border-app-border rounded-lg p-4">
                           {planStreamText}
                         </pre>
                       </div>
                     ) : null}
                     <div className={`flex flex-col items-center justify-center gap-3 ${planStreamText ? 'py-6' : 'py-12'}`}>
-                      <Loader2 className="w-8 h-8 text-[#C2410C] animate-spin" aria-hidden />
-                      <div className="font-mono text-sm text-[#8c8a84] text-center px-2">
+                      <Loader2 className="w-8 h-8 text-app-accent animate-spin" aria-hidden />
+                      <div className="font-mono text-sm text-app-text-faint text-center px-2">
                         {searchStatus === 'searching'
                           ? t('lab.searching')
                           : planStreamText
@@ -707,12 +715,12 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
                   <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
                      <div className="flex items-center gap-3 mb-2">
                         <ListChecks className="w-6 h-6 text-[#4ade80]" />
-                        <h3 className="text-xl font-sans font-bold text-[#1a1a1a]">{t('lab.recommended_plan_title')}</h3>
+                        <h3 className="text-xl font-sans font-bold text-app-text">{t('lab.recommended_plan_title')}</h3>
                      </div>
-                     <p className="text-[#5a5a54] text-sm font-sans mb-6">{t('lab.plan_edit_hint')}</p>
+                     <p className="text-app-text-muted text-sm font-sans mb-6">{t('lab.plan_edit_hint')}</p>
 
                      {planRevising && planStreamText ? (
-                       <pre className="mb-6 max-h-[min(280px,40vh)] overflow-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-[#1a1a1a] bg-[#FAF9F6] border border-[#E6E4DF] rounded-lg p-4">
+                       <pre className="mb-6 max-h-[min(280px,40vh)] overflow-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-app-text bg-app-surface border border-app-border rounded-lg p-4">
                          {planStreamText}
                        </pre>
                      ) : null}
@@ -720,14 +728,14 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
                      <div className="space-y-5 mb-8">
                         {researchPlan.length > 0 ? researchPlan.map((plan, idx) => (
                            <div key={idx} className="flex gap-4">
-                              <div className="w-6 h-6 rounded-full bg-[#F4F1ED] border border-[#E6E4DF] flex items-center justify-center font-mono text-xs text-[#5a5a54] shrink-0 font-bold mt-2">{idx + 1}</div>
+                              <div className="w-6 h-6 rounded-full bg-app-surface-subtle border border-app-border flex items-center justify-center font-mono text-xs text-app-text-muted shrink-0 font-bold mt-2">{idx + 1}</div>
                               <div className="flex-1 min-w-0 space-y-2">
                                  <input
                                    type="text"
                                    value={plan.title}
                                    onChange={e => updatePlanItem(idx, 'title', e.target.value)}
                                    disabled={planRevising}
-                                   className="w-full font-bold text-[#1a1a1a] text-base bg-[#FAF9F6] border border-[#E6E4DF] rounded-lg px-3 py-2 font-sans focus:outline-none focus:border-[#C2410C] focus:ring-1 focus:ring-[#C2410C] disabled:opacity-60"
+                                   className="w-full font-bold text-app-text text-base bg-app-surface border border-app-border rounded-lg px-3 py-2 font-sans focus:outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent disabled:opacity-60"
                                    aria-label={`Step ${idx + 1} title`}
                                  />
                                  <textarea
@@ -735,17 +743,17 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
                                    onChange={e => updatePlanItem(idx, 'desc', e.target.value)}
                                    disabled={planRevising}
                                    rows={4}
-                                   className="w-full text-[#5a5a54] text-sm bg-[#FAF9F6] border border-[#E6E4DF] rounded-lg px-3 py-2 font-sans leading-relaxed resize-y min-h-[5rem] focus:outline-none focus:border-[#C2410C] focus:ring-1 focus:ring-[#C2410C] disabled:opacity-60"
+                                   className="w-full text-app-text-muted text-sm bg-app-surface border border-app-border rounded-lg px-3 py-2 font-sans leading-relaxed resize-y min-h-[5rem] focus:outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent disabled:opacity-60"
                                    aria-label={`Step ${idx + 1} description`}
                                  />
                               </div>
                            </div>
                         )) : (
-                           <div className="text-center text-[#5a5a54]">Generating plan...</div>
+                           <div className="text-center text-app-text-muted">Generating plan...</div>
                         )}
                      </div>
 
-                     <div className="border-t border-[#E6E4DF] pt-6 space-y-3">
+                     <div className="border-t border-app-border pt-6 space-y-3">
                         <form
                           onSubmit={e => {
                             e.preventDefault();
@@ -759,27 +767,27 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
                              disabled={planRevising || researchPlan.length === 0}
                              rows={3}
                              placeholder={t('lab.plan_revision_placeholder')}
-                             className="w-full text-[#1a1a1a] text-sm bg-[#FAF9F6] border border-[#E6E4DF] rounded-lg px-4 py-3 font-sans placeholder:text-[#8c8a84] focus:outline-none focus:border-[#C2410C] focus:ring-1 focus:ring-[#C2410C] disabled:opacity-60 resize-y min-h-[5.5rem]"
+                             className="w-full text-app-text text-sm bg-app-surface border border-app-border rounded-lg px-4 py-3 font-sans placeholder:text-app-text-faint focus:outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent disabled:opacity-60 resize-y min-h-[5.5rem]"
                            />
                            <div className="flex flex-wrap items-center justify-between gap-3">
                               <button
                                 type="submit"
                                 disabled={planRevising || !planRevisionNote.trim() || researchPlan.length === 0}
-                                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg font-sans text-sm font-bold border border-[#E6E4DF] bg-white text-[#1a1a1a] hover:border-[#C2410C]/60 hover:bg-[#FFF7ED] disabled:opacity-50 disabled:pointer-events-none transition-colors shadow-sm"
+                                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg font-sans text-sm font-bold border border-app-border bg-app-surface-raised text-app-text hover:border-app-accent/60 hover:bg-app-accent-wash disabled:opacity-50 disabled:pointer-events-none transition-colors shadow-sm"
                               >
-                                {planRevising ? <Loader2 className="w-4 h-4 animate-spin text-[#C2410C]" /> : <Sparkles className="w-4 h-4 text-[#C2410C]" />}
+                                {planRevising ? <Loader2 className="w-4 h-4 animate-spin text-app-accent" /> : <Sparkles className="w-4 h-4 text-app-accent" />}
                                 {planRevising ? t('lab.plan_revision_applying') : t('lab.plan_revision_apply')}
                               </button>
                            </div>
                         </form>
                      </div>
 
-                     <div className="flex justify-end pt-6 border-t border-[#E6E4DF] mt-6">
+                     <div className="flex justify-end pt-6 border-t border-app-border mt-6">
                         <button
                           type="button"
                           onClick={() => void executeResearch()}
                           disabled={planRevising || researchPlan.length === 0}
-                          className="bg-[#C2410C] hover:bg-[#a0350a] disabled:opacity-50 disabled:pointer-events-none text-white px-6 py-3 rounded-lg font-sans font-bold transition-all shadow-md flex items-center gap-2"
+                          className="bg-app-accent hover:bg-app-accent-hover disabled:opacity-50 disabled:pointer-events-none text-white px-6 py-3 rounded-lg font-sans font-bold transition-all shadow-md flex items-center gap-2"
                         >
                           {t('lab.approve')} <ArrowRight className="w-4 h-4" />
                         </button>
@@ -792,13 +800,13 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
 
          {phase === 'researching' && (
            <div className="flex-1 flex items-center justify-center p-8 w-full max-w-2xl mx-auto">
-              <div className="w-full bg-white border border-[#E6E4DF] shadow-md rounded-xl p-6 font-mono text-sm">
-                 <div className="flex items-center gap-2 mb-6 text-[#C2410C] font-bold">
+              <div className="w-full bg-app-surface-raised border border-app-border shadow-md rounded-xl p-6 font-mono text-sm">
+                 <div className="flex items-center gap-2 mb-6 text-app-accent font-bold">
                    <Terminal className="w-4 h-4" />
                    <span>{t('lab.executing')}</span>
                  </div>
 
-                 <div className="space-y-4 text-[#8c8a84]">
+                 <div className="space-y-4 text-app-text-faint">
                    {/* Web search step */}
                    <div className="flex items-center gap-3">
                      {searchStatus === 'found' ? (
@@ -806,33 +814,33 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
                      ) : searchStatus === 'fallback' ? (
                        <AlertTriangle className="w-4 h-4 text-[#eab308]" />
                      ) : searchStatus === 'searching' ? (
-                       <Loader2 className="w-4 h-4 animate-spin text-[#C2410C]" />
+                       <Loader2 className="w-4 h-4 animate-spin text-app-accent" />
                      ) : (
                        <CheckCircle2 className="w-4 h-4 text-[#4ade80]" />
                      )}
                      <span className={
-                       searchStatus === 'found' ? "text-[#1a1a1a]" :
+                       searchStatus === 'found' ? "text-app-text" :
                        searchStatus === 'fallback' ? "text-[#a16207]" :
-                       searchStatus === 'searching' ? "text-[#1a1a1a]" :
-                       "text-[#5a5a54]"
+                       searchStatus === 'searching' ? "text-app-text" :
+                       "text-app-text-muted"
                      }>
                        {searchStatus === 'searching' && t('lab.searching')}
                        {searchStatus === 'found' && t('lab.search_complete', { count: sourceCount })}
                        {searchStatus === 'fallback' && t('lab.search_fallback')}
                        {searchStatus === 'idle' &&
-                         (aiConfig.metasoApiKey ? t('lab.search_preparing') : t('lab.search_offline_no_key'))}
+                         (aiConfig.searchApiKey ? t('lab.search_preparing') : t('lab.search_offline_no_key'))}
                      </span>
                    </div>
 
                    <div className="flex items-center gap-3">
                      {researchExecStage === 'resolving_context' ? (
-                       <Loader2 className="w-4 h-4 animate-spin text-[#C2410C] shrink-0" aria-hidden />
+                       <Loader2 className="w-4 h-4 animate-spin text-app-accent shrink-0" aria-hidden />
                      ) : (
                        <CheckCircle2 className="w-4 h-4 text-[#4ade80] shrink-0" aria-hidden />
                      )}
                      <span
                        className={
-                         researchExecStage === 'resolving_context' ? 'text-[#5a5a54]' : 'text-[#1a1a1a]'
+                         researchExecStage === 'resolving_context' ? 'text-app-text-muted' : 'text-app-text'
                        }
                      >
                        {t('lab.stage_resolving_context')}
@@ -841,18 +849,18 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
 
                    <div className="flex items-center gap-3">
                      {researchExecStage === 'generating_report' ? (
-                       <Loader2 className="w-4 h-4 animate-spin text-[#C2410C] shrink-0" aria-hidden />
+                       <Loader2 className="w-4 h-4 animate-spin text-app-accent shrink-0" aria-hidden />
                      ) : (
                        <span
-                         className="w-4 h-4 shrink-0 rounded-full border-2 border-[#E6E4DF]"
+                         className="w-4 h-4 shrink-0 rounded-full border-2 border-app-border"
                          aria-hidden
                        />
                      )}
                      <span
                        className={
                          researchExecStage === 'generating_report'
-                           ? 'text-[#1a1a1a]'
-                           : 'text-[#8c8a84]'
+                           ? 'text-app-text'
+                           : 'text-app-text-faint'
                        }
                      >
                        {reportStreamText
@@ -861,7 +869,7 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
                      </span>
                    </div>
                    {reportStreamText ? (
-                     <pre className="mt-4 max-h-[min(360px,50vh)] overflow-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-[#1a1a1a] bg-[#FAF9F6] border border-[#E6E4DF] rounded-lg p-4">
+                     <pre className="mt-4 max-h-[min(360px,50vh)] overflow-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-app-text bg-app-surface border border-app-border rounded-lg p-4">
                        {reportStreamText}
                      </pre>
                    ) : null}
@@ -873,7 +881,7 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
          {phase === 'completed' && (
             <div className="flex-1 flex overflow-hidden">
                {/* Final Report */}
-               <div className="flex-1 bg-[#FAF9F6] text-[#1a1a1a] overflow-y-auto relative paper-texture">
+               <div className="flex-1 bg-app-surface text-app-text overflow-y-auto relative paper-texture">
                      <div className="max-w-5xl mx-auto px-16 py-14">
                      {reportGenerationFailed && (
                        <div className="mb-8 rounded-xl border border-[#eab308]/40 bg-[#fffbeb] px-5 py-4 font-sans text-sm text-[#713f12] shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -885,27 +893,27 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
                            type="button"
                            data-testid="lab-retry-report"
                            onClick={() => void executeResearch()}
-                           className="shrink-0 inline-flex items-center justify-center gap-2 rounded-lg bg-[#C2410C] px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-[#a0350a] transition-colors"
+                           className="shrink-0 inline-flex items-center justify-center gap-2 rounded-lg bg-app-accent px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-app-accent-hover transition-colors"
                          >
                            {t('lab.retry_generate_report')}
                          </button>
                        </div>
                      )}
                      <div className="mb-12 text-center">
-                        <div className="text-[#C2410C] font-mono text-xs uppercase tracking-widest mb-4 flex items-center justify-center gap-2 font-bold">
+                        <div className="text-app-accent font-mono text-xs uppercase tracking-widest mb-4 flex items-center justify-center gap-2 font-bold">
                           <FileText className="w-4 h-4" /> {t('lab.report')}
                         </div>
                         <h1 className="font-serif text-[44px] font-bold leading-tight mb-4">{query || t('lab.report')}</h1>
-                        <div className="h-0.5 w-20 bg-[#1a1a1a] mx-auto"></div>
+                        <div className="h-0.5 w-20 bg-app-text mx-auto"></div>
                         {searchStatus === 'found' && (
-                          <p className="text-xs text-[#8c8a84] mt-3 font-mono">{t('lab.report_footer_web', { count: sourceCount })}</p>
+                          <p className="text-xs text-app-text-faint mt-3 font-mono">{t('lab.report_footer_web', { count: sourceCount })}</p>
                         )}
                         {searchStatus === 'fallback' && (
                           <p className="text-xs text-[#a16207] mt-3 font-mono">{t('lab.report_footer_offline')}</p>
                         )}
                      </div>
 
-                     <div className="font-serif text-[19px] leading-[1.9] text-[#1a1a1a] space-y-7">
+                     <div className="font-serif text-[19px] leading-[1.9] text-app-text space-y-7">
                         <p>{researchReport.intro}</p>
 
                         {researchReport.points?.map((pt, idx) => (
@@ -915,8 +923,8 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
                            </React.Fragment>
                         ))}
 
-                        <div className="bg-[#fff9e6] border-l-4 border-[#C2410C] p-5 text-[#5a5a54] font-sans text-sm my-8 shadow-sm rounded-r">
-                           <strong className="text-[#1a1a1a]">{t('lab.conclusion_label')}</strong> {researchReport.conclusion}
+                        <div className="bg-[#fff9e6] border-l-4 border-app-accent p-5 text-app-text-muted font-sans text-sm my-8 shadow-sm rounded-r">
+                           <strong className="text-app-text">{t('lab.conclusion_label')}</strong> {researchReport.conclusion}
                         </div>
                      </div>
                   </div>
@@ -938,38 +946,38 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="lab-source-detail-title"
-            className="flex max-h-[min(560px,85vh)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-[#E6E4DF] bg-[#FAF9F6] shadow-2xl"
+            className="flex max-h-[min(560px,85vh)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-app-border bg-app-surface shadow-2xl"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-3 border-b border-[#E6E4DF] bg-white px-4 py-3">
+            <div className="flex items-start justify-between gap-3 border-b border-app-border bg-app-surface-raised px-4 py-3">
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#C2410C]">{t('lab.source_detail_heading')}</p>
-                <h2 id="lab-source-detail-title" className="mt-1 font-serif text-lg font-bold leading-snug text-[#1a1a1a]">
+                <p className="text-[10px] font-mono font-bold uppercase tracking-wider text-app-accent">{t('lab.source_detail_heading')}</p>
+                <h2 id="lab-source-detail-title" className="mt-1 font-serif text-lg font-bold leading-snug text-app-text">
                   {sourceDetail.title?.trim() || sourceDetail.link || t('lab.source_untitled')}
                 </h2>
               </div>
               <button
                 type="button"
                 aria-label={t('settings.close')}
-                className="shrink-0 rounded-lg p-1.5 text-[#8c8a84] transition-colors hover:bg-[#F4F1ED] hover:text-[#1a1a1a]"
+                className="shrink-0 rounded-lg p-1.5 text-app-text-faint transition-colors hover:bg-app-surface-subtle hover:text-app-text"
                 onClick={() => setSourceDetail(null)}
               >
                 <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-4 py-3">
-              <p className="text-xs leading-relaxed text-[#5a5a54]">{t('lab.source_modal_hint')}</p>
+              <p className="text-xs leading-relaxed text-app-text-muted">{t('lab.source_modal_hint')}</p>
               {sourceDetail.snippet?.trim() ? (
-                <p className="mt-3 whitespace-pre-wrap font-sans text-sm leading-relaxed text-[#1a1a1a]">{sourceDetail.snippet.trim()}</p>
+                <p className="mt-3 whitespace-pre-wrap font-sans text-sm leading-relaxed text-app-text">{sourceDetail.snippet.trim()}</p>
               ) : null}
               {sourceDetail.link?.trim() ? (
-                <p className="mt-4 break-all font-mono text-[11px] text-[#8c8a84]">{sourceDetail.link.trim()}</p>
+                <p className="mt-4 break-all font-mono text-[11px] text-app-text-faint">{sourceDetail.link.trim()}</p>
               ) : null}
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#E6E4DF] bg-white px-4 py-3">
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-app-border bg-app-surface-raised px-4 py-3">
               <button
                 type="button"
-                className="rounded-lg border border-[#E6E4DF] bg-white px-4 py-2 text-sm font-bold text-[#1a1a1a] shadow-sm hover:bg-[#FAF9F6]"
+                className="rounded-lg border border-app-border bg-app-surface-raised px-4 py-2 text-sm font-bold text-app-text shadow-sm hover:bg-app-surface"
                 onClick={() => setSourceDetail(null)}
               >
                 {t('settings.close')}
@@ -977,7 +985,7 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
               {sourceDetail.link?.trim() && /^https?:\/\//i.test(sourceDetail.link.trim()) ? (
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 rounded-lg bg-[#C2410C] px-4 py-2 text-sm font-bold text-white shadow-md hover:bg-[#a0350a]"
+                  className="inline-flex items-center gap-2 rounded-lg bg-app-accent px-4 py-2 text-sm font-bold text-white shadow-md hover:bg-app-accent-hover"
                   onClick={() => {
                     void openExternalUrl(sourceDetail.link).catch((err) =>
                       console.error('[Scribe AI] openExternalUrl failed', err),

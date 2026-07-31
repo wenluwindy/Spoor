@@ -38,8 +38,8 @@ vi.mock('react-i18next', () => ({
         'canvas.rename': '重命名',
         'canvas.delete_note': '删除便签',
         'canvas.select_note': '选择便签',
-        'canvas.link_note': '链接到其他节点',
-        'canvas.cycle_layout': '切换布局',
+        'canvas.port_in': '连线入口',
+        'canvas.port_out': '连到另一张卡片',
         'canvas.change_color': '更改颜色',
         'canvas.change_font': '更改字体',
         'nodes.theme': '核心主题',
@@ -54,12 +54,6 @@ vi.mock('react-i18next', () => ({
         'settings.profile': '个人资料',
         'settings.ai_config': 'AI 配置',
         'settings.language': '语言',
-        'settings.desktop_download_title': '桌面版（Windows）',
-        'settings.desktop_download_blurb': '安装原生应用可获得本地优先存储、桌面专属能力（如本地 GGUF）。浏览器里的数据留在本浏览器；桌面版使用独立数据目录。',
-        'settings.desktop_download_button': '下载 Windows 安装包',
-        'settings.desktop_installed_title': '桌面版',
-        'settings.desktop_installed_blurb': '当前为桌面应用。',
-        'settings.desktop_releases_button': '打开 Releases 页面',
         'settings.user_name': '显示名称',
         'settings.user_role': '当前焦点 / 状态',
         'settings.provider': 'AI 服务商',
@@ -96,11 +90,9 @@ vi.mock('react-i18next', () => ({
         'agents.sandbox_clear_aria': '清空沙盒对话',
         'agents.sandbox_clear_confirm': '确定清空该人格沙盒中的对话记录？此操作不可恢复。',
         'settings.docs_heading': '配置说明与官方文档',
-        'settings.docs_expand': '展开',
         'settings.docs_blurb_gemini': '在 Google AI Studio 创建 API 密钥后填入。',
         'settings.docs_link_gemini_console_key': 'Google AI Studio — 获取 API 密钥',
         'settings.docs_all_providers_heading': '各 AI 服务商 — 官方文档',
-        'settings.docs_metaso_heading': '秘塔联网搜索（可选）',
         'settings.docs_security_note': '切勿向他人泄露密钥。',
         'agents.select_persona': '请选择一个人格',
         'agents.select_subtitle': '从侧边栏选择一个人格或创建一个新人格。',
@@ -260,7 +252,7 @@ describe('App 组件', () => {
       const links = getNavLinks();
       const personalLink = links.find(a => a.textContent?.includes('画布'));
       expect(personalLink).toBeDefined();
-      expect(personalLink).toHaveClass('bg-white');
+      expect(personalLink).toHaveClass('bg-app-surface-raised');
     });
 
     it('切换到 reference 标签', async () => {
@@ -272,7 +264,7 @@ describe('App 组件', () => {
       const links = getNavLinks();
       const refLink = links.find(a => a.textContent?.includes('长文'))!;
       await user.click(refLink);
-      expect(refLink).toHaveClass('bg-white');
+      expect(refLink).toHaveClass('bg-app-surface-raised');
     });
 
     it('切换到 lab 标签', async () => {
@@ -284,7 +276,7 @@ describe('App 组件', () => {
       const links = getNavLinks();
       const labLink = links.find(a => a.textContent?.includes('研究'))!;
       await user.click(labLink);
-      expect(labLink).toHaveClass('bg-white');
+      expect(labLink).toHaveClass('bg-app-surface-raised');
     });
 
     it('切换到 agents 标签', async () => {
@@ -296,7 +288,7 @@ describe('App 组件', () => {
       const links = getNavLinks();
       const agentsLink = links.find(a => a.textContent?.includes('角色'))!;
       await user.click(agentsLink);
-      expect(agentsLink).toHaveClass('bg-white');
+      expect(agentsLink).toHaveClass('bg-app-surface-raised');
     });
   });
 
@@ -425,6 +417,35 @@ describe('App 组件', () => {
       const nodes = await db.nodes.toArray();
       expect(nodes.length).toBeGreaterThanOrEqual(1);
       expect(nodes.some(n => n.type === 'text')).toBe(true);
+    });
+  });
+
+  // --- 连线 ---
+  describe('连线落在空白处', () => {
+    /** 连线态由 svg 上的 data-connecting-from 反映（临时连线靠它绘制）。 */
+    const pendingLinkFrom = () =>
+      document.querySelector('svg[data-connecting-from]')?.getAttribute('data-connecting-from') ?? '';
+
+    it('落在空白处后连线态立即结束，不会一点再点反复建卡', async () => {
+      // 回归：以前落在空白处只开菜单、不清 connectingFrom，于是关菜单的那一次点击
+      // 又会命中同一段逻辑把菜单再弹出来——表现为「怎么点都还在建卡」，也放不下这根线。
+      await act(async () => { render(<App />); });
+      // 等种子节点经 useLiveQuery 渲染出来，端口才在 DOM 里
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      });
+
+      await act(async () => {
+        fireEvent.pointerDown(screen.getAllByLabelText('连到另一张卡片')[0], { button: 0 });
+      });
+      expect(pendingLinkFrom()).not.toBe('');
+
+      const background = document.querySelector('[data-canvas-background]')!;
+      await act(async () => {
+        fireEvent.pointerDown(background, { button: 0, clientX: 300, clientY: 300 });
+      });
+
+      expect(pendingLinkFrom()).toBe('');
     });
   });
 
@@ -624,22 +645,43 @@ describe('App 组件', () => {
       expect(screen.getByRole('tab', { name: 'settings.tab_storage' })).toBeInTheDocument();
     });
 
-    it('通用页有语言、秘塔密钥与说明折叠区', async () => {
+    it('通用页只剩语言、主题与检查更新', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
       await openSettings(user);
 
       expect(screen.getByText('English')).toBeInTheDocument();
       expect(screen.getByText('中文')).toBeInTheDocument();
-      expect(screen.getByText('settings.metaso_key')).toBeInTheDocument();
-      expect(screen.getByText('配置说明与官方文档')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /settings\.update_check/ })).toBeInTheDocument();
+      // 秘塔 Key 搬去了搜索服务页，配置说明搬去了帮助页
+      expect(screen.queryByText('settings.search_key_label')).not.toBeInTheDocument();
+      expect(screen.queryByText('settings.docs_all_providers_heading')).not.toBeInTheDocument();
     });
 
-    it('网页版设置面板显示桌面版下载入口', async () => {
+    it('搜索服务页列出各家并各给一个 Key 输入框', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
       await openSettings(user);
-      expect(screen.getByText('下载 Windows 安装包')).toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: 'settings.tab_search' }));
+
+      expect(screen.getByRole('button', { name: 'Metaso' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Tavily' })).toBeInTheDocument();
+      expect(document.querySelectorAll('input[type="password"]')).toHaveLength(2);
+    });
+
+    it('帮助页把文档与功能说明全部摊开，没有折叠区', async () => {
+      const user = userEvent.setup();
+      await act(async () => { render(<App />); });
+      await openSettings(user);
+      await user.click(screen.getByRole('tab', { name: 'settings.tab_help' }));
+
+      // 这几个键在本文件的 t() 桩里有中文映射
+      expect(screen.getByText('各 AI 服务商 — 官方文档')).toBeInTheDocument();
+      expect(screen.getByText('切勿向他人泄露密钥。')).toBeInTheDocument();
+      expect(screen.getByText('settings.help_features_heading')).toBeInTheDocument();
+      expect(screen.getByText('settings.help_canvas_title')).toBeInTheDocument();
+      // 「不用展开，全部写出」——页面里不该再有折叠区
+      expect(document.querySelector('details')).toBeNull();
     });
 
     it('首次进入模型服务页是空的，并给出预设入口', async () => {
@@ -1161,46 +1203,6 @@ describe('App 组件', () => {
       const nodes = await db.nodes.toArray();
       const newNode = nodes.find(n => n.type === 'text');
       expect(newNode?.canvasId).toBe('default');
-    });
-
-    it('合成文章按钮存在', async () => {
-      await act(async () => { render(<App />); });
-      // 合成文章按钮在右上角
-      const publishBtns = screen.getAllByLabelText(/合成文章/);
-      expect(publishBtns.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('画布合成按钮未选中时为白色样式', async () => {
-      await act(async () => { render(<App />); });
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-      });
-      const publishBtn = screen.getByLabelText(/合成文章\s*\(/);
-      expect(publishBtn.className).toContain('bg-white');
-      expect(publishBtn.className).not.toContain('bg-[#C2410C]');
-    });
-
-    it('画布合成按钮选中便签后为橙色样式', async () => {
-      const user = userEvent.setup();
-      await act(async () => { render(<App />); });
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-      });
-
-      let selectBtns = screen.queryAllByLabelText('选择便签');
-      if (selectBtns.length === 0) {
-        await createNoteViaContextMenu(user);
-        await act(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 150));
-        });
-        selectBtns = screen.queryAllByLabelText('选择便签');
-      }
-
-      expect(selectBtns.length).toBeGreaterThan(0);
-      await user.click(selectBtns[0]);
-
-      const publishBtn = screen.getByLabelText(/合成文章\s*\(/);
-      expect(publishBtn.className).toContain('bg-[#C2410C]');
     });
 
     it('AI 提交输入框存在', async () => {

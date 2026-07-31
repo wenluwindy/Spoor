@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseLenientLlmJson, removeTrailingCommas } from './llmJson';
+import { parseLenientLlmJson, removeTrailingCommas } from '../../src/utils/llmJson';
 
 describe('llmJson', () => {
   it('removeTrailingCommas fixes commas before } and ]', () => {

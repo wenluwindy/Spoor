@@ -19,33 +19,33 @@ export function OnboardingCard({ onOpenSettings, onDismiss }: OnboardingCardProp
   return (
     // 外层不吃指针事件，避免挡住底下的画布拖拽与右键
     <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-8">
-      <div className="pointer-events-auto relative w-full max-w-sm rounded-2xl border border-[#E6E4DF] bg-white/95 p-6 shadow-xl backdrop-blur-sm">
+      <div className="pointer-events-auto relative w-full max-w-sm rounded-2xl border border-app-border bg-app-surface-raised/95 p-6 shadow-xl backdrop-blur-sm">
         <Tooltip label={t('onboarding.dismiss')}>
           <button
             type="button"
             onClick={onDismiss}
-            className="absolute right-3 top-3 rounded-full p-1.5 text-[#8c8a84] transition-colors hover:bg-[#F4F1ED] hover:text-[#1a1a1a]"
+            className="absolute right-3 top-3 rounded-full p-1.5 text-app-text-faint transition-colors hover:bg-app-surface-subtle hover:text-app-text"
           >
             <X className="h-3.5 w-3.5" />
           </button>
         </Tooltip>
 
-        <div className="mb-3 flex items-center gap-2 text-[#C2410C]">
+        <div className="mb-3 flex items-center gap-2 text-app-accent">
           <Settings className="h-4 w-4" />
-          <span className="font-sans text-[10px] font-bold tracking-wider text-[#8c8a84]">
+          <span className="font-sans text-[10px] font-bold tracking-wider text-app-text-faint">
             {t('onboarding.eyebrow')}
           </span>
         </div>
 
-        <h2 className="mb-2 font-serif text-lg font-bold text-[#1a1a1a]">
+        <h2 className="mb-2 font-serif text-lg font-bold text-app-text">
           {t('onboarding.title')}
         </h2>
-        <p className="mb-5 text-[13px] leading-relaxed text-[#5a5a54]">{t('onboarding.blurb')}</p>
+        <p className="mb-5 text-[13px] leading-relaxed text-app-text-muted">{t('onboarding.blurb')}</p>
 
         <button
           type="button"
           onClick={onOpenSettings}
-          className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#C2410C] px-4 font-sans text-sm font-bold text-white shadow-sm shadow-[#C2410C]/20 transition-colors hover:bg-[#9A3412]"
+          className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-app-accent px-4 font-sans text-sm font-bold text-white shadow-sm shadow-app-accent/20 transition-colors hover:bg-app-accent-deep"
         >
           {t('onboarding.cta')}
           <ArrowRight className="h-4 w-4" />

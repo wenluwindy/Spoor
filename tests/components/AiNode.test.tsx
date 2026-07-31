@@ -23,16 +23,9 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('lucide-react', () => {
-  const icons = ['Loader2', 'Send'] as const;
-  const out: Record<string, React.FC> = {};
-  for (const name of icons) {
-    out[name] = (props: Record<string, unknown>) => {
-      const { createElement } = require('react');
-      return createElement('svg', { 'data-testid': `icon-${name}`, ...props });
-    };
-  }
-  return out;
+vi.mock('lucide-react', async (importOriginal) => {
+  const { lucideIconMock } = await import('../lucideMock');
+  return lucideIconMock(importOriginal as () => Promise<Record<string, unknown>>);
 });
 
 vi.mock('react-markdown', () => ({
@@ -182,4 +175,23 @@ describe('AiNode', () => {
 
     expect(screen.getByTestId('icon-Loader2')).toBeInTheDocument();
   });
+  it('顶部有类型标题「构思」', () => {
+    const { getByText } = render(
+      <AiNode node={baseAi()} editingNodeId={null} setEditingNodeId={vi.fn()} />,
+    );
+    expect(getByText('nodes.ai_label')).toBeInTheDocument();
+  });
+
+  it('正文区不再写死 max-h：卡片拖大后它要跟着长高', () => {
+    const { container } = render(
+      <AiNode node={baseAi()} editingNodeId={null} setEditingNodeId={vi.fn()} />,
+    );
+    const scroller = container.querySelector('.overflow-y-auto');
+    expect(scroller).toBeTruthy();
+    expect(scroller!.className).not.toMatch(/max-h-/);
+    // 靠 flex-1 + min-h-0 吃满卡片剩余高度，追问框因此始终紧贴正文下沿
+    expect(scroller!.className).toContain('flex-1');
+    expect(scroller!.className).toContain('min-h-0');
+  });
+
 });

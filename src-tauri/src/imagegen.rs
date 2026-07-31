@@ -66,6 +66,7 @@ fn classify_http(status: u16, body: &str) -> &'static str {
 #[serde(rename_all = "camelCase")]
 pub struct ImageGenRequest {
     /// `doubao_seedream` | `openai_images` | `gemini_image` | `custom_openai_images`
+    /// | `rightapi_draw`
     pub api_kind: String,
     pub base_url: String,
     pub api_key: String,
@@ -214,6 +215,26 @@ async fn post_json(
         .map_err(|e| ImageGenError::with_detail("bad_response", format!("{e}: {text:.400}")))
 }
 
+async fn get_json(url: &str, headers: Vec<(&str, String)>) -> Result<Value, ImageGenError> {
+    let mut req = client()?.get(url);
+    for (k, v) in headers {
+        req = req.header(k, v);
+    }
+    let response = req.send().await.map_err(|e| {
+        eprintln!("[Spoor] image_generate network error: {e} (url={url})");
+        ImageGenError::with_detail("network", e.to_string())
+    })?;
+
+    let status = response.status();
+    let text = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        eprintln!("[Spoor] image_generate HTTP {status} url={url}");
+        return Err(ImageGenError::http(status.as_u16(), &text));
+    }
+    serde_json::from_str(&text)
+        .map_err(|e| ImageGenError::with_detail("bad_response", format!("{e}: {text:.400}")))
+}
+
 /// 下载 URL 型结果的原始字节。
 async fn download(url: &str) -> Result<(Vec<u8>, String), ImageGenError> {
     let response = client()?
@@ -313,6 +334,60 @@ pub fn extract_gemini_images(body: &Value) -> Vec<ImagePayload> {
                 }
             }
         }
+    }
+    out
+}
+
+/// 从一段文字里抠出第一个 http(s) URL。
+///
+/// RightAPI 的 Gemini 型任务结果把图片地址放在 `parts[].text` 里，是**纯文本**而不是
+/// `inlineData`，所以 [`extract_gemini_images`] 抠不到。多数时候整段就是一个 URL，
+/// 但偶尔会被包在 markdown 里，因此按分隔符切一刀而不是直接整段当地址用。
+fn first_url_in(text: &str) -> Option<String> {
+    let start = text.find("http")?;
+    let rest = &text[start..];
+    let end = rest
+        .find(|c: char| c.is_whitespace() || matches!(c, ')' | ']' | '"' | '\'' | '<' | '>'))
+        .unwrap_or(rest.len());
+    let url = rest[..end].trim_end_matches(['.', ',', ';', '。', '，']);
+    // `http://` 本身长 7，比它还短的一定是误报
+    (url.len() > 8).then(|| url.to_string())
+}
+
+/// Gemini 型结果里以纯文本形式给出的图片 URL。
+pub fn extract_gemini_text_urls(body: &Value) -> Vec<ImagePayload> {
+    let mut out = Vec::new();
+    let Some(candidates) = body.get("candidates").and_then(|v| v.as_array()) else {
+        return out;
+    };
+    for candidate in candidates {
+        let Some(parts) = candidate
+            .get("content")
+            .and_then(|c| c.get("parts"))
+            .and_then(|p| p.as_array())
+        else {
+            continue;
+        };
+        for part in parts {
+            if let Some(text) = part.get("text").and_then(|v| v.as_str()) {
+                if let Some(url) = first_url_in(text) {
+                    out.push(ImagePayload::Url(url));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// RightAPI 的任务结果按提交时的协议回：Images 型是 `data[]`，Gemini 型是
+/// `candidates[]`（图在 `inlineData` 或 `parts[].text` 的 URL 里）。三种都试。
+pub fn extract_rightapi_images(body: &Value) -> Vec<ImagePayload> {
+    let mut out = extract_openai_style_images(body);
+    if out.is_empty() {
+        out = extract_gemini_images(body);
+    }
+    if out.is_empty() {
+        out = extract_gemini_text_urls(body);
     }
     out
 }
@@ -459,14 +534,133 @@ async fn generate_gemini(req: &ImageGenRequest) -> Result<Vec<ImagePayload>, Ima
     Ok(extract_gemini_images(&response))
 }
 
+// ───────────────────────────── RightAPI（异步绘图） ─────────────────────────────
+
+/// 轮询间隔与上限。生图普遍 10～60 秒，4K 图偶尔上分钟，5 分钟封顶足够，
+/// 再久基本是服务端卡死而不是还在画。
+const RIGHTAPI_POLL_INTERVAL_MS: u64 = 2_000;
+const RIGHTAPI_POLL_TIMEOUT_MS: u64 = 300_000;
+
+/// 任务查询是**站点层级**接口，路径里没有 `/draw`（见 RightAPI 文档「任务查询」）。
+///
+/// 用户填的 Base URL 是绘图基址 `https://www.rightapi.ai/draw/v1`，查询要的却是
+/// `https://www.rightapi.ai/v1/tasks/{id}`，所以这里把 `/draw` 段摘掉。
+/// 没有该段的自建网关原样拼，不去猜。
+fn rightapi_task_url(base: &str, task_id: &str) -> String {
+    let base = trim_base(base);
+    let root = match base.rfind("/draw/") {
+        Some(i) => format!("{}{}", &base[..i], &base[i + "/draw".len()..]),
+        None => match base.strip_suffix("/draw") {
+            Some(prefix) => prefix.to_string(),
+            None => base,
+        },
+    };
+    format!("{root}/tasks/{task_id}")
+}
+
+/// 任务失败时把服务端给的原因带出来，没有就退回状态本身。
+fn rightapi_failure(body: &Value) -> ImageGenError {
+    let message = body
+        .get("error")
+        .and_then(|e| e.get("message").or(Some(e)))
+        .and_then(|v| v.as_str().map(str::to_string).or_else(|| Some(v.to_string())))
+        .unwrap_or_else(|| "task failed".to_string());
+    ImageGenError {
+        code: classify_http(200, &message).into(),
+        http_status: None,
+        detail: Some(message.chars().take(600).collect()),
+    }
+}
+
+/// RightAPI 绘图。提交拿 `task_id`，再轮询任务直到出图。
+///
+/// 与 OpenAI Images 的差别（全部来自官方文档）：
+/// - 请求体必须带 `"async": true`，响应只回 `task_id`，不含图
+/// - `size` 是宽高比（`1:1` / `16:9` / …）而不是像素，另有 `imageSize`（`1K`/`2K`/`4K`）
+/// - 参考图放请求体的 `image` 数组，走不到 `/images/edits` 的 multipart
+async fn generate_rightapi(
+    req: &ImageGenRequest,
+    flag: &AtomicBool,
+) -> Result<Vec<ImagePayload>, ImageGenError> {
+    let base = trim_base(&req.base_url);
+    let mut body = json!({
+        "model": req.model,
+        "prompt": req.prompt,
+        "async": true,
+    });
+    if let Some(size) = &req.size {
+        body["size"] = json!(size);
+    }
+    if let Some(n) = req.n {
+        body["n"] = json!(n);
+    }
+    // 这家的画质旋钮叫 imageSize，取 1K/2K/4K，语义对应我们配置里的 quality
+    if let Some(quality) = &req.quality {
+        body["imageSize"] = json!(quality);
+    }
+
+    let refs = load_references(&req.ref_images, 4);
+    if !refs.is_empty() {
+        let urls: Vec<String> = refs
+            .iter()
+            .map(|(data, mime)| format!("data:{mime};base64,{data}"))
+            .collect();
+        body["image"] = json!(urls);
+    }
+
+    let auth = vec![("Authorization", format!("Bearer {}", req.api_key.trim()))];
+    let submitted = post_json(&format!("{base}/images/generations"), auth.clone(), body).await?;
+
+    // 文档说恒为异步，但真同步回了图就别白跑一趟轮询
+    let direct = extract_rightapi_images(&submitted);
+    if !direct.is_empty() {
+        return Ok(direct);
+    }
+
+    let Some(task_id) = submitted.get("task_id").and_then(|v| v.as_str()) else {
+        return Err(ImageGenError::with_detail(
+            "bad_response",
+            format!("missing task_id: {submitted:.400}"),
+        ));
+    };
+
+    let url = rightapi_task_url(&req.base_url, task_id);
+    let deadline = RIGHTAPI_POLL_TIMEOUT_MS / RIGHTAPI_POLL_INTERVAL_MS;
+    for _ in 0..deadline {
+        check_cancelled(flag)?;
+        tokio::time::sleep(std::time::Duration::from_millis(RIGHTAPI_POLL_INTERVAL_MS)).await;
+        check_cancelled(flag)?;
+
+        let task = get_json(&url, auth.clone()).await?;
+        if task.get("status").and_then(|v| v.as_str()) == Some("failed") {
+            return Err(rightapi_failure(&task));
+        }
+        // 完成态不带 status 字段（直接就是 Images / Gemini 形状），所以以「抠到图」
+        // 而不是以状态字符串作为结束条件
+        let images = extract_rightapi_images(&task);
+        if !images.is_empty() {
+            return Ok(images);
+        }
+    }
+
+    Err(ImageGenError::with_detail(
+        "timeout",
+        format!("task {task_id} still pending after {}s", RIGHTAPI_POLL_TIMEOUT_MS / 1000),
+    ))
+}
+
 // ───────────────────────────── 入口 ─────────────────────────────
 
-async fn dispatch(req: &ImageGenRequest) -> Result<Vec<ImagePayload>, ImageGenError> {
+async fn dispatch(
+    req: &ImageGenRequest,
+    flag: &AtomicBool,
+) -> Result<Vec<ImagePayload>, ImageGenError> {
     match req.api_kind.as_str() {
         "doubao_seedream" => generate_doubao(req).await,
         // 自定义端点按 OpenAI 兼容处理，解析时会自动嗅探字段
         "openai_images" | "custom_openai_images" => generate_openai(req).await,
         "gemini_image" => generate_gemini(req).await,
+        "rightapi_draw" => generate_rightapi(req, flag).await,
         other => Err(ImageGenError::with_detail("provider_unsupported", other.to_string())),
     }
 }
@@ -492,7 +686,7 @@ pub async fn image_generate(req: ImageGenRequest) -> Result<Vec<String>, ImageGe
 
 async fn run(req: &ImageGenRequest, flag: &AtomicBool) -> Result<Vec<String>, ImageGenError> {
     check_cancelled(flag)?;
-    let payloads = dispatch(req).await?;
+    let payloads = dispatch(req, flag).await?;
     if payloads.is_empty() {
         return Err(ImageGenError::new("no_image"));
     }
@@ -642,6 +836,120 @@ mod tests {
         assert!(extract_gemini_images(&json!({})).is_empty());
         assert!(extract_gemini_images(&json!({ "candidates": [] })).is_empty());
         assert!(extract_gemini_images(&json!({ "candidates": [{}] })).is_empty());
+    }
+
+    // ── RightAPI 异步绘图 ──
+
+    #[test]
+    fn task_url_drops_the_draw_segment() {
+        // 绘图基址带 /draw，任务查询是站点层级接口，不带
+        assert_eq!(
+            rightapi_task_url("https://www.rightapi.ai/draw/v1", "task_1"),
+            "https://www.rightapi.ai/v1/tasks/task_1"
+        );
+        assert_eq!(
+            rightapi_task_url("https://www.rightapi.ai/draw/v1/", "task_1"),
+            "https://www.rightapi.ai/v1/tasks/task_1"
+        );
+        assert_eq!(
+            rightapi_task_url("https://www.rightapi.ai/draw", "task_1"),
+            "https://www.rightapi.ai/tasks/task_1"
+        );
+    }
+
+    #[test]
+    fn task_url_leaves_gateways_without_draw_alone() {
+        // 自建网关的路径形状未知，别去猜
+        assert_eq!(
+            rightapi_task_url("https://gw.internal/v1", "task_1"),
+            "https://gw.internal/v1/tasks/task_1"
+        );
+    }
+
+    #[test]
+    fn extracts_rightapi_images_shape() {
+        let body = json!({ "created": 1, "data": [{ "url": "https://cdn/x.png" }] });
+        assert_eq!(
+            extract_rightapi_images(&body),
+            vec![ImagePayload::Url("https://cdn/x.png".into())]
+        );
+    }
+
+    #[test]
+    fn extracts_rightapi_gemini_text_url() {
+        // 完成态的 Gemini 形状把地址放在 parts[].text，是纯文本不是 inlineData
+        let body = json!({
+            "candidates": [{
+                "content": { "role": "model", "parts": [{ "text": "https://cdn/y.png" }] },
+                "finishReason": "STOP"
+            }],
+            "modelVersion": "nano-banana-fast"
+        });
+        assert_eq!(
+            extract_rightapi_images(&body),
+            vec![ImagePayload::Url("https://cdn/y.png".into())]
+        );
+    }
+
+    #[test]
+    fn extracts_rightapi_gemini_inline_data_too() {
+        let body = json!({
+            "candidates": [{
+                "content": { "parts": [{ "inlineData": { "mimeType": "image/png", "data": "AAA" } }] }
+            }]
+        });
+        assert_eq!(
+            extract_rightapi_images(&body),
+            vec![ImagePayload::Base64WithMime("AAA".into(), "image/png".into())]
+        );
+    }
+
+    #[test]
+    fn pending_task_yields_no_images() {
+        // 排队/进行中的任务不该被当成结果，否则会提前收尾报 no_image
+        let queued = json!({ "task_id": "t", "status": "in_progress", "progress": 45 });
+        assert!(extract_rightapi_images(&queued).is_empty());
+        let submitted = json!({ "task_id": "t", "status": "processing", "progress": 0 });
+        assert!(extract_rightapi_images(&submitted).is_empty());
+    }
+
+    #[test]
+    fn submit_ack_message_is_not_mistaken_for_a_url() {
+        // 提交回执的 message 是中文说明，里面没有 http，不能被当成图
+        let body = json!({
+            "task_id": "t",
+            "status": "processing",
+            "message": "任务id: t 已提交，正在处理中，请稍后在异步任务中查看结果"
+        });
+        assert!(extract_rightapi_images(&body).is_empty());
+    }
+
+    #[test]
+    fn pulls_url_out_of_surrounding_text() {
+        assert_eq!(first_url_in("![img](https://cdn/z.png)"), Some("https://cdn/z.png".into()));
+        assert_eq!(first_url_in("好了：https://cdn/z.png。"), Some("https://cdn/z.png".into()));
+        assert_eq!(first_url_in("  https://cdn/z.png  "), Some("https://cdn/z.png".into()));
+        assert_eq!(first_url_in("no link here"), None);
+        assert_eq!(first_url_in("http://"), None);
+    }
+
+    #[test]
+    fn failure_surfaces_the_server_message() {
+        let body = json!({
+            "task_id": "t",
+            "status": "failed",
+            "error": { "message": "内容审核未通过", "code": "" }
+        });
+        let err = rightapi_failure(&body);
+        assert_eq!(err.code, "content_filtered");
+        assert_eq!(err.detail.as_deref(), Some("内容审核未通过"));
+    }
+
+    #[test]
+    fn failure_without_message_still_reports_something() {
+        let err = rightapi_failure(&json!({ "task_id": "t", "status": "failed" }));
+        assert_eq!(err.code, "http_error");
+        assert!(err.detail.is_some());
     }
 
     // ── 扩展名判定 ──

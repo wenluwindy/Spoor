@@ -13,6 +13,8 @@ import { MIMO_TOKEN_PLAN_BASE_URL } from './mimo';
 export const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 export const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 export const ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
+/** RightAPI 的**绘图**基址。注意是 rightapi.ai，不是 right.ai（另一家的站点）。 */
+export const RIGHTAPI_DRAW_BASE_URL = 'https://www.rightapi.ai/draw/v1';
 
 /** 各服务商的默认 Base URL。`custom` 没有默认值，必须用户填。 */
 export const PROVIDER_DEFAULT_BASE_URL: Record<ProviderKind, string> = {
@@ -51,6 +53,18 @@ export function defaultImageApiKind(kind: ProviderKind): ImageApiKind | undefine
 export function supportsImageGeneration(kind: ProviderKind): boolean {
   return defaultImageApiKind(kind) !== undefined;
 }
+
+/**
+ * `custom` 服务商可选的生图协议。
+ *
+ * 只有自定义端点需要选——其余几种由 `kind` 唯一确定，摆出来只会让人选错。
+ */
+export const SELECTABLE_IMAGE_API_KINDS: ImageApiKind[] = [
+  'custom_openai_images',
+  'rightapi_draw',
+  'doubao_seedream',
+  'gemini_image',
+];
 
 type PresetImageModel = Omit<ImageModelEntry, 'id'>;
 
@@ -91,6 +105,33 @@ export const PRESET_IMAGE_MODELS: Partial<Record<ProviderKind, PresetImageModel[
       label: 'Nano Banana Pro',
       capabilities: { textToImage: true, imageToImage: true, maxRefImages: 3 },
       defaultParams: { n: 1 },
+    },
+  ],
+};
+
+/**
+ * 按生图协议给的预设，用于 `custom` 服务商——它的 `kind` 一律是 `custom`，
+ * 靠 [`PRESET_IMAGE_MODELS`] 那张按 `ProviderKind` 索引的表区分不开。
+ *
+ * RightAPI 的 `size` 是**宽高比**而不是像素（`1:1` / `16:9` / `9:16` / `4:3`），
+ * 缺省时服务端按 1024x1024 出图。`quality` 会被发成它的 `imageSize`（`1K`/`2K`/`4K`），
+ * 只有部分模型支持，所以预设里不填。
+ */
+export const PRESET_IMAGE_MODELS_BY_API_KIND: Partial<Record<ImageApiKind, PresetImageModel[]>> = {
+  rightapi_draw: [
+    {
+      modelName: 'nano-banana-fast',
+      label: 'Nano Banana Fast (RightAPI)',
+      capabilities: { textToImage: true, imageToImage: true, maxRefImages: 4 },
+      sizeOptions: ['1:1', '16:9', '9:16', '4:3'],
+      defaultParams: { size: '1:1', n: 1 },
+    },
+    {
+      modelName: 'nano-banana',
+      label: 'Nano Banana (RightAPI)',
+      capabilities: { textToImage: true, imageToImage: true, maxRefImages: 4 },
+      sizeOptions: ['1:1', '16:9', '9:16', '4:3'],
+      defaultParams: { size: '1:1', n: 1 },
     },
   ],
 };

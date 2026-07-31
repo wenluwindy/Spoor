@@ -238,19 +238,19 @@ export function Reference({
   }, [activeArticle?.id]);
 
   return (
-    <div className="flex-1 flex min-h-0 bg-[#FAF9F6] paper-texture overflow-hidden">
+    <div className="flex-1 flex min-h-0 bg-app-surface paper-texture overflow-hidden">
       {!isFullScreen && (
-        <div className="w-64 border-r border-[#E6E4DF] bg-white flex flex-col z-10 shadow-sm relative shrink-0">
-          <div className="p-4 border-b border-[#E6E4DF] bg-[#F4F1ED]/50 flex-shrink-0">
+        <div className="w-64 border-r border-app-border bg-app-surface-raised flex flex-col z-10 shadow-sm relative shrink-0">
+          <div className="p-4 border-b border-app-border bg-app-surface-subtle/50 flex-shrink-0">
             <div className="flex items-center justify-between">
-              <h2 className="font-bold text-sm font-sans text-[#1a1a1a] flex items-center gap-2">
+              <h2 className="font-bold text-sm font-sans text-app-text flex items-center gap-2">
                 <Library className="w-4 h-4" />
                 {t('reference.index_title')}
               </h2>
               <button
                 type="button"
                 onClick={() => void handleAddArticle()}
-                className="text-[#8c8a84] hover:text-[#1a1a1a] transition-colors p-1 rounded hover:bg-[#EAE7E2]"
+                className="text-app-text-faint hover:text-app-text transition-colors p-1 rounded hover:bg-app-surface-sunken"
                 title={t('reference.add_article')}
                 aria-label={t('reference.add_article')}
               >
@@ -258,22 +258,22 @@ export function Reference({
               </button>
             </div>
             <div className="mt-4 relative">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#8c8a84]" />
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-app-text-faint" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t('reference.search_refs')}
-                className="w-full text-xs font-sans bg-white border border-[#E6E4DF] pl-9 pr-3 py-2 rounded-md focus:outline-none focus:border-[#C2410C] focus:ring-1 focus:ring-[#C2410C] transition-all shadow-sm"
+                className="w-full text-xs font-sans bg-app-surface-raised border border-app-border pl-9 pr-3 py-2 rounded-md focus:outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent transition-all shadow-sm"
               />
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
             {articles.length === 0 ? (
-              <p className="text-xs text-[#8c8a84] px-1">{t('reference.empty_library')}</p>
+              <p className="text-xs text-app-text-faint px-1">{t('reference.empty_library')}</p>
             ) : filteredArticles.length === 0 ? (
-              <p className="text-xs text-[#8c8a84] px-1">{t('reference.no_matches')}</p>
+              <p className="text-xs text-app-text-faint px-1">{t('reference.no_matches')}</p>
             ) : (
               filteredArticles.map((article) => (
                 <div
@@ -282,36 +282,36 @@ export function Reference({
                   onClick={() => setActiveReferenceId(article.id)}
                   className={`p-3 border rounded-md cursor-pointer transition-all relative overflow-hidden group ${
                     activeReferenceId === article.id
-                      ? 'bg-[#F4F1ED] border-[#C2410C]/30'
-                      : 'bg-white border-transparent hover:border-[#E6E4DF] hover:bg-[#FAF9F6] hover:shadow-sm'
+                      ? 'bg-app-surface-subtle border-app-accent/30'
+                      : 'bg-app-surface-raised border-transparent hover:border-app-border hover:bg-app-surface hover:shadow-sm'
                   }`}
                 >
                   <div className="flex justify-between items-start mb-1.5 gap-1">
                     <span
                       className={`min-w-0 truncate ${
-                        activeReferenceId === article.id ? 'text-[#C2410C]' : 'text-[#8c8a84]'
+                        activeReferenceId === article.id ? 'text-app-accent' : 'text-app-text-faint'
                       } text-[10px] uppercase tracking-wider font-mono font-bold`}
                     >
                       {article.type}
                     </span>
                     <div className="flex shrink-0 items-center gap-1.5">
-                      <span className="text-[#8c8a84] text-[10px]">{article.date}</span>
+                      <span className="text-app-text-faint text-[10px]">{article.date}</span>
                       <button
                         type="button"
                         data-testid={`reference-delete-${article.id}`}
                         title={t('reference.delete_article')}
                         aria-label={t('reference.delete_article')}
                         onClick={(e) => void handleDeleteArticle(article, e)}
-                        className="rounded p-0.5 text-[#8c8a84] opacity-0 transition-all hover:bg-[#EAE7E2] hover:text-[#C2410C] group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#C2410C]/40"
+                        className="rounded p-0.5 text-app-text-faint opacity-0 transition-all hover:bg-app-surface-sunken hover:text-app-accent group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-app-accent/40"
                       >
                         <Trash2 className="h-3.5 w-3.5" aria-hidden />
                       </button>
                     </div>
                   </div>
-                  <h3 className="font-bold text-sm leading-tight mb-1 font-serif pr-6 text-[#1a1a1a]">
+                  <h3 className="font-bold text-sm leading-tight mb-1 font-serif pr-6 text-app-text">
                     {article.title}
                   </h3>
-                  <p className="text-[#5a5a54] text-xs font-sans truncate">
+                  <p className="text-app-text-muted text-xs font-sans truncate">
                     {(article.content || '').slice(0, 50)}
                     {(article.content || '').length > 0 ? '…' : ''}
                   </p>
@@ -322,14 +322,14 @@ export function Reference({
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto relative bg-[#FAF9F6] border-r border-[#E6E4DF]">
-        <div className="sticky top-0 w-full h-14 bg-white/80 backdrop-blur-md border-b border-[#E6E4DF] flex items-center justify-between px-6 z-10">
-          <div className="flex items-center gap-4 text-[#5a5a54]">
+      <div className="flex-1 overflow-y-auto relative bg-app-surface border-r border-app-border">
+        <div className="sticky top-0 w-full h-14 bg-app-surface-raised/80 backdrop-blur-md border-b border-app-border flex items-center justify-between px-6 z-10">
+          <div className="flex items-center gap-4 text-app-text-muted">
             <button
               type="button"
               onClick={() => isFullScreen && setIsFullScreen(false)}
               disabled={!isFullScreen}
-              className={`hover:text-[#1a1a1a] transition-colors ${!isFullScreen ? 'opacity-30 pointer-events-none' : ''}`}
+              className={`hover:text-app-text transition-colors ${!isFullScreen ? 'opacity-30 pointer-events-none' : ''}`}
               aria-label={t('reference.immersive_exit')}
             >
               <ChevronLeft className="w-5 h-5" />
@@ -337,7 +337,7 @@ export function Reference({
             <button
               type="button"
               onClick={() => setIsFullScreen(!isFullScreen)}
-              className="hover:text-[#1a1a1a] transition-colors p-1 bg-white hover:bg-[#EAE7E2] rounded border border-[#E6E4DF] shadow-sm ml-[-4px]"
+              className="hover:text-app-text transition-colors p-1 bg-app-surface-raised hover:bg-app-surface-sunken rounded border border-app-border shadow-sm ml-[-4px]"
               aria-label={isFullScreen ? t('reference.immersive_exit') : t('reference.immersive_enter')}
               title={isFullScreen ? t('reference.immersive_exit') : t('reference.immersive_enter')}
             >
@@ -348,21 +348,21 @@ export function Reference({
                 type="button"
                 onClick={() => activeArticle && setContentsOpen(!contentsOpen)}
                 disabled={!activeArticle}
-                className="text-xs font-sans font-medium hover:text-[#1a1a1a] disabled:opacity-40"
+                className="text-xs font-sans font-medium hover:text-app-text disabled:opacity-40"
               >
                 {t('reference.contents')}
               </button>
               {contentsOpen && activeArticle ? (
-                <div className="absolute left-0 top-full mt-1 min-w-[12rem] bg-white border border-[#E6E4DF] rounded-md shadow-lg py-2 z-20 max-h-64 overflow-y-auto">
+                <div className="absolute left-0 top-full mt-1 min-w-[12rem] bg-app-surface-raised border border-app-border rounded-md shadow-lg py-2 z-20 max-h-64 overflow-y-auto">
                   {toc.length === 0 ? (
-                    <p className="px-3 py-2 text-[11px] text-[#8c8a84]">{t('reference.contents_empty')}</p>
+                    <p className="px-3 py-2 text-[11px] text-app-text-faint">{t('reference.contents_empty')}</p>
                   ) : (
                     toc.map((item, idx) => (
                       <button
                         key={`${item.slug}-${idx}`}
                         type="button"
                         onClick={() => scrollToHeading(item.slug)}
-                        className="w-full text-left px-3 py-1.5 text-[11px] text-[#1a1a1a] hover:bg-[#F4F1ED]"
+                        className="w-full text-left px-3 py-1.5 text-[11px] text-app-text hover:bg-app-surface-subtle"
                         style={{ paddingLeft: `${8 + (item.level - 1) * 10}px` }}
                       >
                         {item.text}
@@ -381,7 +381,7 @@ export function Reference({
               type="button"
               onClick={() => void copyCitation()}
               disabled={!activeArticle}
-              className="text-xs font-sans font-medium text-[#5a5a54] hover:text-[#1a1a1a] bg-white border border-[#E6E4DF] px-3 py-1.5 rounded shadow-sm flex items-center gap-2 disabled:opacity-40"
+              className="text-xs font-sans font-medium text-app-text-muted hover:text-app-text bg-app-surface-raised border border-app-border px-3 py-1.5 rounded shadow-sm flex items-center gap-2 disabled:opacity-40"
             >
               <Link2 className="w-3.5 h-3.5" />
               {t('reference.citation')}
@@ -390,27 +390,27 @@ export function Reference({
         </div>
 
         {!activeArticle ? (
-          <div className="max-w-2xl mx-auto my-24 px-6 text-center text-[#8c8a84] text-sm font-sans">
+          <div className="max-w-2xl mx-auto my-24 px-6 text-center text-app-text-faint text-sm font-sans">
             {t('reference.empty_library')}
           </div>
         ) : (
-          <div className="max-w-2xl mx-auto my-12 bg-white border border-[#E6E4DF] shadow-md relative" key={activeArticle.id}>
-            <div className="absolute -top-px -left-px -right-px h-1 bg-[#C2410C]" />
+          <div className="max-w-2xl mx-auto my-12 bg-app-surface-raised border border-app-border shadow-md relative" key={activeArticle.id}>
+            <div className="absolute -top-px -left-px -right-px h-1 bg-app-accent" />
 
             <div className="p-16">
-              <div className="flex flex-col gap-6 md:flex-row md:items-start md:gap-10 border-b-2 border-[#1a1a1a] pb-6 mb-10">
+              <div className="flex flex-col gap-6 md:flex-row md:items-start md:gap-10 border-b-2 border-app-text pb-6 mb-10">
                 <div className="min-w-0 flex-1 pr-2">
-                  <div className="text-[#8c8a84] font-mono text-xs uppercase tracking-widest mb-3 flex flex-wrap items-center gap-x-1">
+                  <div className="text-app-text-faint font-mono text-xs uppercase tracking-widest mb-3 flex flex-wrap items-center gap-x-1">
                     <span>{t('reference.document_prefix')}</span>
                     <input
-                      className="bg-transparent border-0 border-b border-transparent focus:border-[#C2410C] outline-none min-w-[5rem] max-w-[12rem] font-mono text-[#8c8a84]"
+                      className="bg-transparent border-0 border-b border-transparent focus:border-app-accent outline-none min-w-[5rem] max-w-[12rem] font-mono text-app-text-faint"
                       value={activeArticle.type}
                       onChange={(e) => void db.articles.update(activeArticle.id, { type: e.target.value })}
                       aria-label={t('reference.document_prefix')}
                     />
                   </div>
                   <h1
-                    className="font-serif text-4xl font-bold text-[#1a1a1a] leading-tight max-w-full focus:outline-none hover:bg-[#EAE7E2]/50 focus:bg-[#EAE7E2]/50 rounded px-2 -mx-2 transition-colors cursor-text"
+                    className="font-serif text-4xl font-bold text-app-text leading-tight max-w-full focus:outline-none hover:bg-app-surface-sunken/50 focus:bg-app-surface-sunken/50 rounded px-2 -mx-2 transition-colors cursor-text"
                     contentEditable
                     suppressContentEditableWarning
                     onBlur={(e) => {
@@ -421,13 +421,13 @@ export function Reference({
                     {activeArticle.title}
                   </h1>
                 </div>
-                <div className="flex shrink-0 w-full flex-col gap-3 text-xs font-sans text-[#5a5a54] sm:w-auto sm:max-w-[11rem] md:items-end md:text-right">
+                <div className="flex shrink-0 w-full flex-col gap-3 text-xs font-sans text-app-text-muted sm:w-auto sm:max-w-[11rem] md:items-end md:text-right">
                   <label className="flex flex-col gap-0.5 sm:items-stretch md:items-end">
                     <span className="shrink-0 font-bold">{t('reference.author_label')}:</span>
                     <input
                       type="text"
                       data-testid="reference-meta-author"
-                      className="w-full shrink-0 min-w-0 border-0 bg-transparent px-0.5 py-1 text-[#5a5a54] outline-none rounded-sm hover:bg-[#F4F1ED]/80 focus-visible:bg-[#F4F1ED]/80 focus-visible:ring-1 focus-visible:ring-[#C2410C]/35 md:text-right"
+                      className="w-full shrink-0 min-w-0 border-0 bg-transparent px-0.5 py-1 text-app-text-muted outline-none rounded-sm hover:bg-app-surface-subtle/80 focus-visible:bg-app-surface-subtle/80 focus-visible:ring-1 focus-visible:ring-app-accent/35 md:text-right"
                       value={draftAuthor}
                       aria-label={t('reference.author_label')}
                       onChange={(e) => {
@@ -454,7 +454,7 @@ export function Reference({
                     <input
                       type="text"
                       data-testid="reference-meta-date"
-                      className="w-full shrink-0 min-w-0 border-0 bg-transparent px-0.5 py-1 text-[#5a5a54] outline-none rounded-sm hover:bg-[#F4F1ED]/80 focus-visible:bg-[#F4F1ED]/80 focus-visible:ring-1 focus-visible:ring-[#C2410C]/35 md:text-right"
+                      className="w-full shrink-0 min-w-0 border-0 bg-transparent px-0.5 py-1 text-app-text-muted outline-none rounded-sm hover:bg-app-surface-subtle/80 focus-visible:bg-app-surface-subtle/80 focus-visible:ring-1 focus-visible:ring-app-accent/35 md:text-right"
                       value={draftDateField}
                       aria-label={t('reference.published_label')}
                       onChange={(e) => {
@@ -479,10 +479,10 @@ export function Reference({
                 </div>
               </div>
 
-              <div className="font-serif text-lg leading-relaxed text-[#1a1a1a]">
+              <div className="font-serif text-lg leading-relaxed text-app-text">
                 {isEditingBody ? (
                   <div
-                    className="min-h-[12rem] whitespace-pre-wrap focus:outline-none hover:bg-[#EAE7E2]/50 focus:bg-[#EAE7E2]/50 rounded px-2 -mx-2 transition-colors cursor-text"
+                    className="min-h-[12rem] whitespace-pre-wrap focus:outline-none hover:bg-app-surface-sunken/50 focus:bg-app-surface-sunken/50 rounded px-2 -mx-2 transition-colors cursor-text"
                     contentEditable
                     suppressContentEditableWarning
                     onBlur={(e) => {
@@ -498,7 +498,7 @@ export function Reference({
                   </div>
                 ) : (
                   <div
-                    className="markdown-body min-h-[12rem] cursor-text rounded px-2 -mx-2 transition-colors hover:bg-[#EAE7E2]/30"
+                    className="markdown-body min-h-[12rem] cursor-text rounded px-2 -mx-2 transition-colors hover:bg-app-surface-sunken/30"
                     onClick={() => setIsEditingBody(true)}
                   >
                     <Markdown remarkPlugins={REFERENCE_MARKDOWN_PLUGINS} components={markdownComponents}>
@@ -513,15 +513,15 @@ export function Reference({
       </div>
 
       {!isFullScreen && (
-        <div className="w-72 bg-white flex-shrink-0 flex flex-col font-sans text-xs">
-          <div className="p-4 border-b border-[#E6E4DF] font-bold text-[#1a1a1a] h-14 flex items-center bg-[#F4F1ED]/50">
+        <div className="w-72 bg-app-surface-raised flex-shrink-0 flex flex-col font-sans text-xs">
+          <div className="p-4 border-b border-app-border font-bold text-app-text h-14 flex items-center bg-app-surface-subtle/50">
             {t('reference.metadata_notes')}
           </div>
           <div className="p-6 space-y-8 overflow-y-auto">
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-[#8c8a84] font-semibold uppercase tracking-wider text-[10px] flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#C2410C]" />
+                <h4 className="text-app-text-faint font-semibold uppercase tracking-wider text-[10px] flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-app-accent" />
                   {t('reference.tags')}
                 </h4>
               </div>
@@ -529,13 +529,13 @@ export function Reference({
                 {(activeArticle?.tags ?? []).map((tag) => (
                   <span
                     key={tag}
-                    className="group bg-[#EAE7E2] text-[#5a5a54] px-2 py-1 rounded flex items-center gap-1 text-[11px]"
+                    className="group bg-app-surface-sunken text-app-text-muted px-2 py-1 rounded flex items-center gap-1 text-[11px]"
                   >
                     {tag}
                     <button
                       type="button"
                       onClick={() => removeTag(tag)}
-                      className="opacity-60 hover:opacity-100 p-0.5 rounded hover:bg-[#d1cfca]"
+                      className="opacity-60 hover:opacity-100 p-0.5 rounded hover:bg-app-edge"
                       aria-label={t('reference.remove_tag')}
                     >
                       <X className="w-3 h-3" />
@@ -551,14 +551,14 @@ export function Reference({
                   onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
                   placeholder={t('reference.tag_add_placeholder')}
                   disabled={!activeArticle}
-                  className="flex-1 text-[11px] bg-[#FAF9F6] border border-[#E6E4DF] rounded px-2 py-1.5 focus:outline-none focus:border-[#C2410C]"
+                  className="flex-1 text-[11px] bg-app-surface border border-app-border rounded px-2 py-1.5 focus:outline-none focus:border-app-accent"
                 />
                 <Tooltip label={t('reference.tag_add')}>
                   <button
                     type="button"
                     onClick={addTag}
                     disabled={!activeArticle}
-                    className="p-1.5 rounded border border-[#E6E4DF] hover:bg-[#F4F1ED] disabled:opacity-40"
+                    className="p-1.5 rounded border border-app-border hover:bg-app-surface-subtle disabled:opacity-40"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -568,25 +568,25 @@ export function Reference({
 
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-[#8c8a84] font-semibold uppercase tracking-wider text-[10px] flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#1a1a1a]" />
+                <h4 className="text-app-text-faint font-semibold uppercase tracking-wider text-[10px] flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-app-text" />
                   {t('reference.linked_drafts')}
                 </h4>
               </div>
               <div className="space-y-2">
                 {linkedIds.length === 0 ? (
-                  <p className="text-[11px] text-[#8c8a84]">{t('reference.linked_empty')}</p>
+                  <p className="text-[11px] text-app-text-faint">{t('reference.linked_empty')}</p>
                 ) : (
                   linkedIds.map((cid) => {
                     const c = canvases.find((x) => x.id === cid);
                     return (
-                      <div key={cid} className="flex items-start gap-2 p-3 bg-[#FAF9F6] border border-[#E6E4DF] rounded">
-                        <BookOpen className="w-4 h-4 text-[#C2410C] mt-0.5 shrink-0" />
+                      <div key={cid} className="flex items-start gap-2 p-3 bg-app-surface border border-app-border rounded">
+                        <BookOpen className="w-4 h-4 text-app-accent mt-0.5 shrink-0" />
                         <div className="min-w-0 flex-1">
                           <button
                             type="button"
                             onClick={() => onOpenCanvas?.(cid)}
-                            className="font-semibold text-[#1a1a1a] text-[11px] text-left hover:text-[#C2410C] hover:underline"
+                            className="font-semibold text-app-text text-[11px] text-left hover:text-app-accent hover:underline"
                             disabled={!onOpenCanvas}
                           >
                             {c?.name ?? cid}
@@ -601,13 +601,13 @@ export function Reference({
 
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-[#8c8a84] font-semibold uppercase tracking-wider text-[10px] flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#5a5a54]" />
+                <h4 className="text-app-text-faint font-semibold uppercase tracking-wider text-[10px] flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-app-text-muted" />
                   {t('reference.private_notes')}
                 </h4>
                 {noteStatus && (
                   <span
-                    className={`text-[10px] ${noteStatus === 'Saved' ? 'text-green-600' : 'text-[#8c8a84]'}`}
+                    className={`text-[10px] ${noteStatus === 'Saved' ? 'text-green-600' : 'text-app-text-faint'}`}
                   >
                     {noteStatus}
                   </span>
@@ -617,7 +617,7 @@ export function Reference({
                 value={notesLocal}
                 onChange={(e) => onNotesChange(e.target.value)}
                 disabled={!activeArticle}
-                className="w-full h-40 bg-[#FAF9F6] border border-[#E6E4DF] rounded-md p-3 text-[#5a5a54] resize-none focus:outline-none focus:border-[#C2410C] focus:ring-1 focus:ring-[#C2410C] shadow-sm disabled:opacity-40"
+                className="w-full h-40 bg-app-surface border border-app-border rounded-md p-3 text-app-text-muted resize-none focus:outline-none focus:border-app-accent focus:ring-1 focus:ring-app-accent shadow-sm disabled:opacity-40"
                 placeholder={t('reference.notes_placeholder')}
               />
             </div>

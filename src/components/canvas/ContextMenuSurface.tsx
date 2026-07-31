@@ -62,8 +62,8 @@ function EntryRow({
   const Icon = entry.icon;
   const tone = entry.danger
     ? 'text-red-700 hover:bg-red-50'
-    : 'text-[#1a1a1a] hover:bg-[#F4F1ED]';
-  const activeTone = entry.danger ? 'bg-red-50' : 'bg-[#F4F1ED]';
+    : 'text-app-text hover:bg-app-surface-subtle';
+  const activeTone = entry.danger ? 'bg-red-50' : 'bg-app-surface-subtle';
 
   return (
     <button
@@ -89,14 +89,14 @@ function EntryRow({
       {Icon ? (
         <Icon
           className={`h-3.5 w-3.5 shrink-0 ${
-            entry.danger ? 'text-red-600' : entry.accent ? 'text-[#C2410C]' : 'text-[#5a5a54]'
+            entry.danger ? 'text-red-600' : entry.accent ? 'text-app-accent' : 'text-app-text-muted'
           }`}
         />
       ) : (
         <span className="h-3.5 w-3.5 shrink-0" />
       )}
       <span className="min-w-0 flex-1 truncate">{entry.label}</span>
-      {entry.submenu ? <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#8c8a84]" /> : null}
+      {entry.submenu ? <ChevronRight className="h-3.5 w-3.5 shrink-0 text-app-text-faint" /> : null}
     </button>
   );
 }
@@ -168,7 +168,7 @@ function MenuPanel({
       role={role ?? 'menu'}
       data-canvas-context-menu=""
       tabIndex={-1}
-      className="fixed z-[150] flex min-w-[200px] max-w-[280px] flex-col rounded-xl border border-[#E6E4DF] bg-white p-1 shadow-xl outline-none"
+      className="fixed z-[150] flex min-w-[200px] max-w-[280px] flex-col rounded-xl border border-app-border bg-app-surface-raised p-1 shadow-xl outline-none"
       style={{
         left: pos?.left ?? x,
         top: pos?.top ?? y,
@@ -177,7 +177,7 @@ function MenuPanel({
     >
       {sections.map((section, sectionIndex) => (
         <React.Fragment key={section.id}>
-          {sectionIndex > 0 ? <div className="my-1 h-px bg-[#F4F1ED]" /> : null}
+          {sectionIndex > 0 ? <div className="my-1 h-px bg-app-surface-subtle" /> : null}
           {section.entries.map((entry) => (
             <EntryRow
               key={entry.id}

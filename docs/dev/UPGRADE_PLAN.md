@@ -512,7 +512,7 @@ export interface AIProviderProfile {
   chatModels: AIModelEntry[];
   imageModels: ImageModelEntry[];
   /** 生图协议：默认由 kind 推导，custom 时必填 */
-  imageApiKind?: 'doubao_seedream' | 'openai_images' | 'gemini_image' | 'custom_openai_images';
+  imageApiKind?: 'doubao_seedream' | 'openai_images' | 'gemini_image' | 'custom_openai_images' | 'rightapi_draw';
   localGgufPath?: string;
   localEnableThinking?: boolean;
 }
@@ -560,7 +560,7 @@ export interface AIConfig {
 - **测试**：对话发 `ping`；生图发最小尺寸 `a red circle`，成功显示缩略图
 - 火山方舟对话模型输入框需专门提示（推理接入点 ID）
 
-## 11. 四种生图适配器
+## 11. 生图适配器
 
 > 模型 ID 为**预设默认值**，均可在设置里修改；实现时对照各家最新文档核对。
 
@@ -570,10 +570,12 @@ export interface AIConfig {
 | **`openai_images`**<br>OpenAI | `POST {base}/images/generations`<br>图生图 `POST {base}/images/edits` | `{ model:'gpt-image-1', prompt, size, n, quality }` | `/images/edits` **multipart**：`image[]` 多文件 + `prompt` + `model` | `data[].b64_json` → 解码落盘 |
 | **`gemini_image`**<br>Nano Banana | `POST {base}/models/{model}:generateContent`<br>`base=https://generativelanguage.googleapis.com/v1beta` | `{ contents:[{parts:[{text}]}], generationConfig:{ responseModalities:['IMAGE'] } }`<br>预设 `gemini-2.5-flash-image` / `gemini-3-pro-image-preview` | 同一 `parts` 追加 `{ inlineData:{ mimeType, data } }` | `candidates[0].content.parts[].inlineData.data` → 解码落盘 |
 | **`custom_openai_images`**<br>自定义 | `POST {用户填写的 base}/images/generations` | 同 `openai_images`，base URL / model / 鉴权前缀全由用户填 | 同 `openai_images` | 自动嗅探 `data[].b64_json` → `data[].url` → `images[]` |
+| **`rightapi_draw`**<br>RightAPI（**异步**） | 提交 `POST {base}/images/generations`<br>`base=https://www.rightapi.ai/draw/v1`<br>轮询 `GET {base 去掉 /draw}/tasks/{task_id}` | `{ model, prompt, async:true, size, n, imageSize }`<br>`size` 是**宽高比**（`1:1`/`16:9`/`9:16`/`4:3`）不是像素；`imageSize` 取 `1K`/`2K`/`4K`，映射自配置里的 `quality`<br>预设 `nano-banana-fast` / `nano-banana` | body 加 `image`：data URL **数组**，不走 multipart | 提交只回 `task_id`；每 2s 轮询、5 分钟封顶，完成态按提交协议回 Images 形状（`data[].url`）或 Gemini 形状（`parts[].inlineData` 或 `parts[].text` 里的**纯 URL**） |
 
 - Gemini 走 **REST 而非 `@google/genai` SDK**（请求在 Rust 侧发）。SDK 依赖保留给现有对话链路
 - **鉴权头差异**：火山方舟/OpenAI 用 `Authorization: Bearer`；Gemini 用 `x-goog-api-key`；自定义可选（默认 Bearer）
-- **错误归一**：Rust 抛 `{ code, httpStatus?, detail? }`，`code` ∈ `no_api_key` `network` `http_error` `bad_response` `no_image` `content_filtered` `aborted` `unsupported_i2i` `disk_write_failed` `quota_exceeded`。前端 `t('imagegen.errors.'+code)`，`detail` 折叠显示
+- **错误归一**：Rust 抛 `{ code, httpStatus?, detail? }`，`code` ∈ `no_api_key` `network` `http_error` `bad_response` `no_image` `content_filtered` `aborted` `unsupported_i2i` `disk_write_failed` `quota_exceeded` `timeout`。前端 `t('imagegen.errors.'+code)`，`detail` 折叠显示
+- **协议选择**：`custom` 服务商在设置里可切生图协议（`SELECTABLE_IMAGE_API_KINDS`），其余由 `ProviderKind` 唯一推导。切到 `rightapi_draw` 且 Base URL 还空着时自动填绘图基址——域名是 `rightapi.ai` 而不是 `right.ai`，后者是另一家的站点，`/draw/*` 上会直接断开 TLS 连接
 - **并发**：`IMAGE_GEN_MAX_CONCURRENCY = 2`，超出排队。生图**不阻塞** `isAnyAiBusy`
 - **取消**：Rust 侧 `CancellationToken` + `image_generate_cancel(taskId)`
 

@@ -186,7 +186,7 @@ export function Tooltip({
               role="tooltip"
               data-tooltip=""
               data-placement={placed?.placement ?? placement}
-              className="pointer-events-none fixed z-[200] rounded-md border border-[#E6E4DF] bg-white px-2 py-1 font-sans text-[11px] leading-snug text-[#1a1a1a] shadow-lg"
+              className="pointer-events-none fixed z-[200] rounded-md border border-app-border bg-app-surface-raised px-2 py-1 font-sans text-[11px] leading-snug text-app-text shadow-lg"
               style={{
                 top: placed?.top ?? 0,
                 left: placed?.left ?? 0,
@@ -197,7 +197,7 @@ export function Tooltip({
               {label}
               <span
                 aria-hidden
-                className="absolute h-2 w-2 rotate-45 border-[#E6E4DF] bg-white"
+                className="absolute h-2 w-2 rotate-45 border-app-border bg-app-surface-raised"
                 style={{
                   left: (placed?.arrowLeft ?? 0) - 4,
                   ...(placed?.placement === 'bottom'

@@ -1,6 +1,6 @@
 [package]
 name = "spoor"
-version = "0.1.0"
+version = "0.2.0"
 description = "踪迹 · Spoor — local-first spatial note taking"
 authors = ["AI Studio"]
 edition = "2021"
@@ -17,7 +17,8 @@ futures-util = "0.3"
 open = "5"
 # 本地推理改为子进程调用预编译 llama-cli.exe，无需从源码编译 CUDA llama.cpp
 encoding_rs = "0.8"
-tokio = { version = "1", features = ["rt-multi-thread"] }
+# time：RightAPI 异步绘图要按间隔轮询任务状态
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 uuid = { version = "1.24.0", features = ["v4"] }
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 mime_guess = "2.0.5"

@@ -43,11 +43,19 @@ describe('CanvasEdgeLines', () => {
     expect(container.querySelector('[data-edge-from="c"]')).toBeInTheDocument();
   });
 
-  it('每个 edge group 渲染 2 条线（视觉线 + hit area）', () => {
+  it('每个 edge group 渲染 2 条路径（视觉曲线 + hit area）', () => {
     const edges = [{ id: 'e1', from: 'a', to: 'b' }] as Edge[];
     const { container } = render(<CanvasEdgeLines {...defaultProps} edges={edges} />);
-    const lines = container.querySelectorAll('g[data-edge-id="e1"] line');
-    expect(lines.length).toBe(2);
+    const paths = container.querySelectorAll('g[data-edge-id="e1"] path');
+    expect(paths.length).toBe(2);
+  });
+
+  it('视觉曲线挂箭头 marker，方向可读', () => {
+    const edges = [{ id: 'e1', from: 'a', to: 'b' }] as Edge[];
+    const { container } = render(<CanvasEdgeLines {...defaultProps} edges={edges} />);
+    const visible = container.querySelector('g[data-edge-id="e1"] path.node-connector');
+    expect(visible?.getAttribute('marker-end')).toBe('url(#spoor-edge-arrow)');
+    expect(container.querySelector('marker#spoor-edge-arrow')).toBeTruthy();
   });
 
   it('hovered edge 对应的删除按钮可见', () => {

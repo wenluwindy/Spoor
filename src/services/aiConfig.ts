@@ -6,11 +6,13 @@ import type {
   ImageModelEntry,
   ModelRef,
   ProviderKind,
+  SearchProviderKind,
 } from '../types/aiConfig';
 import {
   PROVIDER_DEFAULT_BASE_URL,
   defaultImageApiKind,
 } from '../constants/aiProviderPresets';
+import { DEFAULT_SEARCH_PROVIDER, isSearchProviderKind } from '../constants/searchProviders';
 
 /**
  * v2 配置的读取与迁移。
@@ -83,8 +85,26 @@ export function resolveActiveChatConfig(config: AIConfigV2): AIConfig {
     model: modelName,
     localGgufPath: provider?.localGgufPath,
     localEnableThinking: provider?.localEnableThinking,
-    metasoApiKey: config.metasoApiKey,
+    ...resolveSearchConfig(config),
   };
+}
+
+export interface ResolvedSearchConfig {
+  searchProvider: SearchProviderKind;
+  searchApiKey: string;
+}
+
+/**
+ * 当前启用的搜索服务与它的 Key。
+ *
+ * `metasoApiKey` 是老字段，`normalizeAiConfig` 已经把它迁进 `searchApiKeys.metaso`；
+ * 这里再兜一次，是为了让没走过 normalize 的调用方（测试里直接构造的配置）也对。
+ */
+export function resolveSearchConfig(config: AIConfigV2): ResolvedSearchConfig {
+  const kind = config.searchProvider ?? DEFAULT_SEARCH_PROVIDER;
+  const stored = config.searchApiKeys?.[kind] ?? '';
+  const key = kind === 'metaso' ? stored || (config.metasoApiKey ?? '') : stored;
+  return { searchProvider: kind, searchApiKey: key.trim() };
 }
 
 export interface ResolvedImageModel {
@@ -162,9 +182,11 @@ export function migrateV1ToV2(v1: Partial<AIConfig>): AIConfigV2 {
   const localPath = (v1.localGgufPath ?? '').trim();
   const metasoApiKey = (v1.metasoApiKey ?? '').trim() || undefined;
 
+  const searchApiKeys = metasoApiKey ? { metaso: metasoApiKey } : undefined;
+
   const everConfigured = apiKey !== '' || localPath !== '';
   if (!everConfigured) {
-    return { ...emptyAiConfigV2(), metasoApiKey };
+    return { ...emptyAiConfigV2(), metasoApiKey, searchApiKeys };
   }
 
   const providerId = newId();
@@ -189,6 +211,7 @@ export function migrateV1ToV2(v1: Partial<AIConfig>): AIConfigV2 {
     providers: [provider],
     activeChat: { providerId, modelId },
     metasoApiKey,
+    searchApiKeys,
   };
 }
 
@@ -264,7 +287,33 @@ export function normalizeAiConfig(raw: unknown): AIConfigV2 {
       modelId: typeof activeChat.modelId === 'string' ? activeChat.modelId : '',
     },
     defaultImage: (o.defaultImage as ModelRef | undefined) ?? undefined,
-    metasoApiKey: typeof o.metasoApiKey === 'string' ? o.metasoApiKey : undefined,
+    ...normalizeSearchSettings(o),
+  };
+}
+
+/**
+ * 搜索服务设置的规范化。
+ *
+ * 老配置只有 `metasoApiKey`，把它抬进 `searchApiKeys.metaso`——不迁的话，
+ * 用户升级后打开「搜索服务」页会看到一个空输入框，以为 Key 丢了。
+ * 老字段本身留着不删，回退到旧版本时仍然能读。
+ */
+function normalizeSearchSettings(o: Record<string, unknown>): Partial<AIConfigV2> {
+  const legacy = typeof o.metasoApiKey === 'string' ? o.metasoApiKey.trim() : '';
+  const raw = (o.searchApiKeys ?? {}) as Record<string, unknown>;
+
+  const keys: Partial<Record<SearchProviderKind, string>> = {};
+  for (const [kind, value] of Object.entries(raw)) {
+    if (isSearchProviderKind(kind) && typeof value === 'string' && value.trim()) {
+      keys[kind] = value.trim();
+    }
+  }
+  if (!keys.metaso && legacy) keys.metaso = legacy;
+
+  return {
+    metasoApiKey: legacy || undefined,
+    searchProvider: isSearchProviderKind(o.searchProvider) ? o.searchProvider : undefined,
+    searchApiKeys: Object.keys(keys).length > 0 ? keys : undefined,
   };
 }
 

@@ -4,6 +4,7 @@ import type {
   AIProviderProfile,
   ImageModelEntry,
   ProviderKind,
+  SearchProviderKind,
 } from '../types/aiConfig';
 import {
   PRESET_CHAT_MODEL,
@@ -238,6 +239,38 @@ export function setDefaultImage(
   return { ...config, defaultImage: { providerId, modelId } };
 }
 
+// ───────────────────────────── 搜索服务 ─────────────────────────────
+
+export function setSearchProvider(config: AIConfigV2, kind: SearchProviderKind): AIConfigV2 {
+  return { ...config, searchProvider: kind };
+}
+
+/**
+ * 存某一家的 Key。各家各存各的——切换服务不该把已经填好的 Key 冲掉。
+ *
+ * 秘塔额外同步一份到老的 `metasoApiKey` 字段：万一用户装回旧版本，Key 还在。
+ */
+export function setSearchApiKey(
+  config: AIConfigV2,
+  kind: SearchProviderKind,
+  key: string,
+): AIConfigV2 {
+  const trimmed = key.trim();
+  const next = { ...(config.searchApiKeys ?? {}) };
+  if (trimmed) {
+    next[kind] = trimmed;
+  } else {
+    delete next[kind];
+  }
+
+  return {
+    ...config,
+    searchApiKeys: Object.keys(next).length > 0 ? next : undefined,
+    ...(kind === 'metaso' ? { metasoApiKey: trimmed || undefined } : {}),
+  };
+}
+
+/** @deprecated 用 [`setSearchApiKey`]。留着是因为老测试与外部调用还在引。 */
 export function setMetasoApiKey(config: AIConfigV2, key: string): AIConfigV2 {
-  return { ...config, metasoApiKey: key.trim() || undefined };
+  return setSearchApiKey(config, 'metaso', key);
 }

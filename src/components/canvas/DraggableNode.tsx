@@ -4,6 +4,8 @@ import { Check, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { colorPresets, fontPresets } from '../../constants/presets';
 import { isDarkNodeBackground } from '../../utils/nodePaletteTone';
 import { useDraggable } from '../../hooks/useDraggable';
+import { useCanvasGrid } from '../../hooks/useCanvasGrid';
+import { CANVAS_GRID_SIZE } from '../../services/canvasGrid';
 import { useResizable } from '../../hooks/useResizable';
 import { Tooltip } from '../ui/Tooltip';
 
@@ -16,10 +18,11 @@ export interface DraggableNodeProps {
   initialX?: number;
   initialY?: number;
   onDelete?: () => void;
-  onCycleLayout?: () => void;
   className?: string;
   scale?: number;
   isSelected?: boolean;
+  /** 当前选区的全部节点 id：本节点在其中且选区 >1 时，拖它等于拖整组。 */
+  selectedIds?: string[];
   isEditing?: boolean;
   onToggleSelect?: () => void;
   allowPalette?: boolean;
@@ -39,8 +42,8 @@ export interface DraggableNodeProps {
 export const DraggableNode: React.FC<DraggableNodeProps> = ({ 
   id, nodesRef, isConnecting, onLink, children, 
   initialX = 100, initialY = 100, initialWidth = 320, initialHeight = 0,
-  onDelete, onCycleLayout, className = '', scale = 1, 
-  isSelected, isEditing, onToggleSelect, allowPalette, onDragEnd, onResizeEnd,
+  onDelete, className = '', scale = 1, 
+  isSelected, selectedIds, isEditing, onToggleSelect, allowPalette, onDragEnd, onResizeEnd,
   rotation = 0,
   glassSurface = false,
   onStickyActivate,
@@ -53,9 +56,16 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
   /** 编辑正文时隐藏外链、布局/删除、缩放手柄等外围控件（避免 group-hover 仍显示） */
   const hideChrome = Boolean(isEditing);
 
-  const node = useDraggable(initialX, initialY, scale, (pos) => {
-    if (onDragEnd) onDragEnd(id, pos);
-  });
+  const gridEnabled = useCanvasGrid();
+  const node = useDraggable(
+    initialX,
+    initialY,
+    scale,
+    (pos) => {
+      if (onDragEnd) onDragEnd(id, pos);
+    },
+    { id, snap: gridEnabled ? CANVAS_GRID_SIZE : 0, groupIds: selectedIds },
+  );
 
   const { size, onPointerDown: onResizePointerDown } = useResizable(initialWidth, initialHeight, scaleRef, (newSize) => {
     if (onResizeEnd) onResizeEnd(newSize);
@@ -67,7 +77,9 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
   const paletteColorChoices = glassSurface ? colorPresets.slice(3) : colorPresets;
   return (
     <div 
-      className={`absolute cursor-move group pointer-events-auto select-none ${className} ${isSelected && !hideChrome ? 'ring-2 ring-[#C2410C]' : ''}`}
+      className={`absolute cursor-move group pointer-events-auto select-none ${className} ${isSelected && !hideChrome ? 'ring-2 ring-app-accent' : ''}`}
+      // 连线拖到一半松手时靠它做命中判定（见 hooks/useCanvasLinkDrag）
+      data-node-id={id}
       data-glass-surface={glassSurface ? '' : undefined}
       data-node-tone={
         styleOverrides.bg
@@ -129,16 +141,38 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
         <Tooltip label={t('canvas.select_note')}>
           <button
             onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onToggleSelect(); }}
-            className={`absolute -top-3 -left-3 w-6 h-6 bg-white border ${isSelected ? 'border-[#C2410C] text-[#C2410C] opacity-100' : 'border-[#E6E4DF] text-transparent hover:border-[#C2410C] opacity-0 group-hover:opacity-40'} rounded-full flex items-center justify-center transition-all z-10 shadow-sm ${hideChrome ? '!opacity-0 pointer-events-none' : ''}`}
+            className={`absolute -top-3 -left-3 w-6 h-6 bg-app-surface-raised border ${isSelected ? 'border-app-accent text-app-accent opacity-100' : 'border-app-border text-transparent hover:border-app-accent opacity-0 group-hover:opacity-40'} rounded-full flex items-center justify-center transition-all z-10 shadow-sm ${hideChrome ? '!opacity-0 pointer-events-none' : ''}`}
           >
             <Check className="w-3 h-3" />
           </button>
         </Tooltip>
       )}
-      <Tooltip label={t('canvas.link_note')}>
+      {/*
+        入口（左中）与出口（右中）是连线的两个固定锚点，连线几何按它们计算
+        （见 utils/edgePath）。出口起连，入口收线——方向因此在画布上可读。
+      */}
+      <Tooltip label={t('canvas.port_in')}>
         <button
+          data-port="in"
           onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onLink(id); }}
-          className={`absolute top-1/2 -mt-3 -right-3 w-6 h-6 bg-white border border-[#E6E4DF] rounded-full flex items-center justify-center text-[#8c8a84] hover:text-[#C2410C] hover:border-[#C2410C] transition-all z-10 shadow-sm ${
+          className={`absolute top-1/2 -mt-2.5 -left-2.5 w-5 h-5 rounded-full border-2 transition-all z-10 shadow-sm ${
+            isConnecting
+              ? 'bg-app-accent/15 border-app-accent scale-110'
+              : 'bg-app-surface-raised border-app-edge hover:border-app-accent'
+          } ${
+            hideChrome
+              ? '!opacity-0 pointer-events-none'
+              : isConnecting || isSelected
+                ? 'opacity-100'
+                : 'opacity-0 group-hover:opacity-70'
+          }`}
+        />
+      </Tooltip>
+      <Tooltip label={t('canvas.port_out')}>
+        <button
+          data-port="out"
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onLink(id); }}
+          className={`absolute top-1/2 -mt-3 -right-3 w-6 h-6 bg-app-surface-raised border border-app-border rounded-full flex items-center justify-center text-app-text-faint hover:text-app-accent hover:border-app-accent transition-all z-10 shadow-sm ${
             hideChrome
               ? '!opacity-0 pointer-events-none'
               : isSelected
@@ -158,21 +192,11 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
               : 'opacity-0 group-hover:opacity-100'
         }`}
       >
-        {onCycleLayout && (
-          <Tooltip label={t('canvas.cycle_layout')}>
-            <button
-              onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onCycleLayout(); }}
-              className="w-6 h-6 bg-white border border-[#E6E4DF] rounded-full flex items-center justify-center text-[#8c8a84] hover:text-[#C2410C] hover:border-[#C2410C] transition-all shadow-sm"
-            >
-              <SlidersHorizontal className="w-3 h-3" />
-            </button>
-          </Tooltip>
-        )}
         {onDelete && (
           <Tooltip label={t('canvas.delete_note')}>
             <button
               onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onDelete(); }}
-              className="w-6 h-6 bg-white border border-[#E6E4DF] rounded-full flex items-center justify-center text-[#8c8a84] hover:text-[#C2410C] hover:border-[#C2410C] transition-all shadow-sm"
+              className="w-6 h-6 bg-app-surface-raised border border-app-border rounded-full flex items-center justify-center text-app-text-faint hover:text-app-accent hover:border-app-accent transition-all shadow-sm"
             >
               <Trash2 className="w-3 h-3" />
             </button>
@@ -192,12 +216,12 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
               : 'opacity-0 group-hover:opacity-100'
         }`}
       >
-        <div className="w-1.5 h-1.5 border-r border-b border-[#8c8a84]"></div>
+        <div className="w-1.5 h-1.5 border-r border-b border-app-text-faint"></div>
       </div>
 
       {showPalette && allowPalette && (
         <div 
-          className="node-palette absolute -bottom-14 left-0 bg-white/90 backdrop-blur-md border border-[#E6E4DF] shadow-xl rounded-lg p-2 z-50 flex items-center gap-4 cursor-default pointer-events-auto"
+          className="node-palette absolute -bottom-14 left-0 bg-app-surface-raised/90 backdrop-blur-md border border-app-border shadow-xl rounded-lg p-2 z-50 flex items-center gap-4 cursor-default pointer-events-auto"
           onPointerDown={(e) => e.stopPropagation()} /* Prevent drag when clicking palette */
         >
           <div className="flex gap-1.5">
@@ -211,13 +235,13 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
               </Tooltip>
             ))}
           </div>
-          <div className="w-[1px] h-4 bg-[#E6E4DF]"></div>
+          <div className="w-[1px] h-4 bg-app-border"></div>
           <div className="flex gap-2 text-xs">
             {fontPresets.map((font, i) => (
               <button
                 key={i}
                 onClick={() => setStyleOverrides(prev => ({ ...prev, font: font.value }))}
-                className="px-2 py-0.5 rounded hover:bg-[#F4F1ED] text-[#5a5a54] hover:text-[#1a1a1a] transition-colors"
+                className="px-2 py-0.5 rounded hover:bg-app-surface-subtle text-app-text-muted hover:text-app-text transition-colors"
                 title={`${t('canvas.change_font')}: ${font.name}`}
                 style={{ fontFamily: font.value }}
               >

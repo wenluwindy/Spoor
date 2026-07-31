@@ -76,14 +76,15 @@ describe('resolveActiveChatTarget', () => {
 
 describe('resolveActiveChatConfig（喂给既有对话链路的扁平形状）', () => {
   it('压成 v1 的字段名', () => {
-    expect(resolveActiveChatConfig(config({ metasoApiKey: 'mk' }))).toEqual({
+    expect(resolveActiveChatConfig(config({ searchApiKeys: { metaso: 'mk' } }))).toEqual({
       provider: 'doubao',
       apiKey: 'k1',
       baseUrl: DOUBAO_ARK_BASE_URL,
       model: 'ep-123',
       localGgufPath: undefined,
       localEnableThinking: undefined,
-      metasoApiKey: 'mk',
+      searchProvider: 'metaso',
+      searchApiKey: 'mk',
     });
   });
 
@@ -105,11 +106,35 @@ describe('resolveActiveChatConfig（喂给既有对话链路的扁平形状）',
     expect(flat.model).toBe('');
   });
 
-  it('metasoApiKey 是全局的，不属于任何服务商', () => {
-    expect(resolveActiveChatConfig(emptyAiConfigV2()).metasoApiKey).toBeUndefined();
-    expect(
-      resolveActiveChatConfig({ ...emptyAiConfigV2(), metasoApiKey: 'mk' }).metasoApiKey,
-    ).toBe('mk');
+  it('搜索服务是全局的，不属于任何服务商', () => {
+    const empty = resolveActiveChatConfig(emptyAiConfigV2());
+    expect(empty.searchApiKey).toBe('');
+    expect(empty.searchProvider).toBe('metaso');
+
+    const withKey = resolveActiveChatConfig({
+      ...emptyAiConfigV2(),
+      searchApiKeys: { tavily: 'tvly-x' },
+      searchProvider: 'tavily',
+    });
+    expect(withKey.searchProvider).toBe('tavily');
+    expect(withKey.searchApiKey).toBe('tvly-x');
+  });
+
+  it('老配置只有 metasoApiKey 时也解析得出秘塔的 Key', () => {
+    // 用户升级前存下的配置没走过 normalize 也要对
+    const flat = resolveActiveChatConfig({ ...emptyAiConfigV2(), metasoApiKey: 'mk' });
+    expect(flat.searchProvider).toBe('metaso');
+    expect(flat.searchApiKey).toBe('mk');
+  });
+
+  it('启用了别家时不拿秘塔的 Key 顶上', () => {
+    // 顶上去的话，用户以为在用 Tavily，实际把秘塔的 Key 发去了 Tavily
+    const flat = resolveActiveChatConfig({
+      ...emptyAiConfigV2(),
+      metasoApiKey: 'mk',
+      searchProvider: 'tavily',
+    });
+    expect(flat.searchApiKey).toBe('');
   });
 });
 
@@ -282,9 +307,32 @@ describe('normalizeAiConfig', () => {
   });
 
   it('v2 原样保留', () => {
-    const c = config({ metasoApiKey: 'mk' });
+    const c = config({ metasoApiKey: 'mk', searchApiKeys: { metaso: 'mk' } });
     const got = normalizeAiConfig(JSON.parse(JSON.stringify(c)));
     expect(got).toEqual(c);
+  });
+
+  it('老配置的 metasoApiKey 迁进 searchApiKeys.metaso', () => {
+    // 不迁的话，用户升级后打开搜索服务页会看到空输入框，以为 Key 丢了
+    const got = normalizeAiConfig(config({ metasoApiKey: 'mk' }));
+    expect(got.searchApiKeys).toEqual({ metaso: 'mk' });
+    // 老字段留着，装回旧版本还能读
+    expect(got.metasoApiKey).toBe('mk');
+  });
+
+  it('已有 searchApiKeys.metaso 时不被老字段覆盖', () => {
+    const got = normalizeAiConfig(
+      config({ metasoApiKey: 'old', searchApiKeys: { metaso: 'new' } }),
+    );
+    expect(got.searchApiKeys?.metaso).toBe('new');
+  });
+
+  it('不认识的搜索服务与空 Key 被丢掉', () => {
+    const got = normalizeAiConfig(
+      config({ searchProvider: 'wat', searchApiKeys: { tavily: '  ', bogus: 'x' } } as never),
+    );
+    expect(got.searchProvider).toBeUndefined();
+    expect(got.searchApiKeys).toBeUndefined();
   });
 
   it('providers 里的坏条目被丢掉而不是整份配置作废', () => {

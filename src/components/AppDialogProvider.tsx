@@ -101,20 +101,20 @@ export function AppDialogProvider({ children }: { children: React.ReactNode }) {
             aria-modal="true"
             aria-labelledby="app-dialog-title"
             aria-describedby="app-dialog-message"
-            className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-[#E6E4DF] overflow-hidden animate-in zoom-in-95 duration-200"
+            className="w-full max-w-md bg-app-surface-raised rounded-2xl shadow-2xl border border-app-border overflow-hidden animate-in zoom-in-95 duration-200"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="px-6 pt-6 pb-4 border-b border-[#F4F1ED] bg-[#FAF9F6]">
+            <div className="px-6 pt-6 pb-4 border-b border-app-surface-subtle bg-app-surface">
               <h2
                 id="app-dialog-title"
-                className="font-serif text-lg font-bold text-[#1a1a1a] leading-snug"
+                className="font-serif text-lg font-bold text-app-text leading-snug"
               >
                 {title}
               </h2>
             </div>
             <p
               id="app-dialog-message"
-              className="px-6 py-5 text-sm font-sans text-[#4a4a44] leading-relaxed whitespace-pre-wrap"
+              className="px-6 py-5 text-sm font-sans text-app-text-soft leading-relaxed whitespace-pre-wrap"
             >
               {message}
             </p>
@@ -127,8 +127,8 @@ export function AppDialogProvider({ children }: { children: React.ReactNode }) {
                     onClick={() => close(true)}
                     className={`px-4 py-2 rounded-xl text-sm font-sans font-bold shadow-sm transition-colors ${
                       isDanger
-                        ? 'bg-[#C2410C] text-white hover:bg-[#a0350a]'
-                        : 'bg-[#1a1a1a] text-white hover:bg-[#333]'
+                        ? 'bg-app-accent text-white hover:bg-app-accent-hover'
+                        : 'bg-app-inverse text-app-on-inverse hover:bg-app-inverse-hover'
                     }`}
                   >
                     {dialog.options.confirmLabel ?? t('dialog.confirm')}
@@ -136,7 +136,7 @@ export function AppDialogProvider({ children }: { children: React.ReactNode }) {
                   <button
                     type="button"
                     onClick={() => close(false)}
-                    className="px-4 py-2 rounded-xl text-sm font-sans font-medium border border-[#E6E4DF] text-[#5a5a54] bg-white hover:bg-[#F4F1ED] transition-colors"
+                    className="px-4 py-2 rounded-xl text-sm font-sans font-medium border border-app-border text-app-text-muted bg-app-surface-raised hover:bg-app-surface-subtle transition-colors"
                   >
                     {dialog.options.cancelLabel ?? t('dialog.cancel')}
                   </button>
@@ -146,7 +146,7 @@ export function AppDialogProvider({ children }: { children: React.ReactNode }) {
                   type="button"
                   autoFocus
                   onClick={() => close(true)}
-                  className="px-4 py-2 rounded-xl text-sm font-sans font-bold bg-[#1a1a1a] text-white hover:bg-[#333] shadow-sm transition-colors"
+                  className="px-4 py-2 rounded-xl text-sm font-sans font-bold bg-app-inverse text-app-on-inverse hover:bg-app-inverse-hover shadow-sm transition-colors"
                 >
                   {dialog.options.okLabel ?? t('dialog.ok')}
                 </button>

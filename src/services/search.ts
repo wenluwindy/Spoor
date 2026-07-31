@@ -1,4 +1,5 @@
 import { AppError } from './appError';
+import type { SearchProviderKind } from '../types/aiConfig';
 const LOG_PREFIX = '[Scribe AI][Search]';
 
 // ---------------------------------------------------------------------------
@@ -6,6 +7,11 @@ const LOG_PREFIX = '[Scribe AI][Search]';
 // ---------------------------------------------------------------------------
 
 export interface MetasoSearchConfig {
+  apiKey: string;
+}
+
+export interface WebSearchConfig {
+  kind: SearchProviderKind;
   apiKey: string;
 }
 
@@ -22,6 +28,14 @@ export interface MetasoSearchResponse {
   total: number;
   webpages: MetasoWebpage[];
 }
+
+/**
+ * 各家搜索服务归一后的形状。
+ *
+ * 沿用秘塔的字段名而不是另起一套：`buildSearchContext` 与两个调用方的下游
+ * 全都吃这个结构，换名字等于把改动摊到整条链路上，收益只是好看一点。
+ */
+export type WebSearchResponse = MetasoSearchResponse;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -103,6 +117,105 @@ export async function metasoSearch(
     return (await response.json()) as MetasoSearchResponse;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tavily
+// ---------------------------------------------------------------------------
+
+const TAVILY_ENDPOINT = 'https://api.tavily.com/search';
+
+interface TavilyResult {
+  title?: string;
+  url?: string;
+  content?: string;
+  score?: number;
+  published_date?: string;
+}
+
+/**
+ * Tavily 的 `results[]` → 归一后的 `webpages[]`。
+ *
+ * `content` 就是给模型看的那段摘要，直接当 snippet。`published_date` 只有
+ * `topic: news` 才会有，一般是空的。
+ */
+export function mapTavilyResults(raw: unknown): WebSearchResponse {
+  const results = (raw as { results?: TavilyResult[] } | null)?.results ?? [];
+  const webpages = results.map((r) => ({
+    title: String(r.title ?? ''),
+    link: String(r.url ?? ''),
+    snippet: String(r.content ?? ''),
+    score: r.score === undefined ? '' : String(r.score),
+    date: String(r.published_date ?? ''),
+  }));
+  return { credits: 0, total: webpages.length, webpages };
+}
+
+async function tavilySearch(query: string, apiKey: string): Promise<WebSearchResponse> {
+  console.info(`${LOG_PREFIX} tavilySearch`, { query });
+
+  if (isTauriRuntime()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    try {
+      const json = await invoke<string>('tavily_search', { apiKey, query });
+      return mapTavilyResults(JSON.parse(json));
+    } catch (e) {
+      console.error(`${LOG_PREFIX} Tauri tavily_search failed`, e);
+      throw e instanceof Error ? e : new Error(String(e));
+    }
+  }
+
+  // 浏览器路径：Tavily 是带 CORS 的，不用像秘塔那样走 Vite 代理
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(TAVILY_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ query, max_results: 5, search_depth: 'basic' }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`${LOG_PREFIX} HTTP ${response.status}`, text.slice(0, 500));
+      throw new AppError('search.failed', `HTTP ${response.status}: ${text.slice(0, 200)}`);
+    }
+
+    return mapTavilyResults(await response.json());
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dispatcher
+// ---------------------------------------------------------------------------
+
+/**
+ * 按当前启用的服务跑一次联网搜索。
+ *
+ * 各家返回结构在各自的适配里归一成同一个形状，所以调用方只管拿 `webpages`。
+ */
+export async function webSearch(
+  query: string,
+  config: WebSearchConfig,
+): Promise<WebSearchResponse> {
+  const apiKey = config.apiKey.trim();
+  if (!apiKey) {
+    throw new AppError('search.no_key');
+  }
+
+  switch (config.kind) {
+    case 'tavily':
+      return tavilySearch(query, apiKey);
+    case 'metaso':
+    default:
+      return metasoSearch(query, { apiKey });
   }
 }
 

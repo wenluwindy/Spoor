@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import type { AgentConfig, AgentMarkdownKnowledgeFile } from '../db';
 import { db } from '../db';
-import type { CallAIFn } from '../types';
+import type { CallAIFn } from '../types/ai';
 import { formatAiError } from '../services/ai';
 import { resolveErrorMessage } from '../utils/resolveErrorMessage';
 import {
@@ -308,13 +308,13 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
   );
 
   return (
-    <div className="flex-1 flex min-h-0 bg-[#FAF9F6] overflow-hidden relative">
+    <div className="flex-1 flex min-h-0 bg-app-surface overflow-hidden relative">
       {/* Pane 1: Persona List */}
-      <section className="w-64 shrink-0 flex flex-col min-h-0 border-r border-[#E6E4DF] bg-white z-10">
-        <div className="p-4 border-b border-[#E6E4DF] flex items-center gap-2">
+      <section className="w-64 shrink-0 flex flex-col min-h-0 border-r border-app-border bg-app-surface-raised z-10">
+        <div className="p-4 border-b border-app-border flex items-center gap-2">
           <div className="relative flex-1 min-w-0">
             <input
-              className="w-full pl-9 pr-3 py-2 text-xs font-sans bg-white border border-[#E6E4DF] rounded-lg focus:ring-1 focus:ring-[#C2410C] focus:border-[#C2410C] outline-none"
+              className="w-full pl-9 pr-3 py-2 text-xs font-sans bg-app-surface-raised border border-app-border rounded-lg focus:ring-1 focus:ring-app-accent focus:border-app-accent outline-none"
               placeholder={t('agents.search_personas')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -322,13 +322,13 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
               autoComplete="off"
               aria-label={t('agents.search_personas')}
             />
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#8c8a84] pointer-events-none" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-app-text-faint pointer-events-none" />
           </div>
           <button
             type="button"
             onClick={handleAddAgent}
             aria-label={t('agents.new_persona')}
-            className="text-[#C2410C] hover:bg-[#F4F1ED] p-1 rounded-full transition-colors flex items-center justify-center shrink-0"
+            className="text-app-accent hover:bg-app-surface-subtle p-1 rounded-full transition-colors flex items-center justify-center shrink-0"
           >
             <Plus className="w-5 h-5" />
           </button>
@@ -341,19 +341,19 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                 onClick={() => {
                   setActiveAgentId(agent.id);
                 }}
-                className={`p-4 cursor-pointer transition-colors border-l-4 ${activeAgentId === agent.id ? 'bg-[#F4F1ED] border-[#C2410C]' : 'hover:bg-[#F4F1ED]/50 border-transparent'}`}
+                className={`p-4 cursor-pointer transition-colors border-l-4 ${activeAgentId === agent.id ? 'bg-app-surface-subtle border-app-accent' : 'hover:bg-app-surface-subtle/50 border-transparent'}`}
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-[#FFF7ED] border border-[#E6E4DF] flex items-center justify-center overflow-hidden">
+                  <div className="w-10 h-10 rounded-lg bg-app-accent-wash border border-app-border flex items-center justify-center overflow-hidden">
                     <AgentIcon
                       agentId={agent.id}
                       className="w-full h-full"
                       imageClassName="scale-[1.32]"
-                      fallbackClassName={activeAgentId === agent.id ? 'text-[#C2410C]' : 'text-[#8c8a84]'}
+                      fallbackClassName={activeAgentId === agent.id ? 'text-app-accent' : 'text-app-text-faint'}
                     />
                   </div>
                   <div className="min-w-0">
-                    <h4 className={`font-bold truncate ${activeAgentId === agent.id ? 'text-[#1a1a1a]' : 'text-[#5a5a54]'}`}>{resolveAgentLocalizedName(agent)}</h4>
+                    <h4 className={`font-bold truncate ${activeAgentId === agent.id ? 'text-app-text' : 'text-app-text-muted'}`}>{resolveAgentLocalizedName(agent)}</h4>
                   </div>
                 </div>
               </div>
@@ -366,19 +366,19 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
       <section className="flex-1 flex flex-col min-h-0 overflow-y-auto relative">
         {activeAgent ? (
           <>
-            <div className="sticky top-0 bg-[#FAF9F6]/80 backdrop-blur-md px-10 py-6 border-b border-[#E6E4DF] flex flex-col sm:flex-row justify-between items-start sm:items-end z-10 gap-4">
+            <div className="sticky top-0 bg-app-surface/80 backdrop-blur-md px-10 py-6 border-b border-app-border flex flex-col sm:flex-row justify-between items-start sm:items-end z-10 gap-4">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-12 h-12 rounded-xl bg-[#FFF7ED] border border-[#E6E4DF] flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                <div className="w-12 h-12 rounded-xl bg-app-accent-wash border border-app-border flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
                   <AgentIcon
                     agentId={activeAgent.id}
                     className="w-full h-full"
                     imageClassName="scale-[1.32]"
-                    fallbackClassName="text-[#C2410C]"
+                    fallbackClassName="text-app-accent"
                   />
                 </div>
                 <input
                   type="text"
-                  className="font-serif text-3xl font-bold text-[#1a1a1a] bg-transparent border-0 border-b border-transparent hover:border-[#E6E4DF] focus:border-[#C2410C] focus:ring-0 outline-none w-full max-w-2xl py-1 px-0 transition-colors placeholder:text-[#8c8a84] placeholder:font-normal"
+                  className="font-serif text-3xl font-bold text-app-text bg-transparent border-0 border-b border-transparent hover:border-app-border focus:border-app-accent focus:ring-0 outline-none w-full max-w-2xl py-1 px-0 transition-colors placeholder:text-app-text-faint placeholder:font-normal"
                   value={displayName}
                   onChange={(e) => handleUpdateActiveAgent('name', e.target.value)}
                   placeholder={t('agents.new_persona')}
@@ -388,7 +388,7 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
               <div className="flex gap-3">
                 <button 
                   onClick={() => setIsSandboxOpen(!isSandboxOpen)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-sans font-bold transition-all text-sm shadow-sm ${isSandboxOpen ? 'bg-[#C2410C] text-white shadow-[#C2410C]/20' : 'bg-white border border-[#E6E4DF] text-[#5a5a54] hover:bg-[#F4F1ED]'}`}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-sans font-bold transition-all text-sm shadow-sm ${isSandboxOpen ? 'bg-app-accent text-white shadow-app-accent/20' : 'bg-app-surface-raised border border-app-border text-app-text-muted hover:bg-app-surface-subtle'}`}
                 >
                   <MessageSquare className="w-4 h-4" />
                   {isSandboxOpen ? t('agents.close_sandbox') : t('agents.test_sandbox')}
@@ -408,18 +408,18 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                 {/* Identity Section */}
                 <div className="space-y-6">
                   <div className="flex items-center gap-4">
-                    <div className="w-1 h-8 bg-[#C2410C] rounded-full"></div>
-                    <h3 className="text-xl font-serif font-bold text-[#1a1a1a]">{t('agents.identity_tone')}</h3>
+                    <div className="w-1 h-8 bg-app-accent rounded-full"></div>
+                    <h3 className="text-xl font-serif font-bold text-app-text">{t('agents.identity_tone')}</h3>
                   </div>
                   <div className="space-y-2">
                     <div className="flex justify-between items-end">
-                      <label className="text-[10px] font-mono font-bold text-[#8c8a84] uppercase tracking-wider">{t('agents.system_prompt')}</label>
+                      <label className="text-[10px] font-mono font-bold text-app-text-faint uppercase tracking-wider">{t('agents.system_prompt')}</label>
                       <div className="flex items-center gap-3">
-                        <span className={`${(displayPrompt.length || 0) > 2000 ? 'text-red-500' : 'text-[#a09f9c]'} text-[10px] font-mono`}>{displayPrompt.length} / 2000</span>
+                        <span className={`${(displayPrompt.length || 0) > 2000 ? 'text-red-500' : 'text-app-text-dim'} text-[10px] font-mono`}>{displayPrompt.length} / 2000</span>
                         <button 
                           onClick={handleEnhancePrompt}
                           disabled={isEnhancing || !displayPrompt.trim()}
-                          className="flex items-center gap-1.5 text-[10px] font-bold text-[#C2410C] hover:text-[#9a3412] px-2 py-1 bg-[#C2410C]/5 rounded border border-[#C2410C]/20 transition-all disabled:opacity-50"
+                          className="flex items-center gap-1.5 text-[10px] font-bold text-app-accent hover:text-app-accent-deep px-2 py-1 bg-app-accent/5 rounded border border-app-accent/20 transition-all disabled:opacity-50"
                         >
                           {isEnhancing ? <Loader2 className="w-3 h-3 animate-spin"/> : <Wand2 className="w-3 h-3" />}
                           {t('agents.enhance_prompt')}
@@ -427,7 +427,7 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                       </div>
                     </div>
                     <textarea 
-                      className={`w-full p-4 font-mono text-sm text-[#5a5a54] bg-white border ${displayPrompt.length > 2000 ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-[#E6E4DF] focus:border-[#C2410C] focus:ring-[#C2410C]'} rounded-lg outline-none transition-colors overflow-y-auto resize-y min-h-[160px]`} 
+                      className={`w-full p-4 font-mono text-sm text-app-text-muted bg-app-surface-raised border ${displayPrompt.length > 2000 ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-app-border focus:border-app-accent focus:ring-app-accent'} rounded-lg outline-none transition-colors overflow-y-auto resize-y min-h-[160px]`} 
                       style={{ height: Math.max(160, (displayPrompt.split('\n').length || 1) * 24 + 40) + 'px' }}
                       value={displayPrompt}
                       onChange={e => handleUpdateActiveAgent('prompt', e.target.value)}
@@ -439,11 +439,11 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                 {/* Knowledge Section */}
                 <div className="space-y-6">
                   <div className="flex items-center gap-4">
-                    <div className="w-1 h-8 bg-[#C2410C] rounded-full"></div>
-                    <h3 className="text-xl font-serif font-bold text-[#1a1a1a]">{t('agents.knowledge_base')}</h3>
+                    <div className="w-1 h-8 bg-app-accent rounded-full"></div>
+                    <h3 className="text-xl font-serif font-bold text-app-text">{t('agents.knowledge_base')}</h3>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="md:col-span-2 p-6 bg-white border border-[#E6E4DF] rounded-xl space-y-4 shadow-sm">
+                    <div className="md:col-span-2 p-6 bg-app-surface-raised border border-app-border rounded-xl space-y-4 shadow-sm">
                       <input
                         ref={knowledgeFileInputRef}
                         type="file"
@@ -453,39 +453,39 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                         onChange={(e) => void handleKnowledgeFilesChange(e)}
                       />
                       <div className="flex justify-between items-center">
-                        <h4 className="font-sans font-bold text-[#1a1a1a]">{t('agents.knowledge_custom_title')}</h4>
+                        <h4 className="font-sans font-bold text-app-text">{t('agents.knowledge_custom_title')}</h4>
                         <button
                           type="button"
                           onClick={openKnowledgeFilePicker}
-                          className="text-xs text-[#C2410C] font-bold hover:underline"
+                          className="text-xs text-app-accent font-bold hover:underline"
                         >
                           {t('agents.knowledge_manage_files')}
                         </button>
                       </div>
-                      <p className="text-[11px] text-[#8c8a84] font-sans leading-relaxed">{t('agents.knowledge_hint')}</p>
+                      <p className="text-[11px] text-app-text-faint font-sans leading-relaxed">{t('agents.knowledge_hint')}</p>
                       <div className="space-y-2 min-h-[3rem]">
                         {(activeAgent.knowledgeMarkdownFiles ?? []).length === 0 ? (
-                          <p className="text-sm text-[#8c8a84] font-sans py-2">{t('agents.knowledge_empty')}</p>
+                          <p className="text-sm text-app-text-faint font-sans py-2">{t('agents.knowledge_empty')}</p>
                         ) : (
                           (activeAgent.knowledgeMarkdownFiles ?? []).map((f) => (
                             <div
                               key={f.name}
-                              className="flex items-center justify-between gap-2 p-3 bg-[#F4F1ED] rounded-lg border border-[#E6E4DF]"
+                              className="flex items-center justify-between gap-2 p-3 bg-app-surface-subtle rounded-lg border border-app-border"
                             >
                               <div className="flex items-center gap-3 min-w-0">
-                                <FileText className="w-4 h-4 text-[#8c8a84] shrink-0" />
-                                <span className="text-sm font-sans font-medium text-[#1a1a1a] truncate" title={f.name}>
+                                <FileText className="w-4 h-4 text-app-text-faint shrink-0" />
+                                <span className="text-sm font-sans font-medium text-app-text truncate" title={f.name}>
                                   {f.name}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-[10px] text-[#8c8a84] font-mono">
+                                <span className="text-[10px] text-app-text-faint font-mono">
                                   {t('agents.knowledge_chars', { count: f.content.length })}
                                 </span>
                                 <button
                                   type="button"
                                   onClick={() => removeKnowledgeFile(f.name)}
-                                  className="p-1.5 rounded-md text-[#8c8a84] hover:text-[#ef4444] hover:bg-[#fee2e2] transition-colors"
+                                  className="p-1.5 rounded-md text-app-text-faint hover:text-[#ef4444] hover:bg-[#fee2e2] transition-colors"
                                   aria-label={t('agents.knowledge_remove_file', { name: f.name })}
                                 >
                                   <Trash2 className="w-4 h-4" />
@@ -495,22 +495,22 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                           ))
                         )}
                       </div>
-                      <div className="pt-4 border-t border-[#E6E4DF] flex items-center justify-center">
+                      <div className="pt-4 border-t border-app-border flex items-center justify-center">
                         <button
                           type="button"
                           onClick={openKnowledgeFilePicker}
-                          className="flex items-center gap-2 text-[#C2410C] hover:text-[#9a3412] font-sans text-sm font-bold transition-colors"
+                          className="flex items-center gap-2 text-app-accent hover:text-app-accent-deep font-sans text-sm font-bold transition-colors"
                         >
                           <Plus className="w-4 h-4" /> {t('agents.knowledge_add_md')}
                         </button>
                       </div>
                     </div>
-                    <div className="p-6 bg-white text-[#1a1a1a] border border-[#E6E4DF] rounded-xl flex flex-col justify-between shadow-sm">
+                    <div className="p-6 bg-app-surface-raised text-app-text border border-app-border rounded-xl flex flex-col justify-between shadow-sm">
                       <div>
                         <h4 className="font-sans font-bold mb-2">{t('agents.model_params')}</h4>
                         <div className="space-y-4 mt-6">
                           <div className="space-y-1">
-                            <div className="flex justify-between text-[10px] uppercase font-mono tracking-widest text-[#8c8a84] mb-2">
+                            <div className="flex justify-between text-[10px] uppercase font-mono tracking-widest text-app-text-faint mb-2">
                               <span>{t('agents.temp')}</span>
                               <span>{activeAgent.temperature ?? 0.7}</span>
                             </div>
@@ -519,11 +519,11 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                               min="0" max="2" step="0.1" 
                               value={activeAgent.temperature ?? 0.7}
                               onChange={(e) => handleUpdateActiveAgent('temperature', parseFloat(e.target.value))}
-                              className="w-full accent-[#C2410C] h-1 bg-[#F4F1ED] rounded-lg appearance-none cursor-pointer"
+                              className="w-full accent-app-accent h-1 bg-app-surface-subtle rounded-lg appearance-none cursor-pointer"
                             />
                           </div>
                           <div className="space-y-1 mt-4">
-                            <div className="flex justify-between text-[10px] uppercase font-mono tracking-widest text-[#8c8a84] mb-2">
+                            <div className="flex justify-between text-[10px] uppercase font-mono tracking-widest text-app-text-faint mb-2">
                               <span>{t('agents.creativity')}</span>
                               <span>{activeAgent.creativity ?? 0.4}</span>
                             </div>
@@ -532,12 +532,12 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                               min="0" max="1" step="0.1" 
                               value={activeAgent.creativity ?? 0.4}
                               onChange={(e) => handleUpdateActiveAgent('creativity', parseFloat(e.target.value))}
-                              className="w-full accent-[#C2410C] h-1 bg-[#F4F1ED] rounded-lg appearance-none cursor-pointer"
+                              className="w-full accent-app-accent h-1 bg-app-surface-subtle rounded-lg appearance-none cursor-pointer"
                             />
                           </div>
                         </div>
                       </div>
-                      <div className="text-[10px] font-mono text-[#8c8a84] mt-6">
+                      <div className="text-[10px] font-mono text-app-text-faint mt-6">
                         {t('agents.model_params_footer')}
                       </div>
                     </div>
@@ -548,11 +548,11 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
 
             {/* Test Sandbox Panel */}
             {isSandboxOpen && (
-              <div className="absolute inset-y-0 right-0 z-20 flex w-[min(100vw,400px)] min-h-0 flex-col border-l border-[#E6E4DF] bg-[#FAF9F6] shadow-[-12px_0_32px_rgba(0,0,0,0.06)] animate-in slide-in-from-right duration-300">
-                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#E6E4DF] bg-[#F4F1ED]/50 px-4 py-3">
+              <div className="absolute inset-y-0 right-0 z-20 flex w-[min(100vw,400px)] min-h-0 flex-col border-l border-app-border bg-app-surface shadow-[-12px_0_32px_rgba(0,0,0,0.06)] animate-in slide-in-from-right duration-300">
+                <div className="flex shrink-0 items-center justify-between gap-2 border-b border-app-border bg-app-surface-subtle/50 px-4 py-3">
                   <div className="flex min-w-0 items-center gap-2">
-                    <MessageSquare className="h-4 w-4 shrink-0 text-[#C2410C]" />
-                    <span className="truncate font-serif font-bold text-[#1a1a1a]">
+                    <MessageSquare className="h-4 w-4 shrink-0 text-app-accent" />
+                    <span className="truncate font-serif font-bold text-app-text">
                       {t('agents.sandbox_title', { name: displayName })}
                     </span>
                   </div>
@@ -563,14 +563,14 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                       disabled={sandboxMessages.length === 0 || isSandboxLoading}
                       title={t('agents.sandbox_clear')}
                       aria-label={t('agents.sandbox_clear_aria')}
-                      className="rounded-md p-2 text-[#8c8a84] transition-colors hover:bg-[#E6E4DF]/60 hover:text-[#1a1a1a] disabled:pointer-events-none disabled:opacity-30"
+                      className="rounded-md p-2 text-app-text-faint transition-colors hover:bg-app-border/60 hover:text-app-text disabled:pointer-events-none disabled:opacity-30"
                     >
                       <RotateCcw className="h-4 w-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => setIsSandboxOpen(false)}
-                      className="rounded-md p-2 text-[#8c8a84] hover:bg-[#E6E4DF]/60 hover:text-[#1a1a1a]"
+                      className="rounded-md p-2 text-app-text-faint hover:bg-app-border/60 hover:text-app-text"
                       aria-label={t('agents.close_sandbox')}
                     >
                       <X className="h-5 w-5" />
@@ -581,8 +581,8 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                 <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
                   {sandboxMessages.length === 0 && (
                     <div className="text-center py-10 px-4">
-                      <Bot className="w-10 h-10 text-[#E6E4DF] mx-auto mb-3" />
-                      <p className="text-xs text-[#8c8a84] font-sans">
+                      <Bot className="w-10 h-10 text-app-border mx-auto mb-3" />
+                      <p className="text-xs text-app-text-faint font-sans">
                         {t('agents.sandbox_empty', { name: displayName })}
                       </p>
                     </div>
@@ -591,8 +591,8 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                     <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm font-sans shadow-sm ${
                         msg.role === 'user' 
-                          ? 'bg-[#EAE7E2] text-[#1a1a1a] rounded-tr-none border border-[#D9D6D1]' 
-                          : 'bg-white border border-[#E6E4DF] text-[#1a1a1a] rounded-tl-none'
+                          ? 'bg-app-surface-sunken text-app-text rounded-tr-none border border-app-border' 
+                          : 'bg-app-surface-raised border border-app-border text-app-text rounded-tl-none'
                       }`}>
                         {msg.text}
                       </div>
@@ -600,20 +600,20 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                   ))}
                   {isSandboxLoading && (
                     <div className="flex justify-start">
-                      <div className="bg-white border border-[#E6E4DF] px-4 py-2.5 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 text-[#C2410C] animate-spin" />
-                        <span className="text-xs text-[#8c8a84] italic">{t('agents.ai_thinking')}</span>
+                      <div className="bg-app-surface-raised border border-app-border px-4 py-2.5 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 text-app-accent animate-spin" />
+                        <span className="text-xs text-app-text-faint italic">{t('agents.ai_thinking')}</span>
                       </div>
                     </div>
                   )}
                   <div ref={chatEndRef} />
                 </div>
 
-                <div className="shrink-0 border-t border-[#E6E4DF] bg-[#FAF9F6] p-4">
+                <div className="shrink-0 border-t border-app-border bg-app-surface p-4">
                   <form onSubmit={handleSendMessage} className="relative">
                     <input 
                       type="text"
-                      className="w-full rounded-xl border border-[#E6E4DF] bg-white py-3 pl-4 pr-12 text-sm font-sans shadow-sm transition-all focus:border-[#C2410C] focus:outline-none focus:ring-1 focus:ring-[#C2410C]"
+                      className="w-full rounded-xl border border-app-border bg-app-surface-raised py-3 pl-4 pr-12 text-sm font-sans shadow-sm transition-all focus:border-app-accent focus:outline-none focus:ring-1 focus:ring-app-accent"
                       placeholder={t('agents.message_placeholder', { name: displayName })}
                       value={sandboxInput}
                       onChange={e => setSandboxInput(e.target.value)}
@@ -622,13 +622,13 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                       <button
                         type="submit"
                         disabled={!sandboxInput.trim() || isSandboxLoading}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-[#C2410C] text-white flex items-center justify-center hover:bg-[#9a3412] transition-colors disabled:opacity-50"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-app-accent text-white flex items-center justify-center hover:bg-app-accent-deep transition-colors disabled:opacity-50"
                       >
                         <Send className="w-4 h-4" />
                       </button>
                     </Tooltip>
                   </form>
-                  <p className="text-[10px] text-center text-[#8c8a84] mt-2 font-mono">
+                  <p className="text-[10px] text-center text-app-text-faint mt-2 font-mono">
                     {t('agents.sandbox_note')}
                   </p>
                 </div>
@@ -637,9 +637,9 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-12 text-center opacity-50">
-            <Bot className="w-16 h-16 text-[#8c8a84] mb-4" />
-            <h2 className="font-serif text-2xl font-bold text-[#1a1a1a]">{t('agents.select_persona')}</h2>
-            <p className="font-sans text-[#5a5a54] mt-2">{t('agents.select_subtitle')}</p>
+            <Bot className="w-16 h-16 text-app-text-faint mb-4" />
+            <h2 className="font-serif text-2xl font-bold text-app-text">{t('agents.select_persona')}</h2>
+            <p className="font-sans text-app-text-muted mt-2">{t('agents.select_subtitle')}</p>
           </div>
         )}
       </section>

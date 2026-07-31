@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { metasoSearch, buildSearchContext } from '../../src/services/search';
+import {
+  metasoSearch,
+  webSearch,
+  mapTavilyResults,
+  buildSearchContext,
+} from '../../src/services/search';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -102,5 +107,73 @@ describe('metasoSearch', () => {
         expect.objectContaining({ code: 'search.failed', detail: expect.stringContaining('401') }),
       );
     });
+  });
+});
+
+describe('Tavily 适配', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('results[] 映射成归一后的 webpages[]', () => {
+    const mapped = mapTavilyResults({
+      query: 'x',
+      results: [
+        {
+          title: 'Article A',
+          url: 'https://a.com',
+          content: 'Snippet A',
+          score: 0.93,
+        },
+      ],
+    });
+
+    expect(mapped.webpages).toEqual([
+      { title: 'Article A', link: 'https://a.com', snippet: 'Snippet A', score: '0.93', date: '' },
+    ]);
+    expect(mapped.total).toBe(1);
+  });
+
+  it('news 主题带回的发布日期保留下来', () => {
+    const mapped = mapTavilyResults({
+      results: [{ title: 'T', url: 'https://n.com', content: 'C', published_date: '2026-07-01' }],
+    });
+    expect(mapped.webpages[0].date).toBe('2026-07-01');
+  });
+
+  it('缺字段与空结果都不抛', () => {
+    expect(mapTavilyResults({ results: [] }).webpages).toEqual([]);
+    expect(mapTavilyResults({}).webpages).toEqual([]);
+    expect(mapTavilyResults(null).webpages).toEqual([]);
+
+    const partial = mapTavilyResults({ results: [{ title: 'only title' }] });
+    expect(partial.webpages[0]).toEqual({
+      title: 'only title',
+      link: '',
+      snippet: '',
+      score: '',
+      date: '',
+    });
+  });
+
+  it('映射结果能直接喂给 buildSearchContext', () => {
+    // 归一的意义就在这里：下游一行都不用改
+    const context = buildSearchContext(
+      mapTavilyResults({ results: [{ title: 'A', url: 'https://a.com', content: 'S' }] }),
+    );
+    expect(context).toContain('[Source 1: A](https://a.com)');
+    expect(context).toContain('S');
+  });
+});
+
+describe('webSearch 分发', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('没有 Key 时不发请求，直接抛 search.no_key', async () => {
+    await expect(webSearch('q', { kind: 'tavily', apiKey: '   ' })).rejects.toThrow(
+      expect.objectContaining({ code: 'search.no_key' }),
+    );
   });
 });

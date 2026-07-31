@@ -1,10 +1,10 @@
 import React from 'react';
 import { Bot } from 'lucide-react';
 
-import mirrorIconUrl from '../../Mirror Icon - Orange Theme.png';
-import weavingIconUrl from '../../Weaving Icon - Orange Theme.png';
-import ironSmoothingIconUrl from '../../Iron Smoothing Icon.png';
-import compassIconUrl from '../../Compass Icon - Orange Theme.png';
+import mirrorIconUrl from '../assets/agents/mirror.png';
+import weavingIconUrl from '../assets/agents/weaving.png';
+import ironSmoothingIconUrl from '../assets/agents/iron-smoothing.png';
+import compassIconUrl from '../assets/agents/compass.png';
 
 const AGENT_ICON_URLS: Record<string, string> = {
   interviewer: mirrorIconUrl,

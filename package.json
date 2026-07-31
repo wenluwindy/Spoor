@@ -1,8 +1,8 @@
 {
-  "name": "react-example",
+  "name": "spoor",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
-  "version": "0.0.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -18,12 +18,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "remotion:server": "node scripts/remotion-server.mjs",
-    "remotion:studio": "npm run remotion:studio --prefix remotion-kit",
-    "remotion:render": "npm run remotion:render --prefix remotion-kit",
-    "remotion:render:promo": "npm run remotion:render:promo --prefix remotion-kit",
-    "remotion:render:spoor": "npm run remotion:render:spoor --prefix remotion-kit",
-    "remotion:render:spoor-zh": "npm run remotion:render:spoor-zh --prefix remotion-kit"
+    "remotion:server": "node scripts/remotion-server.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.51.0",

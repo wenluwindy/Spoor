@@ -77,7 +77,7 @@ export function ProvidersSettingsTab({ config, onChange }: ProvidersSettingsTabP
   return (
     <div className="space-y-3">
       {config.providers.length === 0 && (
-        <p className="text-[11px] text-[#8c8a84] leading-relaxed">{t('settings.providers_empty')}</p>
+        <p className="text-[11px] text-app-text-faint leading-relaxed">{t('settings.providers_empty')}</p>
       )}
 
       {config.providers.map((provider) => (
@@ -91,7 +91,7 @@ export function ProvidersSettingsTab({ config, onChange }: ProvidersSettingsTabP
       ))}
 
       <div className="pt-1 space-y-2">
-        <p className="text-[10px] font-mono font-bold text-[#8c8a84] uppercase tracking-wider">
+        <p className="text-[10px] font-mono font-bold text-app-text-faint uppercase tracking-wider">
           {t('settings.add_provider')}
         </p>
         <div className="flex flex-wrap gap-2">
@@ -100,7 +100,7 @@ export function ProvidersSettingsTab({ config, onChange }: ProvidersSettingsTabP
               key={kind}
               type="button"
               onClick={() => onChange(addProvider(config, createProviderFromPreset(kind)))}
-              className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[#E6E4DF] text-[11px] font-bold text-[#5a5a54] hover:border-[#C2410C]/40 hover:text-[#C2410C] transition-colors"
+              className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-app-border text-[11px] font-bold text-app-text-muted hover:border-app-accent/40 hover:text-app-accent transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               {t(`settings.provider_kind.${kind}`)}
@@ -109,8 +109,8 @@ export function ProvidersSettingsTab({ config, onChange }: ProvidersSettingsTabP
         </div>
       </div>
 
-      <div className="pt-1 space-y-2 border-t border-[#F4F1ED]">
-        <p className="text-[10px] font-mono font-bold text-[#8c8a84] uppercase tracking-wider pt-2">
+      <div className="pt-1 space-y-2 border-t border-app-surface-subtle">
+        <p className="text-[10px] font-mono font-bold text-app-text-faint uppercase tracking-wider pt-2">
           {t('settings.import_heading')}
         </p>
         <button
@@ -118,16 +118,16 @@ export function ProvidersSettingsTab({ config, onChange }: ProvidersSettingsTabP
           disabled={busy}
           aria-busy={busy}
           onClick={() => void handleCcSwitchImport()}
-          className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[#E6E4DF] text-[11px] font-bold text-[#5a5a54] hover:border-[#C2410C]/40 hover:text-[#C2410C] disabled:cursor-wait disabled:opacity-50 transition-colors"
+          className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-app-border text-[11px] font-bold text-app-text-muted hover:border-app-accent/40 hover:text-app-accent disabled:cursor-wait disabled:opacity-50 transition-colors"
         >
           <Download className="w-3.5 h-3.5" />
           {t('settings.ccswitch_import')}
         </button>
-        <p className="text-[10px] text-[#8c8a84] leading-relaxed">{t('settings.ccswitch_hint')}</p>
+        <p className="text-[10px] text-app-text-faint leading-relaxed">{t('settings.ccswitch_hint')}</p>
         {importNote && (
           <p
             role="status"
-            className={`text-[10px] leading-relaxed ${importNote.ok ? 'text-[#3f7d4f]' : 'text-[#C2410C]'}`}
+            className={`text-[10px] leading-relaxed ${importNote.ok ? 'text-[#3f7d4f]' : 'text-app-accent'}`}
           >
             {importNote.text}
           </p>

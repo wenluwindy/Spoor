@@ -85,7 +85,7 @@ export function IntentClarificationModal({
           <div className="flex items-start gap-1.5 px-2.5 pt-2 pb-1">
             <p
               id="intent-clarify-title"
-              className="flex-1 text-[10px] leading-snug text-[#8c8a84]/95 font-medium"
+              className="flex-1 text-[10px] leading-snug text-app-text-faint/95 font-medium"
             >
               {t('ai.intent.panel_hint')}
             </p>
@@ -93,7 +93,7 @@ export function IntentClarificationModal({
               type="button"
               onClick={onCancel}
               disabled={isSubmitting}
-              className="shrink-0 p-0.5 rounded-full text-[#b0aea8] hover:text-[#5a5a54] hover:bg-white/40 disabled:opacity-50 transition-colors"
+              className="shrink-0 p-0.5 rounded-full text-app-text-dim hover:text-app-text-muted hover:bg-app-surface-raised/40 disabled:opacity-50 transition-colors"
               aria-label={t('ai.intent.cancel')}
             >
               <X className="w-3 h-3" strokeWidth={2} />
@@ -108,8 +108,8 @@ export function IntentClarificationModal({
                   <label
                     className={`flex items-start gap-2 cursor-pointer rounded-lg px-2 py-1.5 transition-all duration-150 ${
                       isChecked
-                        ? 'bg-white/45 ring-1 ring-[#C2410C]/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]'
-                        : 'hover:bg-white/30'
+                        ? 'bg-app-surface-raised/45 ring-1 ring-app-accent/18 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]'
+                        : 'hover:bg-app-surface-raised/30'
                     } ${isSubmitting ? 'opacity-50 pointer-events-none' : ''}`}
                   >
                     <input
@@ -122,14 +122,14 @@ export function IntentClarificationModal({
                     <span
                       className={`mt-px flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border transition-all ${
                         isChecked
-                          ? 'border-[#C2410C]/80 bg-[#C2410C]/90 text-white shadow-sm'
-                          : 'border-[#d8d6d0]/90 bg-white/35 backdrop-blur-sm'
+                          ? 'border-app-accent/80 bg-app-accent/90 text-white shadow-sm'
+                          : 'border-app-border/90 bg-app-surface-raised/35 backdrop-blur-sm'
                       }`}
                       aria-hidden
                     >
                       {isChecked ? <Check className="w-2 h-2 stroke-[3]" /> : null}
                     </span>
-                    <span className="text-[11px] text-[#3d3d38] leading-snug">{opt}</span>
+                    <span className="text-[11px] text-app-text-soft leading-snug">{opt}</span>
                   </label>
                 </li>
               );
@@ -141,7 +141,7 @@ export function IntentClarificationModal({
               type="button"
               disabled={isSubmitting}
               onClick={() => setExtraOpen((v) => !v)}
-              className="flex items-center gap-0.5 text-[10px] text-[#a8a6a0] hover:text-[#6a6a64] disabled:opacity-50 self-start py-0.5 transition-colors"
+              className="flex items-center gap-0.5 text-[10px] text-app-text-dim hover:text-app-text-muted disabled:opacity-50 self-start py-0.5 transition-colors"
             >
               {extraOpen ? (
                 <ChevronUp className="w-2.5 h-2.5" aria-hidden />
@@ -157,11 +157,11 @@ export function IntentClarificationModal({
                 disabled={isSubmitting}
                 rows={2}
                 placeholder={t('ai.intent.extra_placeholder')}
-                className="w-full rounded-lg border border-white/50 bg-white/25 backdrop-blur-sm px-2 py-1 text-[11px] text-[#1a1a1a] placeholder:text-[#b0aea8] focus:outline-none focus:ring-1 focus:ring-[#C2410C]/25 disabled:opacity-50 resize-none shadow-[inset_0_1px_2px_rgba(26,26,26,0.04)]"
+                className="w-full rounded-lg border border-white/50 bg-app-surface-raised/25 backdrop-blur-sm px-2 py-1 text-[11px] text-app-text placeholder:text-app-text-dim focus:outline-none focus:ring-1 focus:ring-app-accent/25 disabled:opacity-50 resize-none shadow-[inset_0_1px_2px_rgba(26,26,26,0.04)]"
               />
             ) : null}
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] text-[#b0aea8] tabular-nums">
+              <span className="text-[10px] text-app-text-dim tabular-nums">
                 {selected.length > 0
                   ? t('ai.intent.selected_count', { count: selected.length })
                   : t('ai.intent.select_at_least_one')}
@@ -171,7 +171,7 @@ export function IntentClarificationModal({
                   type="button"
                   onClick={onCancel}
                   disabled={isSubmitting}
-                  className="text-[10px] text-[#a8a6a0] hover:text-[#5a5a54] disabled:opacity-50 px-1.5 py-0.5 rounded-md hover:bg-white/35 transition-colors"
+                  className="text-[10px] text-app-text-dim hover:text-app-text-muted disabled:opacity-50 px-1.5 py-0.5 rounded-md hover:bg-app-surface-raised/35 transition-colors"
                 >
                   {t('ai.intent.cancel')}
                 </button>
@@ -179,7 +179,7 @@ export function IntentClarificationModal({
                   type="button"
                   disabled={!canConfirm}
                   onClick={submitSelected}
-                  className="text-[10px] font-semibold text-[#C2410C] hover:text-[#a0350a] disabled:opacity-35 disabled:pointer-events-none flex items-center gap-1 px-1.5 py-0.5 rounded-md enabled:hover:bg-white/40 enabled:backdrop-blur-sm transition-all"
+                  className="text-[10px] font-semibold text-app-accent hover:text-app-accent-hover disabled:opacity-35 disabled:pointer-events-none flex items-center gap-1 px-1.5 py-0.5 rounded-md enabled:hover:bg-app-surface-raised/40 enabled:backdrop-blur-sm transition-all"
                 >
                   {isSubmitting ? <Loader2 className="w-2.5 h-2.5 animate-spin" aria-hidden /> : null}
                   {t('ai.intent.confirm')}

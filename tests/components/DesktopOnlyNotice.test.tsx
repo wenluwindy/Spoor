@@ -29,7 +29,7 @@ vi.mock('lucide-react', async (importOriginal) => {
   return lucideIconMock(importOriginal as () => Promise<Record<string, unknown>>);
 });
 
-vi.mock('../../LOGO.png', () => ({ default: 'logo.png' }));
+vi.mock('../../src/assets/LOGO.png', () => ({ default: 'logo.png' }));
 
 describe('DesktopOnlyNotice', () => {
   beforeEach(() => {

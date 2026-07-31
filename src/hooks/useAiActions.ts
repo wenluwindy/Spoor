@@ -4,7 +4,8 @@ import type { AgentConfig, CanvasNode, Edge as DbEdge } from '../db';
 import type { AIConfig } from '../components/AISettingsModal';
 import type { CanvasTransform } from './useCanvasInteraction';
 import { callUniversalAI, formatAiError, maskApiKeyForLog } from '../services/ai';
-import { metasoSearch } from '../services/search';
+import { webSearch } from '../services/search';
+import { DEFAULT_SEARCH_PROVIDER } from '../constants/searchProviders';
 import { deriveSearchQueryFromNoteText, spawnWebSearchCardsFromPages } from '../services/spawnWebSearchNoteCards';
 import { parseThreadWebSearchIntent } from '../utils/webSearchCommand';
 import { shouldPreflightToolbarIntent } from '../utils/toolbarIntentGate';
@@ -439,7 +440,7 @@ export function useAiActions({
     const searchIntent = parseThreadWebSearchIntent(trimmed);
 
     if (searchIntent) {
-      const key = (aiConfig.metasoApiKey || '').trim();
+      const key = (aiConfig.searchApiKey || '').trim();
       if (!key) {
         void appAlert({ message: t('nodes.search_no_metaso_key') });
         return;
@@ -456,7 +457,10 @@ export function useAiActions({
       followUpGuardRef.current = true;
       setFollowUpParentId(parentNodeId);
       try {
-        const res = await metasoSearch(query, { apiKey: key });
+        const res = await webSearch(query, {
+          kind: aiConfig.searchProvider ?? DEFAULT_SEARCH_PROVIDER,
+          apiKey: key,
+        });
         const pages = res.webpages ?? [];
         if (pages.length === 0) {
           void appAlert({ message: t('nodes.search_no_results') });

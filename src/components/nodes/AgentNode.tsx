@@ -4,6 +4,7 @@ import { Loader2, Play } from 'lucide-react';
 import type { AgentNodeProps } from './types';
 import { resolveAgentLocalizedName } from '../../utils/aiI18n';
 import { AgentIcon } from '../AgentIcon';
+import { NodeTypeLabel } from './NodeTypeLabel';
 
 export function AgentNode({
   node,
@@ -18,19 +19,20 @@ export function AgentNode({
   const runDisabled = isAnalyzing || isAgentAnalysisActionDisabled || !onRunAnalysis;
 
   return (
-    <div className="w-full h-full bg-white text-[#1a1a1a] p-4 shadow-lg border border-[#E6E4DF] rounded-lg relative overflow-hidden flex flex-col">
-      <div className="absolute inset-0 bg-gradient-to-br from-[#C2410C]/8 to-transparent pointer-events-none" aria-hidden />
+    <div className="w-full h-full bg-app-surface-raised text-app-text p-4 shadow-lg border border-app-border rounded-lg relative overflow-hidden flex flex-col">
+      <div className="absolute inset-0 bg-gradient-to-br from-app-accent/8 to-transparent pointer-events-none" aria-hidden />
+      <NodeTypeLabel label={t('nodes.agent_label')} className="relative z-10 mb-2" />
       <div className="flex items-start gap-3 relative z-10">
-        <div className="w-9 h-9 rounded-lg bg-[#F4F1ED] border border-[#E6E4DF] flex items-center justify-center text-[#C2410C] shrink-0 overflow-hidden">
+        <div className="w-9 h-9 rounded-lg bg-app-surface-subtle border border-app-border flex items-center justify-center text-app-accent shrink-0 overflow-hidden">
           <AgentIcon
             agentId={conf?.id}
             className="w-full h-full"
             imageClassName="scale-[1.32]"
-            fallbackClassName="text-[#C2410C]"
+            fallbackClassName="text-app-accent"
           />
         </div>
         <div className="min-w-0 flex-1 self-center">
-          <div className="font-serif text-xl font-bold leading-snug text-[#1a1a1a]">
+          <div className="font-serif text-xl font-bold leading-snug text-app-text">
             {conf ? resolveAgentLocalizedName(conf) : 'Agent'}
           </div>
         </div>
@@ -48,7 +50,7 @@ export function AgentNode({
               e.stopPropagation();
               if (!runDisabled) onRunAnalysis();
             }}
-            className="shrink-0 w-9 h-9 rounded-lg border border-[#E6E4DF] bg-[#FAF9F6] flex items-center justify-center text-[#C2410C] hover:bg-[#FFF7ED] hover:border-[#C2410C]/60 disabled:opacity-40 disabled:pointer-events-none transition-colors shadow-sm"
+            className="shrink-0 w-9 h-9 rounded-lg border border-app-border bg-app-surface flex items-center justify-center text-app-accent hover:bg-app-accent-wash hover:border-app-accent/60 disabled:opacity-40 disabled:pointer-events-none transition-colors shadow-sm"
           >
             <Play className="w-4 h-4" aria-hidden fill="currentColor" />
           </button>
@@ -56,10 +58,10 @@ export function AgentNode({
       </div>
       {isAnalyzing ? (
         <div
-          className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-white/75 backdrop-blur-[1px] pointer-events-none"
+          className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-app-surface-raised/75 backdrop-blur-[1px] pointer-events-none"
           data-testid="agent-analyzing-overlay"
         >
-          <Loader2 className="w-8 h-8 text-[#C2410C] animate-spin" aria-hidden />
+          <Loader2 className="w-8 h-8 text-app-accent animate-spin" aria-hidden />
         </div>
       ) : null}
     </div>

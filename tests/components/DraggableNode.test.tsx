@@ -7,7 +7,8 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) =>
       ({
-        'canvas.link_note': 'Link',
+        'canvas.port_in': 'PortIn',
+        'canvas.port_out': 'PortOut',
         'canvas.delete_note': 'Delete',
         'canvas.cycle_layout': 'Layout',
         'canvas.select_note': 'Select',
@@ -25,7 +26,6 @@ function renderNode(props: Partial<React.ComponentProps<typeof DraggableNode>> =
       isConnecting={false}
       onLink={vi.fn()}
       onDelete={vi.fn()}
-      onCycleLayout={vi.fn()}
       onToggleSelect={vi.fn()}
       isSelected
       {...props}
@@ -36,15 +36,16 @@ function renderNode(props: Partial<React.ComponentProps<typeof DraggableNode>> =
 }
 
 describe('DraggableNode', () => {
-  it('编辑态隐藏外链、布局、删除、缩放手柄与选择圈（避免 group-hover 再次点亮）', () => {
+  it('编辑态隐藏进出端口、删除、缩放手柄与选择圈（避免 group-hover 再次点亮）', () => {
     renderNode({ isEditing: true, isSelected: true });
 
-    expect(screen.getByLabelText('Link')).toHaveClass('pointer-events-none');
-    expect(screen.getByLabelText('Link')).toHaveClass('!opacity-0');
-    const bottomBar = screen.getByLabelText('Layout').parentElement;
+    for (const port of ['PortIn', 'PortOut']) {
+      expect(screen.getByLabelText(port)).toHaveClass('pointer-events-none');
+      expect(screen.getByLabelText(port)).toHaveClass('!opacity-0');
+    }
+    const bottomBar = screen.getByLabelText('Delete').parentElement;
     expect(bottomBar).toHaveClass('pointer-events-none');
     expect(bottomBar).toHaveClass('!opacity-0');
-    expect(screen.getByLabelText('Delete').parentElement).toBe(bottomBar);
     expect(screen.getByLabelText('Select')).toHaveClass('pointer-events-none');
 
     const resize = document.querySelector('.cursor-nwse-resize');
@@ -53,10 +54,12 @@ describe('DraggableNode', () => {
     expect(resize).toHaveClass('!opacity-0');
   });
 
-  it('非编辑且选中时外链按钮常态可见', () => {
+  it('非编辑且选中时进出端口常态可见', () => {
     renderNode({ isEditing: false, isSelected: true });
-    expect(screen.getByLabelText('Link')).toHaveClass('opacity-100');
-    expect(screen.getByLabelText('Link')).not.toHaveClass('pointer-events-none');
+    for (const port of ['PortIn', 'PortOut']) {
+      expect(screen.getByLabelText(port)).toHaveClass('opacity-100');
+      expect(screen.getByLabelText(port)).not.toHaveClass('pointer-events-none');
+    }
   });
 
   it('编辑态不显示选中描边 ring', () => {

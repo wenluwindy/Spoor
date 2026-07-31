@@ -63,7 +63,6 @@ describe('i18n 国际化模块', () => {
       expect(i18n.t('canvas.new_canvas')).toBe('New Canvas');
       expect(i18n.t('canvas.rename')).toBe('Rename');
       expect(i18n.t('canvas.delete_note')).toBe('Delete note');
-      expect(i18n.t('canvas.cycle_layout')).toBe('Cycle Layout');
     });
 
     it('nodes 翻译完整', () => {

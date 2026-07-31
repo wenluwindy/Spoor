@@ -4,6 +4,7 @@ import {
   Wand2,
   ZoomIn,
   Maximize,
+  Grid3x3,
   Paperclip,
   Image as ImageIcon,
   FileText as FileTextIcon,
@@ -12,6 +13,8 @@ import {
 } from 'lucide-react';
 import { IntentClarificationModal } from './IntentClarificationModal';
 import { Tooltip } from './ui/Tooltip';
+import { useCanvasGrid } from '../hooks/useCanvasGrid';
+import { toggleCanvasGrid } from '../services/canvasGrid';
 import {
   TOOLBAR_ATTACHMENT_ACCEPT,
   type ToolbarAttachment,
@@ -59,6 +62,7 @@ export function CanvasToolbar({
   onConfirmIntentClarification,
 }: CanvasToolbarProps) {
   const { t } = useTranslation();
+  const gridEnabled = useCanvasGrid();
 
   return (
     <>
@@ -73,25 +77,25 @@ export function CanvasToolbar({
           onCancel={onCancelIntentClarification}
           onConfirm={onConfirmIntentClarification}
         />
-        <div className={`bg-white rounded-2xl shadow-2xl border border-[#E6E4DF] p-2 ring-4 ring-[#F4F1ED]/50 transition-all ${isToolbarAiLoading ? 'opacity-80' : ''}`}>
+        <div className={`bg-app-surface-raised rounded-2xl shadow-2xl border border-app-border p-2 ring-4 ring-app-surface-subtle/50 transition-all ${isToolbarAiLoading ? 'opacity-80' : ''}`}>
           {attachments.length > 0 && (
-            <ul className="flex flex-wrap gap-1.5 px-2 pt-1 pb-2 border-b border-[#F4F1ED] mb-1">
+            <ul className="flex flex-wrap gap-1.5 px-2 pt-1 pb-2 border-b border-app-surface-subtle mb-1">
               {attachments.map((attachment) => (
                 <li
                   key={attachment.id}
-                  className="flex items-center gap-1.5 max-w-[14rem] bg-[#F4F1ED] border border-[#E6E4DF] rounded-lg pl-2 pr-1 py-1"
+                  className="flex items-center gap-1.5 max-w-[14rem] bg-app-surface-subtle border border-app-border rounded-lg pl-2 pr-1 py-1"
                 >
                   {attachment.kind === 'image' ? (
-                    <ImageIcon className="w-3 h-3 text-[#C2410C] shrink-0" />
+                    <ImageIcon className="w-3 h-3 text-app-accent shrink-0" />
                   ) : (
-                    <FileTextIcon className="w-3 h-3 text-[#5a5a54] shrink-0" />
+                    <FileTextIcon className="w-3 h-3 text-app-text-muted shrink-0" />
                   )}
-                  <span className="text-[11px] font-sans text-[#1a1a1a] truncate">{attachment.name}</span>
+                  <span className="text-[11px] font-sans text-app-text truncate">{attachment.name}</span>
                   <Tooltip label={t('canvas.remove_attachment')}>
                     <button
                       type="button"
                       onClick={() => onRemoveAttachment(attachment.id)}
-                      className="p-0.5 text-[#8c8a84] hover:text-[#C2410C] transition-colors shrink-0"
+                      className="p-0.5 text-app-text-faint hover:text-app-accent transition-colors shrink-0"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -102,7 +106,7 @@ export function CanvasToolbar({
           )}
           <div className="flex items-center space-x-2">
             <Tooltip label={t('canvas.attach_file')}>
-              <label className="w-9 h-9 ml-1 flex items-center justify-center text-[#5a5a54] hover:text-[#1a1a1a] hover:bg-[#F4F1ED] rounded-lg cursor-pointer transition-colors m-0 shrink-0">
+              <label className="w-9 h-9 ml-1 flex items-center justify-center text-app-text-muted hover:text-app-text hover:bg-app-surface-subtle rounded-lg cursor-pointer transition-colors m-0 shrink-0">
                 <Paperclip className="w-4 h-4" />
                 <input
                   type="file"
@@ -119,7 +123,7 @@ export function CanvasToolbar({
               </label>
             </Tooltip>
             <input
-              className="flex-1 bg-transparent border-none focus:outline-none focus:ring-0 font-sans text-sm py-3 text-[#1a1a1a] placeholder-[#8c8a84] disabled:opacity-50"
+              className="flex-1 bg-transparent border-none focus:outline-none focus:ring-0 font-sans text-sm py-3 text-app-text placeholder-app-text-faint disabled:opacity-50"
               placeholder={t('ai.input_placeholder')}
               type="text"
               value={aiPrompt}
@@ -131,7 +135,7 @@ export function CanvasToolbar({
               <button
                 onClick={handleAiSubmit}
                 disabled={isInputDisabled}
-                className="bg-[#C2410C] text-white p-2.5 rounded-xl font-sans text-sm font-bold shadow-md flex items-center justify-center hover:bg-[#a0350a] transition-colors disabled:opacity-75 shrink-0"
+                className="bg-app-accent text-white p-2.5 rounded-xl font-sans text-sm font-bold shadow-md flex items-center justify-center hover:bg-app-accent-hover transition-colors disabled:opacity-75 shrink-0"
               >
                 {isToolbarAiLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
               </button>
@@ -141,22 +145,35 @@ export function CanvasToolbar({
       </div>
 
       {/* Zoom Controls */}
-      <div className="absolute bottom-8 right-6 flex items-center bg-white/80 backdrop-blur-sm border border-[#E6E4DF] rounded-md px-3 py-1.5 shadow-sm font-sans text-[10px] font-bold text-[#8c8a84] space-x-3 z-40">
+      <div className="absolute bottom-8 right-6 flex items-center bg-app-surface-raised/80 backdrop-blur-sm border border-app-border rounded-md px-3 py-1.5 shadow-sm font-sans text-[10px] font-bold text-app-text-faint space-x-3 z-40">
         <button
-          className="hover:text-[#1a1a1a] transition-colors"
+          className="hover:text-app-text transition-colors"
           onClick={() => setCanvasTransform(p => ({ ...p, scale: Math.max(0.1, p.scale / 1.1) }))}
         >{t('canvas.zoom')} -</button>
         <span className="flex items-center gap-1 w-12 justify-center"><ZoomIn className="w-3 h-3" /> {Math.round(canvasTransform.scale * 100)}%</span>
         <button
-          className="hover:text-[#1a1a1a] transition-colors"
+          className="hover:text-app-text transition-colors"
           onClick={() => setCanvasTransform(p => ({ ...p, scale: Math.min(5, p.scale * 1.1) }))}
         >{t('canvas.zoom')} +</button>
-        <span className="h-3 w-[1px] bg-[#E6E4DF]" />
+        <span className="h-3 w-[1px] bg-app-border" />
+        {/* 一个开关同时管网格显示与卡片吸附 */}
+        <Tooltip label={t('canvas.toggle_grid')}>
+          <button
+            type="button"
+            aria-pressed={gridEnabled}
+            onClick={toggleCanvasGrid}
+            className={`flex items-center justify-center transition-colors ${
+              gridEnabled ? 'text-app-accent' : 'text-app-text-faint hover:text-app-accent'
+            }`}
+          >
+            <Grid3x3 className="w-3.5 h-3.5" />
+          </button>
+        </Tooltip>
         <Tooltip label={t('canvas.zoom_to_fit')}>
           <button
             type="button"
             onClick={onZoomToFit}
-            className="flex items-center justify-center text-[#8c8a84] hover:text-[#C2410C] transition-colors"
+            className="flex items-center justify-center text-app-text-faint hover:text-app-accent transition-colors"
           >
             <Maximize className="w-3.5 h-3.5" />
           </button>

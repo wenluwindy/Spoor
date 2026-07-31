@@ -5,14 +5,11 @@ import { db, type CanvasNode } from './db';
 import {
   Maximize2,
   Minimize2,
-  Loader2,
-  PenLine,
 } from 'lucide-react';
 import { commitCanvasInlineEditing } from './utils/commitCanvasInlineEditing';
 import { registerCanvasUnloadFlush } from './utils/registerCanvasUnloadFlush';
 import { getCanvasNodeContextText } from './utils/canvasNodeContextText';
 import { screenToCanvasPosition } from './utils/canvas';
-import { nodeSupportsCycleLayout } from './constants/nodeCapabilities';
 import { CanvasEdgeLines } from './components/canvas/CanvasEdgeLines';
 import { DraggableNode } from './components/canvas/DraggableNode';
 import { CanvasContextMenu, type CanvasContextMenuActions } from './components/canvas/CanvasContextMenu';
@@ -27,18 +24,24 @@ import { Reference } from './components/Reference';
 import { ResearchLab } from './components/ResearchLab';
 import { AgentsStudio } from './components/AgentsStudio';
 import { callUniversalAI } from './services/ai';
+import { autoCheckForUpdateOnce } from './services/appUpdate';
 import { MIMO_TOKEN_PLAN_BASE_URL } from './constants/mimo';
 import { DOUBAO_ARK_BASE_URL } from './constants/doubao';
 import { NodeRenderer } from './components/nodes/NodeRenderer';
 import { useSeedData } from './hooks/useSeedData';
 import { useUserProfile } from './hooks/useUserProfile';
 import { useFullscreen } from './hooks/useFullscreen';
+import { useAppTheme } from './hooks/useAppTheme';
+import { useCanvasGrid } from './hooks/useCanvasGrid';
+import { CANVAS_GRID_SIZE } from './services/canvasGrid';
 import { useCanvasInteraction } from './hooks/useCanvasInteraction';
 import { useCanvasContextMenu } from './hooks/useCanvasContextMenu';
 import { useCanvasMarquee } from './hooks/useCanvasMarquee';
+import { useCanvasLinkDrag } from './hooks/useCanvasLinkDrag';
 import { computeFitTransform, unionNodeBoundsInCanvasSpace } from './utils/zoomToFit';
 import { useNodeActions } from './hooks/useNodeActions';
 import { pickFiles } from './utils/filePicker';
+import { saveMediaAs } from './utils/saveMediaAs';
 import { useAiActions } from './hooks/useAiActions';
 import { useNativeFileDrop } from './hooks/useNativeFileDrop';
 import { useImageGenActions } from './hooks/useImageGenActions';
@@ -118,14 +121,45 @@ export default function App() {
 
   // Fullscreen
   const { isFullscreen, toggleFullscreen } = useFullscreen(mainRef);
+  const appTheme = useAppTheme();
+  /** 选区 id 列表（稳定引用）：多选整体拖拽要把它透传给每个 DraggableNode。 */
+  const selectedNodeIds = React.useMemo(() => [...selectedNodes], [selectedNodes]);
+  const gridEnabled = useCanvasGrid();
 
   // Canvas interaction (transform, pan, zoom, edge lines)
-  const { canvasTransform, setCanvasTransform, transformRef, handlePanStart } = useCanvasInteraction(
-    mainRef, contentContainerRef, svgRef, edgeLabelsRef, nodesRef, connectingFrom, setConnectingFrom,
-  );
+  const { canvasTransform, setCanvasTransform, transformRef, handlePanStart, isSpacePanning } =
+    useCanvasInteraction(
+      mainRef, contentContainerRef, svgRef, edgeLabelsRef, nodesRef, connectingFrom, setConnectingFrom,
+    );
+
+  const { menu: contextMenu, openContextMenu, closeContextMenu } = useCanvasContextMenu(mainRef, transformRef);
 
   // 左键框选（中键平移由 useCanvasInteraction 负责）
   const { marquee, handleMarqueeStart } = useCanvasMarquee({ mainRef, nodesRef, setSelectedNodes });
+
+  /**
+   * 连线落在画布空白处：弹「新建并连上」菜单，**同时结束连线态**。
+   *
+   * 清掉 `connectingFrom` 是关键：菜单已经把 `fromId` 记在自己的 target 里，不再需要
+   * 这个状态。以前不清，于是关掉菜单时的那次点击又会命中这里、菜单再弹一次——
+   * 用户看到的就是「点一次建一张，怎么点都还在建」，而且没有办法把线放下。
+   */
+  const dropLinkOnCanvas = useCallback(
+    (
+      fromId: string,
+      at: {
+        clientX: number;
+        clientY: number;
+        target: EventTarget | null;
+        preventDefault: () => void;
+        stopPropagation: () => void;
+      },
+    ) => {
+      setConnectingFrom(null);
+      openContextMenu(at, { kind: 'link-drop', fromId });
+    },
+    [openContextMenu],
+  );
 
   /**
    * 画布背景按下：先把正在编辑的节点存盘，再按键位分派。
@@ -139,10 +173,20 @@ export default function App() {
         nodesRef,
         nodeType: nodeRow?.type,
       });
-      if (e.button === 1) handlePanStart(e);
-      else if (e.button === 0) handleMarqueeStart(e);
+      if (e.button === 1) {
+        handlePanStart(e);
+        return;
+      }
+      if (e.button !== 0) return;
+      // 正在拉线时落在空白处：不丢弃这根线，改为当场问「要建张什么卡」再自动连上。
+      // 此时也不该同时开始框选。
+      if (connectingFrom) {
+        dropLinkOnCanvas(connectingFrom, e);
+        return;
+      }
+      handleMarqueeStart(e);
     },
-    [editingNodeId, dynamicNodes, handlePanStart, handleMarqueeStart],
+    [editingNodeId, dynamicNodes, handlePanStart, handleMarqueeStart, connectingFrom, dropLinkOnCanvas],
   );
 
   /** 缩放至适应全部内容：把所有节点的包围盒装进视口。 */
@@ -190,6 +234,11 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('ai_config', JSON.stringify(aiConfigV2));
   }, [aiConfigV2]);
+
+  // 启动静默自检：有新版就在侧边栏设置按钮上挂个点，查不到就安静躺下，不打断
+  useEffect(() => {
+    autoCheckForUpdateOnce();
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('active_canvas_id', activeCanvasId);
@@ -281,10 +330,25 @@ export default function App() {
   // Node actions (CRUD, selection, linking)
   const {
     toggleNodeSelection, handleLink, deleteEdge, removeNodeId,
-    createNodeAt, addAgentNodeAt, insertFilesAt, insertPathsAt, duplicateNode, cycleNodeLayout, pasteStickyAt,
+    createNodeAt, createNodeAtLinkedFrom, linkNodes, addAgentNodeAt, insertFilesAt, insertPathsAt, duplicateNode, pasteStickyAt,
     clearSelection, deleteNodes, linkNodesToHub,
   } = useNodeActions({
     activeCanvasId, nodesRef, connectingFrom, setConnectingFrom, edges, selectedNodes, setSelectedNodes, transformRef,
+  });
+
+  // 从端口按住拖到目标松手即连；Esc / 右键放弃。点击-点击的老手势仍然可用。
+  useCanvasLinkDrag({
+    connectingFrom,
+    onDropOnNode: handleLink,
+    onDropOnCanvas: (fromId, clientX, clientY) =>
+      dropLinkOnCanvas(fromId, {
+        clientX,
+        clientY,
+        target: mainRef.current,
+        preventDefault: () => {},
+        stopPropagation: () => {},
+      }),
+    onCancel: () => setConnectingFrom(null),
   });
 
   /**
@@ -328,7 +392,6 @@ export default function App() {
   });
 
   // Right-click menu (canvas / node / nodes / edge)
-  const { menu: contextMenu, openContextMenu, closeContextMenu } = useCanvasContextMenu(mainRef, transformRef);
 
   const nodesById = React.useMemo(
     () => new Map(dynamicNodes.map((n) => [n.id, n])),
@@ -349,7 +412,6 @@ export default function App() {
 
   // AI actions (publish, agent analysis, AI submit)
   const {
-    isPublishing,
     isToolbarAiLoading,
     isToolbarIntentPreflight,
     analyzingAgentNodeId,
@@ -373,6 +435,20 @@ export default function App() {
     dynamicNodes, edges, selectedNodes, setSelectedNodes, setActiveReferenceId, setActiveTab,
   });
 
+  /** 另存为：图片/视频用原件路径，生图节点用当前选中的那一张结果。 */
+  const saveNodeMediaAsFromCanvas = useCallback(
+    async (nodeId: string) => {
+      const node = await db.nodes.get(nodeId);
+      if (!node) return;
+      const rel =
+        node.type === 'imagegen'
+          ? node.imageGenResults?.[node.imageGenActiveIndex ?? 0]
+          : node.filePath;
+      if (rel) await saveMediaAs(rel);
+    },
+    [],
+  );
+
   const contextMenuActions = React.useMemo<CanvasContextMenuActions>(
     () => ({
       createNode: (nodeType, at) => void createNodeAt(nodeType, at),
@@ -389,7 +465,6 @@ export default function App() {
       editNode: (nodeId) => setEditingNodeId(nodeId),
       duplicateNode: (nodeId) => void duplicateNode(nodeId),
       startLink: (nodeId) => handleLink(nodeId),
-      cycleLayout: (nodeId) => void cycleNodeLayout(nodeId),
       toggleSelect: (nodeId) => toggleNodeSelection(nodeId),
       deleteNode: (nodeId) => removeNodeId(nodeId),
       deleteEdge: (edgeId) => deleteEdge(edgeId),
@@ -398,11 +473,27 @@ export default function App() {
       clearSelection: () => clearSelection(),
       deleteNodes: (nodeIds) => void deleteNodes(nodeIds),
       outputAsImageNode: (nodeId) => void outputAsImageNode(nodeId),
+      saveNodeMediaAs: (nodeId) => void saveNodeMediaAsFromCanvas(nodeId),
+      createNodeLinkedFrom: (nodeType, at, fromId) => {
+        setConnectingFrom(null);
+        void createNodeAtLinkedFrom(nodeType, at, fromId);
+      },
+      insertFileLinkedFrom: (accept, at, fromId) => {
+        setConnectingFrom(null);
+        void pickFiles(accept)
+          .then((picked) =>
+            picked.kind === 'paths'
+              ? insertPathsAt(picked.paths, at)
+              : insertFilesAt(picked.files, at),
+          )
+          .then((createdIds) => Promise.all(createdIds.map((id) => linkNodes(fromId, id))));
+      },
     }),
     [
       createNodeAt, insertFilesAt, insertPathsAt, addAgentNodeAt, pasteStickyAt, setCanvasTransform,
-      duplicateNode, handleLink, cycleNodeLayout, toggleNodeSelection, removeNodeId, deleteEdge,
+      duplicateNode, handleLink, toggleNodeSelection, removeNodeId, deleteEdge,
       linkNodesToHub, handlePublish, clearSelection, deleteNodes, outputAsImageNode,
+      saveNodeMediaAsFromCanvas, createNodeAtLinkedFrom, linkNodes,
     ],
   );
 
@@ -483,9 +574,18 @@ export default function App() {
   };
 
   return (
-    <div className="bg-[#FAF9F6] font-serif text-[#1a1a1a] h-screen max-h-screen overflow-hidden flex flex-col paper-texture">
+    <div className="bg-app-surface font-serif text-app-text h-screen max-h-screen overflow-hidden flex flex-col paper-texture">
       
-      <div className="flex flex-1 min-h-0 overflow-hidden" onPointerDown={() => { if (connectingFrom) setConnectingFrom(null); }}>
+      <div
+        className="flex flex-1 min-h-0 overflow-hidden"
+        onPointerDown={(e) => {
+          // 画布空白处由 handleCanvasBackgroundPointerDown 接管（要弹「新建并连上」菜单）；
+          // 这里只负责在画布之外（侧边栏等）按下时取消连线。
+          if (!connectingFrom) return;
+          if ((e.target as HTMLElement).closest('[data-canvas-surface]')) return;
+          setConnectingFrom(null);
+        }}
+      >
         {/* SideNavBar */}
         <Sidebar 
           isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}
@@ -499,22 +599,43 @@ export default function App() {
         {activeTab === 'personal' && (
         <main 
           ref={mainRef} 
-          className="flex-1 min-h-0 relative overflow-hidden bg-[#FAF9F6] paper-texture"
+          data-canvas-surface=""
+          // 按住空格进入「手型」模式：光标先变，用户才知道现在拖的是画布而不是卡片
+          className={`flex-1 min-h-0 relative overflow-hidden bg-app-surface paper-texture ${
+            isSpacePanning ? 'cursor-grab [&_*]:cursor-grab' : ''
+          }`}
           onContextMenu={(e) => openContextMenu(e, { kind: 'canvas' })}
         >
           {/* 画布背景：左键框选、中键平移 */}
           <div
+            data-canvas-background=""
             className="absolute inset-0 z-0"
             onPointerDown={handleCanvasBackgroundPointerDown}
           />
+
+          {/*
+            网格画在背景层而不是 transform 容器里：容器的 scale 会把 1px 的网格点
+            一起放大成糊团。这里改为按 scale 换算 background-size / position，
+            点始终是 1px，但与画布内容严丝合缝地一起平移缩放。
+          */}
+          {gridEnabled && (
+            <div
+              data-canvas-grid=""
+              className="canvas-grid pointer-events-none absolute inset-0 z-0"
+              style={{
+                backgroundSize: `${CANVAS_GRID_SIZE * canvasTransform.scale}px ${CANVAS_GRID_SIZE * canvasTransform.scale}px`,
+                backgroundPosition: `${canvasTransform.x}px ${canvasTransform.y}px`,
+              }}
+            />
+          )}
 
           {/* 原生拖放没有 DataTransfer，浏览器也不给放置光标，只能自己画个提示 */}
           {isFileDragOver && (
             <div
               data-file-drag-overlay=""
-              className="pointer-events-none absolute inset-3 z-[60] rounded-2xl border-2 border-dashed border-[#C2410C] bg-[#C2410C]/5 flex items-center justify-center"
+              className="pointer-events-none absolute inset-3 z-[60] rounded-2xl border-2 border-dashed border-app-accent bg-app-accent/5 flex items-center justify-center"
             >
-              <span className="font-sans text-sm font-bold text-[#C2410C] bg-white/90 px-4 py-2 rounded-xl shadow-sm">
+              <span className="font-sans text-sm font-bold text-app-accent bg-app-surface-raised/90 px-4 py-2 rounded-xl shadow-sm">
                 {t('canvas.drop_files_hint')}
               </span>
             </div>
@@ -524,7 +645,7 @@ export default function App() {
           {marquee && (
             <div
               data-canvas-marquee=""
-              className="pointer-events-none absolute z-50 rounded-sm border border-[#C2410C] bg-[#C2410C]/10"
+              className="pointer-events-none absolute z-50 rounded-sm border border-app-accent bg-app-accent/10"
               style={{
                 left: marquee.left,
                 top: marquee.top,
@@ -539,26 +660,10 @@ export default function App() {
 
           {/* Transformed content container */}
           <div className="absolute top-6 right-6 flex items-center z-40 gap-3">
-              <Tooltip
-                label={isPublishing ? t('nodes.ai_loading') : `${t('sidebar.publish')} (${selectedNodes.size})`}
-              >
-                <button
-                  onClick={handlePublish}
-                  disabled={selectedNodes.size === 0 || isAnyAiBusy}
-                  className={`p-3 rounded-full shadow-md transition-all flex items-center justify-center border ${
-                    selectedNodes.size > 0
-                      ? 'bg-[#C2410C] text-white border-[#a0350a]/50 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100'
-                      : 'bg-white text-[#1a1a1a] border-[#E6E4DF] hover:scale-105 hover:border-[#C2410C] hover:text-[#C2410C] disabled:opacity-50 disabled:hover:scale-100 disabled:hover:border-[#E6E4DF] disabled:hover:text-[#1a1a1a]'
-                  }`}
-                >
-                  {isPublishing ? <Loader2 className="w-5 h-5 animate-spin" /> : <PenLine className="w-5 h-5" />}
-                </button>
-              </Tooltip>
-
               <Tooltip label={t('canvas.full_screen')}>
                 <button
                   onClick={toggleFullscreen}
-                  className="bg-white text-[#1a1a1a] p-3 rounded-full shadow-md hover:scale-105 transition-all border border-[#E6E4DF] flex items-center justify-center hover:border-[#C2410C] hover:text-[#C2410C]"
+                  className="bg-app-surface-raised text-app-text p-3 rounded-full shadow-md hover:scale-105 transition-all border border-app-border flex items-center justify-center hover:border-app-accent hover:text-app-accent"
                 >
                   {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
                 </button>
@@ -581,9 +686,10 @@ export default function App() {
             <div className="absolute inset-0 z-30 w-[1px] h-[1px] pointer-events-none"> 
               {/* All Nodes from Database */}
               {dynamicNodes.map((node) => {
+                /** 只有经典外壳（layout 0）带手写便签式的轻微倾斜；形态现在来自全局主题。 */
                 const rotation = 
-                  (node.type === 'note' || node.type === 'text') ? (node.layout === 0 || node.layout === undefined ? 1 : 0) :
-                  (node.type === 'theme') ? (node.layout === 0 || node.layout === undefined ? -1 : 0) :
+                  (node.type === 'note' || node.type === 'text') ? (appTheme.noteLayout === 0 ? 1 : 0) :
+                  (node.type === 'theme') ? (appTheme.themeLayout === 0 ? -1 : 0) :
                   (node.type === 'image') ? -1 :
                   (node.type === 'video') ? 1 :
                   (node.type === 'document') ? 1 : 0;
@@ -596,12 +702,8 @@ export default function App() {
                     initialWidth={node.width} initialHeight={node.height}
                     onDelete={() => removeNodeId(node.id)} scale={canvasTransform.scale}
                     rotation={rotation}
-                    onCycleLayout={
-                      nodeSupportsCycleLayout(node.type)
-                        ? () => void cycleNodeLayout(node.id)
-                        : undefined
-                    }
                     isSelected={selectedNodes.has(node.id)}
+                    selectedIds={selectedNodeIds}
                     isEditing={editingNodeId === node.id}
                     onToggleSelect={() => toggleNodeSelection(node.id)}
                     allowPalette={true}
@@ -610,7 +712,7 @@ export default function App() {
                       db.nodes.update(node.id, size);
                     }}
                     glassSurface={
-                      (node.type === 'note' || node.type === 'text') && (node.layout ?? 0) === 1
+                      (node.type === 'note' || node.type === 'text') && appTheme.noteLayout === 1
                     }
                     onStickyActivate={
                       node.type === 'note' || node.type === 'text'

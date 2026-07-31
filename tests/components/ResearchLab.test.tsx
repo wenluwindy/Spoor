@@ -84,7 +84,7 @@ vi.mock('react-i18next', () => ({
 // Mock search module
 const mockMetasoSearch = vi.fn();
 vi.mock('../../src/services/search', () => ({
-  metasoSearch: (...args: any[]) => mockMetasoSearch(...args),
+  webSearch: (...args: any[]) => mockMetasoSearch(...args),
   buildSearchContext: (results: any) => {
     if (!results?.webpages?.length) return '';
     return results.webpages.map((w: any) => `[Source] ${w.title}: ${w.snippet}`).join('\n');
@@ -212,7 +212,7 @@ describe('ResearchLab', () => {
     expect(await db.researchSessions.count()).toBe(1);
   });
 
-  it('calls callAI without search context when no metasoApiKey', async () => {
+  it('calls callAI without search context when no search key', async () => {
     const callAI = vi.fn().mockResolvedValue(
       JSON.stringify([
         { title: 'Step 1', desc: 'Desc 1' },
@@ -266,7 +266,7 @@ describe('ResearchLab', () => {
     });
   });
 
-  it('calls metasoSearch when metasoApiKey is provided', async () => {
+  it('calls webSearch when a search key is provided', async () => {
     mockMetasoSearch.mockResolvedValue({
       credits: 1,
       total: 1,
@@ -283,14 +283,17 @@ describe('ResearchLab', () => {
         ]),
       );
 
-    render(<ResearchLab aiConfig={{ ...baseConfig, metasoApiKey: 'sk-metaso-test' }} callAI={callAI} />);
+    render(<ResearchLab aiConfig={{ ...baseConfig, searchApiKey: 'sk-metaso-test' }} callAI={callAI} />);
 
     const input = screen.getByPlaceholderText('Search topic...');
     fireEvent.change(input, { target: { value: 'AI research' } });
     fireEvent.submit(input.closest('form')!);
 
     await waitFor(() => {
-      expect(mockMetasoSearch).toHaveBeenCalledWith('AI research', { apiKey: 'sk-metaso-test' });
+      expect(mockMetasoSearch).toHaveBeenCalledWith('AI research', {
+        kind: 'metaso',
+        apiKey: 'sk-metaso-test',
+      });
     });
 
     await waitFor(() => {
@@ -320,7 +323,7 @@ describe('ResearchLab', () => {
     ]);
     const callAI = vi.fn().mockResolvedValueOnce('{"need_web":true}').mockResolvedValueOnce(planJson);
 
-    render(<ResearchLab aiConfig={{ ...baseConfig, metasoApiKey: 'sk-metaso' }} callAI={callAI} />);
+    render(<ResearchLab aiConfig={{ ...baseConfig, searchApiKey: 'sk-metaso' }} callAI={callAI} />);
 
     fireEvent.change(screen.getByPlaceholderText('Search topic...'), { target: { value: 'topic sources' } });
     fireEvent.submit(screen.getByPlaceholderText('Search topic...').closest('form')!);
@@ -351,7 +354,7 @@ describe('ResearchLab', () => {
         ]),
       );
 
-    render(<ResearchLab aiConfig={{ ...baseConfig, metasoApiKey: 'sk-metaso-test' }} callAI={callAI} />);
+    render(<ResearchLab aiConfig={{ ...baseConfig, searchApiKey: 'sk-metaso-test' }} callAI={callAI} />);
 
     const input = screen.getByPlaceholderText('Search topic...');
     fireEvent.change(input, { target: { value: 'meaning of life' } });
@@ -368,7 +371,7 @@ describe('ResearchLab', () => {
     expect(planPrompt).toContain('meaning of life');
   });
 
-  it('degrades gracefully when metasoSearch fails', async () => {
+  it('degrades gracefully when webSearch fails', async () => {
     mockMetasoSearch.mockRejectedValue(new Error('Network error'));
 
     const callAI = vi.fn()
@@ -383,7 +386,7 @@ describe('ResearchLab', () => {
 
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    render(<ResearchLab aiConfig={{ ...baseConfig, metasoApiKey: 'sk-bad-key' }} callAI={callAI} />);
+    render(<ResearchLab aiConfig={{ ...baseConfig, searchApiKey: 'sk-bad-key' }} callAI={callAI} />);
 
     const input = screen.getByPlaceholderText('Search topic...');
     fireEvent.change(input, { target: { value: 'test query' } });
@@ -504,7 +507,7 @@ describe('ResearchLab', () => {
       .mockResolvedValueOnce(planJson)
       .mockResolvedValueOnce(reportJson);
 
-    render(<ResearchLab aiConfig={{ ...baseConfig, metasoApiKey: 'sk-m' }} callAI={callAI} />);
+    render(<ResearchLab aiConfig={{ ...baseConfig, searchApiKey: 'sk-m' }} callAI={callAI} />);
 
     fireEvent.change(screen.getByPlaceholderText('Search topic...'), { target: { value: 'metaso topic' } });
     fireEvent.submit(screen.getByPlaceholderText('Search topic...').closest('form')!);

@@ -2,16 +2,18 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import i18n from './i18n';
 import { syncDocumentLanguage } from './utils/syncDocumentLanguage';
+import { syncDocumentTheme } from './utils/syncDocumentTheme';
 import App from './App.tsx';
 import { AppDialogProvider } from './components/AppDialogProvider';
 import './index.css';
 import { registerDevBuiltinAgentReset } from './dev/resetBuiltinAgents';
 import { DesktopOnlyNotice } from './components/DesktopOnlyNotice';
 import { shouldRenderFullApp } from './utils/appRuntimeGate';
-import logoUrl from '../LOGO.png';
+import logoUrl from './assets/LOGO.png';
 
 registerDevBuiltinAgentReset();
 syncDocumentLanguage(i18n);
+syncDocumentTheme();
 
 const canRunFullApp = shouldRenderFullApp();
 

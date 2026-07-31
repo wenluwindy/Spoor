@@ -41,12 +41,14 @@ jobs:
             ## Windows 安装（推荐）
 
             下载 **`Spoor_*_x64-setup.exe`**，双击安装，从开始菜单打开 **Spoor / 踪迹**。
+            已装过旧版本的话直接覆盖安装即可，笔记与 `SpoorData/` 目录不受影响；
+            也可以在旧版本里点 **设置 → 通用 → 检查更新**。
 
             - 系统：Windows 10/11，64 位
-            - 首次使用：在应用 **设置** 中配置 AI 服务商与 API Key（仅存本机）
-            - 本地 GGUF 可选，见 [LOCAL_LLM.md](https://github.com/wenluwindy/Spoor/blob/master/docs/LOCAL_LLM.md)
+            - 首次使用：在应用 **设置 → 模型服务** 中配置 AI 服务商与 API Key（仅存本机）
+            - 本地 GGUF 可选，见 [LOCAL_LLM.md](https://github.com/wenluwindy/Spoor/blob/main/docs/guide/LOCAL_LLM.md)
 
-            完整说明：[docs/RELEASE_v0.1.0.md](https://github.com/wenluwindy/Spoor/blob/master/docs/RELEASE_v0.1.0.md) · [DESKTOP_INSTALL.md](https://github.com/wenluwindy/Spoor/blob/master/docs/DESKTOP_INSTALL.md)
+            完整说明：[发布说明](https://github.com/wenluwindy/Spoor/tree/main/docs/release) · [DESKTOP_INSTALL.md](https://github.com/wenluwindy/Spoor/blob/main/docs/guide/DESKTOP_INSTALL.md)
           releaseDraft: false
           prerelease: false
           tauriScript: npm run tauri

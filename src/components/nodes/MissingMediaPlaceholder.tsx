@@ -12,7 +12,7 @@ import { ImageOff } from 'lucide-react';
 export function MissingMediaPlaceholder({ fileName }: { fileName?: string }) {
   const { t } = useTranslation();
   return (
-    <div className="w-full h-full min-h-[80px] flex flex-col items-center justify-center gap-1.5 bg-[#F4F1ED] text-[#8c8a84] px-3 py-4 text-center">
+    <div className="w-full h-full min-h-[80px] flex flex-col items-center justify-center gap-1.5 bg-app-surface-subtle text-app-text-faint px-3 py-4 text-center">
       <ImageOff className="w-5 h-5" />
       <span className="text-[11px] font-sans">{t('nodes.media_missing')}</span>
       {fileName && (
