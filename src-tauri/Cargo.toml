@@ -23,6 +23,7 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 mime_guess = "2.0.5"
 tauri-plugin-dialog = "2.7.2"
 base64 = "0.23.0"
+rusqlite = { version = "0.37", features = ["bundled"] }
 
 [lib]
 name = "spoor_lib"
@@ -31,4 +32,3 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [[bin]]
 name = "spoor"
 path = "src/main.rs"
-

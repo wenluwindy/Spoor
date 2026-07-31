@@ -2,11 +2,11 @@ import type { AIConfigV2, AIModelEntry, AIProviderProfile, ProviderKind } from '
 import { PRESET_CHAT_MODEL, defaultImageApiKind } from '../constants/aiProviderPresets';
 
 /**
- * 导入 cc-switch（https://github.com/farion1231/cc-switch）的服务商配置。
+ * 解析 cc-switch（https://github.com/farion1231/cc-switch）的服务商配置。
  *
- * cc-switch 是 Claude Code / Codex 的供应商切换器，配置在
- * `<用户目录>/.cc-switch/config.json`。它的结构跨版本改过好几次
- * （v1 扁平 → v2 分 app → v3 再套一层），字段名也随之动过。
+ * 当前版 cc-switch 把配置放在 `<用户目录>/.cc-switch/cc-switch.db` 的
+ * `providers` 表中；桌面命令会把每行转换为 `{ name, settingsConfig }`。
+ * 早期版本使用过多种 JSON 外层结构，所以解析器仍保持递归识别以兼容旧数据。
  *
  * 所以这里**不按某个版本的结构逐层取值**，而是把整棵 JSON 走一遍，
  * 认「同时有 name 和 settingsConfig 的对象」为一条服务商，再从

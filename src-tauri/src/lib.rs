@@ -1,3 +1,4 @@
+mod cc_switch;
 mod imagegen;
 mod local_llama;
 mod media;
@@ -274,6 +275,7 @@ pub fn run() {
       open_external_url,
       local_llama_chat,
       get_local_llama_log_path,
+      cc_switch::cc_switch_read_config,
       media::media_store_info,
       media::media_list,
       media::media_import,

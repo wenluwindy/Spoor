@@ -64,7 +64,7 @@ Spoor 是一个带 AI 的无限便签画布。你可以把想法、资料、截�
 
 > 豆包（火山方舟）的「模型」填的是账号下的推理接入点 ID（形如 `ep-xxxxxxxx`），不是模型名。
 
-**从 cc-switch 导入**：如果你已经在用 [cc-switch](https://github.com/farion1231/cc-switch) 管理 Claude Code / Codex 的中转配置，模型服务页底部的「导入 cc-switch 配置」可以直接读它的 `config.json`（一般在 `<用户目录>\.cc-switch\config.json`）。带密钥的 Claude 与 Codex 条目会被追加进来，已有配置不会被覆盖，重复的条目会跳过。
+**从 cc-switch 导入**：如果你已经在用 [cc-switch](https://github.com/farion1231/cc-switch) 管理 Claude Code / Codex 的中转配置，点击模型服务页底部的「导入 cc-switch 配置」会自动读取 `<用户目录>\.cc-switch\cc-switch.db` 中的 `providers` 表。带密钥的 Claude 与 Codex 条目会被追加进来，已有配置不会被覆盖，重复的条目会跳过；数据库不存在时会直接提示未安装。
 
 Anthropic 与中转站：Base URL 填站点根（`https://xxx.com`）或带 `/v1` 都可以，两种写法都认。
 
