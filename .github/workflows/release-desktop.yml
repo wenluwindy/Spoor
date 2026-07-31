@@ -30,6 +30,11 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
+      # tauri-action 不装前端依赖（官方示例里也是单列一步）。少了这步，
+      # 下面的 `npm run tauri` 找不到 node_modules 里的 tauri CLI，一秒就退出码 1。
+      - name: Install frontend dependencies
+        run: npm ci
+
       - name: Build and publish release
         uses: tauri-apps/tauri-action@v1
         env:
