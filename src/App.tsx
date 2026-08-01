@@ -71,6 +71,8 @@ import { saveMediaAs } from './utils/saveMediaAs';
 import { useAiActions } from './hooks/useAiActions';
 import { useNativeFileDrop } from './hooks/useNativeFileDrop';
 import { useImageGenActions } from './hooks/useImageGenActions';
+import { useWebNodeActions } from './hooks/useWebNodeActions';
+import { isFetchableUrl } from './services/webPage';
 import { migrateBase64MediaNodes } from './services/migrateBase64Media';
 import {
   emptyAiConfigV2,
@@ -307,6 +309,11 @@ export default function App() {
    */
   const deleteNodesRef = useRef<(ids: string[]) => Promise<void>>(async () => {});
 
+  /** 同理：粘贴链接要建网页卡片，而建卡的动作在下面才拿得到。 */
+  const createWebNodeRef = useRef<(url: string, at?: { x: number; y: number }) => Promise<string>>(
+    async () => '',
+  );
+
   const clipboardContextRef = useRef({
     dynamicNodes,
     edges,
@@ -360,6 +367,14 @@ export default function App() {
     const onPaste = (e: ClipboardEvent) => {
       if (isTextEditingTarget(e.target)) return;
       const text = e.clipboardData?.getData('text/plain') ?? '';
+
+      // 粘贴的是一条干净的链接：直接落成网页卡片并开抓（Kosmik 的手感）
+      if (isFetchableUrl(text)) {
+        e.preventDefault();
+        void createWebNodeRef.current(text.trim());
+        return;
+      }
+
       const payload = parseCanvasClipboardPayload(text);
       if (!payload) return;
       e.preventDefault();
@@ -388,7 +403,7 @@ export default function App() {
   const {
     toggleNodeSelection, handleLink, deleteEdge, removeNodeId,
     createNodeAt, createNodeAtLinkedFrom, linkNodes, addAgentNodeAt, insertFilesAt, insertPathsAt, duplicateNode, pasteClipboardAt,
-    clearSelection, deleteNodes, linkNodesToHub, duplicateNodes, nudgeNodes, addCanvasLinkNodeAt,
+    clearSelection, deleteNodes, linkNodesToHub, duplicateNodes, nudgeNodes, addCanvasLinkNodeAt, addWebNodeAt,
   } = useNodeActions({
     activeCanvasId, nodesRef, connectingFrom, setConnectingFrom, edges, selectedNodes, setSelectedNodes, transformRef,
   });
@@ -433,6 +448,21 @@ export default function App() {
     enabled: activeTab === 'personal',
     onDrop: handleNativeFileDrop,
   });
+
+  // 网页卡片：抓取态放内存，与生图同一套取舍
+  const { fetchingNodeIds: fetchingWebNodeIds, fetchInto: fetchWebNode } = useWebNodeActions();
+
+  /** 新建一张网页卡片并立刻开抓。粘贴链接与右键新建都走这里。 */
+  const createWebNodeAndFetch = useCallback(
+    async (url: string, at?: { x: number; y: number }) => {
+      const id = await addWebNodeAt(at, url);
+      await fetchWebNode(id, url);
+      return id;
+    },
+    [addWebNodeAt, fetchWebNode],
+  );
+
+  createWebNodeRef.current = createWebNodeAndFetch;
 
   // 生图节点：状态放内存，生成中不入库（重启后不会卡在转圈上）
   const {
@@ -1048,6 +1078,8 @@ export default function App() {
                     canvases={canvases}
                     targetNodeCountByCanvasId={targetNodeCountByCanvasId}
                     onOpenCanvas={setActiveCanvasId}
+                    fetchingWebNodeIds={fetchingWebNodeIds}
+                    onWebFetch={(id, url) => void fetchWebNode(id, url)}
                   />
                 </DraggableNode>
               );

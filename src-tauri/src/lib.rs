@@ -5,6 +5,7 @@ mod media;
 mod snapshot;
 mod updater;
 mod userfile;
+mod webpage;
 
 use futures_util::StreamExt;
 use serde_json::Value;
@@ -340,7 +341,8 @@ pub fn run() {
       userfile::user_file_read_text,
       snapshot::snapshot_write,
       snapshot::snapshot_list,
-      snapshot::snapshot_read
+      snapshot::snapshot_read,
+      webpage::fetch_webpage
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

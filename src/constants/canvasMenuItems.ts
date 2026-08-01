@@ -1,4 +1,4 @@
-import { FileText, Film, Image as ImageIcon, Plus, Sparkles, Wand2 } from 'lucide-react';
+import { FileText, Film, Globe, Image as ImageIcon, Plus, Sparkles, Wand2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 /**
@@ -10,14 +10,14 @@ import type { LucideIcon } from 'lucide-react';
 
 /** 新建节点项：直接写入一个空白节点。 */
 export interface CanvasCreateItemDef {
-  id: 'note' | 'theme' | 'imagegen';
+  id: 'note' | 'theme' | 'imagegen' | 'web';
   /**
    * 实际写入数据库的 `CanvasNode.type`。
    *
    * 注意：「便签」历史上用的是 `'text'` 而非 `'note'`——`'note'` 只出现在早期种子数据里，
    * 两者在 `NodeRenderer` / `nodeCapabilities` / 剪贴板逻辑中完全同构。新建一律用 `'text'`。
    */
-  nodeType: 'text' | 'theme' | 'imagegen';
+  nodeType: 'text' | 'theme' | 'imagegen' | 'web';
   labelKey: string;
   icon: LucideIcon;
   /** 图标使用强调色 `#C2410C`（而非默认的 `#5a5a54`）。 */
@@ -53,6 +53,12 @@ export const CANVAS_CREATE_ITEMS: readonly CanvasCreateItemDef[] = [
     labelKey: 'imagegen.new_node',
     icon: Wand2,
     accent: true,
+  },
+  {
+    id: 'web',
+    nodeType: 'web',
+    labelKey: 'nodes.web_new_node',
+    icon: Globe,
   },
 ] as const;
 

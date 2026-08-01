@@ -32,7 +32,10 @@ export type AppErrorCode =
   | 'file.unsupported'
   // --- 本地媒体存储 ---
   | 'media.desktop_only'
-  | 'media.command_failed';
+  | 'media.command_failed'
+  // --- 网页卡片 ---
+  | 'web.desktop_only'
+  | 'web.fetch_failed';
 
 export class AppError extends Error {
   readonly code: AppErrorCode;

@@ -9,6 +9,7 @@ import { DocumentNode } from './DocumentNode';
 import { AgentNode } from './AgentNode';
 import { ImageGenNode } from './ImageGenNode';
 import { CanvasLinkNode } from './CanvasLinkNode';
+import { WebNode } from './WebNode';
 import type { AIConfigV2 } from '../../types/aiConfig';
 
 /** 画布对某些 `type` 挂载的控件与各分支对应关系见 `src/constants/nodeCapabilities.ts`。 */
@@ -39,6 +40,9 @@ interface NodeRendererProps {
   canvases?: Canvas[];
   targetNodeCountByCanvasId?: Map<string, number>;
   onOpenCanvas?: (canvasId: string) => void;
+  /** 网页卡片：抓取中的节点集合与「抓一次」动作。 */
+  fetchingWebNodeIds?: Set<string>;
+  onWebFetch?: (nodeId: string, url: string) => void;
 }
 
 export function NodeRenderer({
@@ -65,6 +69,8 @@ export function NodeRenderer({
   canvases,
   targetNodeCountByCanvasId,
   onOpenCanvas,
+  fetchingWebNodeIds,
+  onWebFetch,
 }: NodeRendererProps) {
   switch (node.type) {
     case 'theme':
@@ -111,6 +117,16 @@ export function NodeRenderer({
           onPatch={(patch) => onImageGenPatch?.(node.id, patch)}
           onDeleteResult={(index) => onImageGenDeleteResult?.(node.id, index)}
           onSetActiveIndex={(index) => onImageGenSetActiveIndex?.(node.id, index)}
+        />
+      );
+    case 'web':
+      return (
+        <WebNode
+          node={node}
+          editingNodeId={editingNodeId}
+          setEditingNodeId={setEditingNodeId}
+          isFetching={fetchingWebNodeIds?.has(node.id) ?? false}
+          onFetch={onWebFetch ? (url) => onWebFetch(node.id, url) : undefined}
         />
       );
     case 'canvasLink':

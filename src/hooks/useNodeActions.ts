@@ -164,6 +164,18 @@ export function useNodeActions({
     return id;
   };
 
+  /**
+   * 网页卡片。`url` 留空时卡片本身就是输入框；给了地址就由调用方接着触发抓取。
+   */
+  const addWebNodeAt = async (at?: CanvasPoint, url?: string) => {
+    const { x, y } = resolvePosition(at);
+    const id = crypto.randomUUID();
+    await addNodesRecorded(activeCanvasId, [
+      { id, canvasId: activeCanvasId, type: 'web', url, x, y, width: 320 },
+    ]);
+    return id;
+  };
+
   /** 跨画布传送门：一张指向另一张画布的卡片。 */
   const addCanvasLinkNodeAt = async (targetCanvasId: string, at?: CanvasPoint) => {
     const { x, y } = resolvePosition(at);
@@ -175,9 +187,10 @@ export function useNodeActions({
   };
 
   /** 供右键菜单按 `CanvasCreateItemDef.nodeType` 统一分发。返回新节点 id。 */
-  const createNodeAt = async (nodeType: 'text' | 'theme' | 'imagegen', at?: CanvasPoint) => {
+  const createNodeAt = async (nodeType: 'text' | 'theme' | 'imagegen' | 'web', at?: CanvasPoint) => {
     if (nodeType === 'theme') return addThemeNode(at);
     if (nodeType === 'imagegen') return addImageGenNode(at);
+    if (nodeType === 'web') return addWebNodeAt(at);
     return addTextNode(at);
   };
 
@@ -200,7 +213,7 @@ export function useNodeActions({
    * 再右键建卡、再重新连一次。
    */
   const createNodeAtLinkedFrom = async (
-    nodeType: 'text' | 'theme' | 'imagegen',
+    nodeType: 'text' | 'theme' | 'imagegen' | 'web',
     at: CanvasPoint,
     fromId: string,
   ) => {
@@ -372,6 +385,7 @@ export function useNodeActions({
     linkNodes,
     addAgentNodeAt,
     addCanvasLinkNodeAt,
+    addWebNodeAt,
     insertFilesAt,
     insertPathsAt,
     duplicateNode,
