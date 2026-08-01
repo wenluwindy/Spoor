@@ -1,6 +1,6 @@
 [package]
 name = "spoor"
-version = "0.2.0"
+version = "0.3.0"
 description = "踪迹 · Spoor — local-first spatial note taking"
 authors = ["AI Studio"]
 edition = "2021"

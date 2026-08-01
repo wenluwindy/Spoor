@@ -24,6 +24,11 @@ Spoor 是一个带 AI 的无限便签画布。你可以把想法、资料、截�
 - **多个人格 Agent** — 真知镜负责反问，编织者负责联想，熨烫师负责文字实验，占星术负责情景推演。
 - **上下文 AI 便签** — 选中便签后让 AI 分析，结果会作为新便签留在画布上。
 - **多选批量操作** — 框选或多选后右键：全部连到一个节点、合成长文、批量删除。
+- **撤销与重做** — `Ctrl+Z` / `Ctrl+Shift+Z`，覆盖建卡、删卡、移动、拉伸、连线与改字。整组拖拽算一步，长按方向键走一路也算一步。AI 生成期间暂时禁用，等它写完再撤。
+- **全套键盘操作** — `Delete` 删选中、`Ctrl+A` 全选、`Ctrl+C/X/V` 复制剪切粘贴（带连线，跨窗口可用）、`Ctrl+D` 复制、方向键微调（开着网格时按格走，`Shift` 加十倍）、`Ctrl+0` 复位视图、`Ctrl+1` 适应内容。焦点在输入框里时一律让给原生行为。
+- **画布内搜索** — `Ctrl+F` 搜便签正文、主题说明、文件名、生图提示词与人设名，回车逐个跳过去并居中；别的画布里的命中按画布聚合列在下面，点一下就切过去接着找。
+- **数据带得走** — 画布可导出为 **`.canvas`**（[JSON Canvas](https://jsoncanvas.org) 开放格式，Obsidian 能直接打开）、**Markdown 包**（一篇正文 + 一个 `assets/`）或**整张 PNG**；`.canvas` 也能导回来，落成一张新画布。
+- **备份与恢复** — 设置 → 存储可导出全部数据（画布、长文、人设与偏好，**不含密钥**），也可一键还原。每天第一次启动会自动在 `SpoorData/backups/` 留一份快照，滚动保留 7 份。
 - **Research Lab** — 把研究问题拆成计划，收集资料，生成报告，再沉淀回画布。
 - **长文综合** — 把多张便签整理成文章草稿、项目说明或研究总结。
 - **多画布** — 左上角历史记录里新建、重命名、删除画布（删除需二次确认，会连同该画布的节点与连线一起清掉）。
@@ -49,6 +54,12 @@ Spoor 是一个带 AI 的无限便签画布。你可以把想法、资料、截�
 | 连线途中按 Esc / 右键 | 放弃这根线 |
 | 右下角 ▦ | 开关网格显示与卡片吸附 |
 | 右下角 ⛶ | 缩放至适应全部内容 |
+| `Ctrl+Z` / `Ctrl+Shift+Z` | 撤销 / 重做（右上角也有按钮） |
+| `Ctrl+F` | 画布内搜索，回车逐个跳转 |
+| `Delete` / `Ctrl+A` / `Ctrl+D` | 删除选中 / 全选 / 复制选中 |
+| `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | 复制 / 剪切 / 粘贴（连同选区内部的连线） |
+| 方向键 / `Shift`+方向键 | 微调选中卡片；开着网格时按格走 |
+| `Ctrl+0` / `Ctrl+1` | 复位视图 / 缩放至适应全部内容 |
 
 节点内部可滚动的区域（长文 AI 卡、文档节点）滚轮仍然滚内容，不会误触发缩放。输入框内右键保留系统原生菜单，方便复制粘贴。
 
@@ -110,6 +121,7 @@ spoor/
 │   ├── hooks/              画布交互与 AI 动作的状态逻辑
 │   ├── i18n/               中英文案（键必须一一对应，由 check-i18n 守卫）
 │   ├── services/           AI 调用、生图、联网搜索、文件导入、媒体与画布仓储、
+│                           撤销栈与可撤销写入、JSON Canvas 与 Markdown 导出、备份、
 │                           主题与网格开关的外部 store
 │   ├── types/              跨模块类型
 │   ├── utils/              无副作用纯函数
@@ -117,7 +129,8 @@ spoor/
 │   ├── db.ts               Dexie / IndexedDB schema
 │   └── main.tsx            入口
 ├── src-tauri/              Rust 桌面端
-│   └── src/                media（本地文件存储）、imagegen（生图）、
+│   └── src/                media（本地文件存储）、imagegen（生图）、userfile（用户选定路径的读写）、
+│                           snapshot（自动快照）、
 │                           local_llama（GGUF）、cc_switch（配置导入）
 ├── tests/                  Vitest，目录结构镜像 src/
 ├── scripts/                构建、发布与 lint 守卫脚本
@@ -132,5 +145,5 @@ spoor/
 - [本地 GGUF 模型](docs/guide/LOCAL_LLM.md)
 - [数据恢复](docs/guide/DATA_RECOVERY.md)
 - [产品说明](docs/product/APP.md) · [Agent 设计](docs/product/AGENT.md) · [提示词](docs/product/AI-PROMPTS.md)
-- [升级开发文档](docs/dev/UPGRADE_PLAN.md)
-- 发布说明：[v0.2.0](docs/release/RELEASE_v0.2.0.md) · [v0.1.0](docs/release/RELEASE_v0.1.0.md)
+- [v0.3.0 规划与竞品对标](docs/dev/ROADMAP_v0.3.0.md) · [升级开发文档](docs/dev/UPGRADE_PLAN.md)
+- 发布说明：[v0.3.0](docs/release/RELEASE_v0.3.0.md) · [v0.2.0](docs/release/RELEASE_v0.2.0.md) · [v0.1.0](docs/release/RELEASE_v0.1.0.md)
