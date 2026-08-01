@@ -68,14 +68,16 @@ export function useDraggable(
    *
    * 基准坐标在 `begin` 时锁定，之后一律 `基准 + 位移`——累加每帧增量会因浮点误差
    * 让选区在长距离拖拽后逐渐散开。松手时自己落库，因此选区里每张卡的新位置都被持久化。
+   *
+   * 成员判定**只看广播里的 `event.ids`**，不再要求本节点自己的 `groupIds` 也包含它：
+   * 那份列表由 leader 一方算出（多选是选区，区域框是框住的卡片），follower 没有
+   * 独立判断的依据，多一道检查只会让「框住了却不跟着走」这类情况无法解释。
    */
   useEffect(() => {
     if (!id) return;
     let base: { x: number; y: number } | null = null;
     return subscribeGroupDrag((event) => {
       if (event.leaderId === id) return;
-      const ids = groupIdsRef.current;
-      if (!ids || !ids.includes(id)) return;
 
       if (event.type === 'begin') {
         base = event.ids.includes(id) ? { ...posRef.current } : null;

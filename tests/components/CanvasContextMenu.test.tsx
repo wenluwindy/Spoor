@@ -145,6 +145,7 @@ describe('CanvasContextMenu', () => {
         '新建主题卡',
         'imagegen.new_node',
         'nodes.web_new_node',
+        'nodes.frame_new_node',
         '插入图片…',
         '插入视频…',
         '插入文档…',

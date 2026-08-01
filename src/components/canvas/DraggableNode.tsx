@@ -37,6 +37,11 @@ export interface DraggableNodeProps {
   onStickyActivate?: (id: string) => void;
   /** Right-click on the card opens the canvas context menu for this node. */
   onContextMenu?: (e: React.MouseEvent<HTMLDivElement>, id: string) => void;
+  /**
+   * 压死 z 轴层级（区域框用）。默认层级会随点击不断抬高，而区域框必须一直待在
+   * 所有卡片后面——它是背景，不是卡片。
+   */
+  zIndexOverride?: number;
 }
 
 export const DraggableNode: React.FC<DraggableNodeProps> = ({ 
@@ -48,6 +53,7 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
   glassSurface = false,
   onStickyActivate,
   onContextMenu,
+  zIndexOverride,
 }) => {
   const { t } = useTranslation();
   const scaleRef = useRef(scale);
@@ -93,7 +99,7 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
         top: node.pos.y, 
         width: size.width || undefined,
         height: size.height || undefined,
-        zIndex: node.zIndex,
+        zIndex: zIndexOverride ?? node.zIndex,
         ...(rotation ? { transform: `rotate(${rotation}deg)` } : {}),
         '--node-bg': styleOverrides.bg || undefined, 
         '--node-text': styleOverrides.text || undefined, 

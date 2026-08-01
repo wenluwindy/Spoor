@@ -11,7 +11,8 @@ import {
 import { commitCanvasInlineEditing } from './utils/commitCanvasInlineEditing';
 import { registerCanvasUnloadFlush } from './utils/registerCanvasUnloadFlush';
 import { getCanvasNodeContextText } from './utils/canvasNodeContextText';
-import { screenToCanvasPosition } from './utils/canvas';
+import { getCanvasCenterPosition, screenToCanvasPosition } from './utils/canvas';
+import { buildResearchFrame } from './services/researchToCanvas';
 import { CanvasEdgeLines } from './components/canvas/CanvasEdgeLines';
 import { DraggableNode } from './components/canvas/DraggableNode';
 import { CanvasContextMenu, type CanvasContextMenuActions } from './components/canvas/CanvasContextMenu';
@@ -58,6 +59,7 @@ import {
 } from './utils/zoomToFit';
 import { CanvasSearchPanel } from './components/canvas/CanvasSearchPanel';
 import { searchCanvasNodes, stepSearchIndex } from './utils/canvasSearch';
+import { DEFAULT_FRAME_HEIGHT, DEFAULT_FRAME_WIDTH, groupIdsForDrag } from './services/canvasFrame';
 import {
   CanvasImageExportError,
   renderCanvasImage,
@@ -747,6 +749,34 @@ export default function App() {
     [recompute, appAlert, t],
   );
 
+  /**
+   * 把一次研究整块落到当前画布：一个区域框圈住题目、计划、论点与结论，
+   * 全部连回题目卡，然后切到画布页。
+   *
+   * 研究结果原先只沉淀成一篇长文——读得了，但接不上后续思考；落成卡片之后
+   * 每个论点都能继续连线、追问、被重新分析。
+   */
+  const spawnResearchToCanvas = useCallback(
+    async (session: {
+      query: string;
+      researchPlan: { title: string; desc: string }[];
+      researchReport: { intro: string; points: { title: string; text: string }[]; conclusion: string };
+    }) => {
+      const at = getCanvasCenterPosition(transformRef.current ?? { x: 0, y: 0, scale: 1 });
+      const { nodes, edges: newEdges } = buildResearchFrame({
+        canvasId: activeCanvasId,
+        at,
+        session,
+        frameLabel: t('lab.frame_label', { query: session.query }),
+        planLabel: t('lab.frame_plan_step'),
+        conclusionLabel: t('lab.frame_conclusion'),
+      });
+      await addNodesAndEdgesRecorded(activeCanvasId, nodes, newEdges);
+      setActiveTab('personal');
+    },
+    [activeCanvasId, transformRef, t],
+  );
+
   /** 另存为：图片/视频用原件路径，生图节点用当前选中的那一张结果。 */
   const saveNodeMediaAsFromCanvas = useCallback(
     async (nodeId: string) => {
@@ -1060,7 +1090,10 @@ export default function App() {
                     onDelete={() => removeNodeId(node.id)} scale={canvasTransform.scale}
                     rotation={rotation}
                     isSelected={selectedNodes.has(node.id)}
-                    selectedIds={selectedNodeIds}
+                    // 区域框拖的是框住的卡片，普通节点拖的是同选区的卡片（见 canvasFrame）
+                    selectedIds={groupIdsForDrag(node, dynamicNodes, selectedNodeIds)}
+                    // 区域框永远在所有卡片后面：它是背景，不是卡片
+                    zIndexOverride={node.type === 'frame' ? 1 : undefined}
                     isEditing={editingNodeId === node.id}
                     onToggleSelect={() => toggleNodeSelection(node.id)}
                     allowPalette={true}
@@ -1177,7 +1210,13 @@ export default function App() {
             }}
           />
         )}
-        {activeTab === 'lab' && <ResearchLab aiConfig={aiConfig} callAI={callUniversalAI} />}
+        {activeTab === 'lab' && (
+          <ResearchLab
+            aiConfig={aiConfig}
+            callAI={callUniversalAI}
+            onSpawnToCanvas={(session) => void spawnResearchToCanvas(session)}
+          />
+        )}
         {/* Agents in Agents Studio need consistent write access */}
         {activeTab === 'agents' && <AgentsStudio agentConfigs={agentConfigs} setAgentConfigs={async (newConfigs) => {
           const nextIds = new Set(newConfigs.map((c) => c.id));

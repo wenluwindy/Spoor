@@ -27,6 +27,7 @@ import {
   AlertTriangle,
   Sparkles,
   ExternalLink,
+  LayoutGrid,
   Trash2,
   X,
 } from 'lucide-react';
@@ -129,6 +130,12 @@ function researchReportParseFallback(t: TranslateFn): ResearchReportBody {
 }
 
 export interface ResearchLabProps {
+  /** 「落到画布」：把这次研究整块放进当前画布的一个区域框里，然后切过去。 */
+  onSpawnToCanvas?: (session: {
+    query: string;
+    researchPlan: { title: string; desc: string }[];
+    researchReport: { intro: string; points: { title: string; text: string }[]; conclusion: string };
+  }) => void;
   aiConfig: {
     provider: string;
     apiKey: string;
@@ -170,7 +177,7 @@ function parseNeedWebDecision(text: string): boolean {
   return true;
 }
 
-export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
+export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabProps) {
   const { t, i18n } = useTranslation();
   const { confirm } = useAppDialog();
   const [phase, setPhase] = useState<'idle' | 'planning' | 'plan_ready' | 'researching' | 'completed'>('idle');
@@ -896,6 +903,25 @@ export function ResearchLab({ aiConfig, callAI }: ResearchLabProps) {
                            className="shrink-0 inline-flex items-center justify-center gap-2 rounded-lg bg-app-accent px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-app-accent-hover transition-colors"
                          >
                            {t('lab.retry_generate_report')}
+                         </button>
+                       </div>
+                     )}
+                     {onSpawnToCanvas && !reportGenerationFailed && (
+                       <div className="mb-8 flex justify-end">
+                         <button
+                           type="button"
+                           data-testid="lab-spawn-to-canvas"
+                           onClick={() =>
+                             onSpawnToCanvas({
+                               query,
+                               researchPlan: researchPlan.map((s) => ({ title: s.title, desc: s.desc })),
+                               researchReport,
+                             })
+                           }
+                           className="inline-flex items-center gap-2 rounded-lg border border-app-accent/40 bg-app-accent/5 px-4 py-2 text-sm font-bold text-app-accent hover:bg-app-accent/10 transition-colors"
+                         >
+                           <LayoutGrid className="w-4 h-4" />
+                           {t('lab.spawn_to_canvas')}
                          </button>
                        </div>
                      )}

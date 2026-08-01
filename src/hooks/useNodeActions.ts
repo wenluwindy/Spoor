@@ -10,6 +10,7 @@ import {
   materializeCanvasClipboard,
   type CanvasClipboardPayloadV2,
 } from '../utils/canvasClipboard';
+import { DEFAULT_FRAME_HEIGHT, DEFAULT_FRAME_WIDTH } from '../services/canvasFrame';
 import {
   addEdgesRecorded,
   addNodesAndEdgesRecorded,
@@ -207,6 +208,25 @@ export function useNodeActions({
     return created ?? null;
   };
 
+  /** 区域框：一个圈范围的矩形，落点为左上角。 */
+  const addFrameNodeAt = async (at?: CanvasPoint) => {
+    const { x, y } = resolvePosition(at);
+    const id = crypto.randomUUID();
+    await addNodesRecorded(activeCanvasId, [
+      {
+        id,
+        canvasId: activeCanvasId,
+        type: 'frame',
+        content: '',
+        x,
+        y,
+        width: DEFAULT_FRAME_WIDTH,
+        height: DEFAULT_FRAME_HEIGHT,
+      },
+    ]);
+    return id;
+  };
+
   /** 跨画布传送门：一张指向另一张画布的卡片。 */
   const addCanvasLinkNodeAt = async (targetCanvasId: string, at?: CanvasPoint) => {
     const { x, y } = resolvePosition(at);
@@ -218,10 +238,14 @@ export function useNodeActions({
   };
 
   /** 供右键菜单按 `CanvasCreateItemDef.nodeType` 统一分发。返回新节点 id。 */
-  const createNodeAt = async (nodeType: 'text' | 'theme' | 'imagegen' | 'web', at?: CanvasPoint) => {
+  const createNodeAt = async (
+    nodeType: 'text' | 'theme' | 'imagegen' | 'web' | 'frame',
+    at?: CanvasPoint,
+  ) => {
     if (nodeType === 'theme') return addThemeNode(at);
     if (nodeType === 'imagegen') return addImageGenNode(at);
     if (nodeType === 'web') return addWebNodeAt(at);
+    if (nodeType === 'frame') return addFrameNodeAt(at);
     return addTextNode(at);
   };
 
@@ -244,7 +268,7 @@ export function useNodeActions({
    * 再右键建卡、再重新连一次。
    */
   const createNodeAtLinkedFrom = async (
-    nodeType: 'text' | 'theme' | 'imagegen' | 'web',
+    nodeType: 'text' | 'theme' | 'imagegen' | 'web' | 'frame',
     at: CanvasPoint,
     fromId: string,
   ) => {
@@ -417,6 +441,7 @@ export function useNodeActions({
     addAgentNodeAt,
     addCanvasLinkNodeAt,
     addWebNodeAt,
+    addFrameNodeAt,
     extractNoteFrom,
     insertFilesAt,
     insertPathsAt,

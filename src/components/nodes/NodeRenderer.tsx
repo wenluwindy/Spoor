@@ -11,6 +11,7 @@ import { ImageGenNode } from './ImageGenNode';
 import { CanvasLinkNode } from './CanvasLinkNode';
 import { WebNode } from './WebNode';
 import { PdfNode } from './PdfNode';
+import { FrameNode } from './FrameNode';
 import type { AIConfigV2 } from '../../types/aiConfig';
 
 /** 画布对某些 `type` 挂载的控件与各分支对应关系见 `src/constants/nodeCapabilities.ts`。 */
@@ -139,6 +140,8 @@ export function NodeRenderer({
           onSetActiveIndex={(index) => onImageGenSetActiveIndex?.(node.id, index)}
         />
       );
+    case 'frame':
+      return <FrameNode node={node} editingNodeId={editingNodeId} setEditingNodeId={setEditingNodeId} />;
     case 'web':
       return (
         <WebNode

@@ -34,7 +34,7 @@ export function canSaveNodeMedia(node: CanvasNode | undefined): boolean {
 
 /** 菜单只发意图，具体落库由 `useNodeActions` / App 负责。 */
 export interface CanvasContextMenuActions {
-  createNode: (nodeType: 'text' | 'theme' | 'imagegen' | 'web', at: CanvasPoint) => void;
+  createNode: (nodeType: 'text' | 'theme' | 'imagegen' | 'web' | 'frame', at: CanvasPoint) => void;
   insertFile: (accept: string, at: CanvasPoint) => void;
   addAgentNode: (agentConfigId: string, at: CanvasPoint) => void;
   addCanvasLink: (targetCanvasId: string, at: CanvasPoint) => void;
@@ -55,7 +55,7 @@ export interface CanvasContextMenuActions {
   saveNodeMediaAs: (nodeId: string) => void;
   /** 连线拖到空白处：建一张卡并从 `fromId` 连过去。 */
   createNodeLinkedFrom: (
-    nodeType: 'text' | 'theme' | 'imagegen' | 'web',
+    nodeType: 'text' | 'theme' | 'imagegen' | 'web' | 'frame',
     at: CanvasPoint,
     fromId: string,
   ) => void;
