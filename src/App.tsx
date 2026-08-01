@@ -5,6 +5,8 @@ import { db, type CanvasNode } from './db';
 import {
   Maximize2,
   Minimize2,
+  Redo2,
+  Undo2,
 } from 'lucide-react';
 import { commitCanvasInlineEditing } from './utils/commitCanvasInlineEditing';
 import { registerCanvasUnloadFlush } from './utils/registerCanvasUnloadFlush';
@@ -35,10 +37,26 @@ import { useAppTheme } from './hooks/useAppTheme';
 import { useCanvasGrid } from './hooks/useCanvasGrid';
 import { CANVAS_GRID_SIZE } from './services/canvasGrid';
 import { useCanvasInteraction } from './hooks/useCanvasInteraction';
+import { useCanvasHistory } from './hooks/useCanvasHistory';
+import { useCanvasKeyboard } from './hooks/useCanvasKeyboard';
+import { redoCanvasHistory, undoCanvasHistory } from './services/canvasHistory';
+import {
+  addEdgesRecorded,
+  addNodesAndEdgesRecorded,
+  moveNodeRecorded,
+  resizeNodeRecorded,
+} from './services/canvasMutations';
 import { useCanvasContextMenu } from './hooks/useCanvasContextMenu';
 import { useCanvasMarquee } from './hooks/useCanvasMarquee';
 import { useCanvasLinkDrag } from './hooks/useCanvasLinkDrag';
-import { computeFitTransform, unionNodeBoundsInCanvasSpace } from './utils/zoomToFit';
+import {
+  computeCenterTransform,
+  computeFitTransform,
+  unionNodeBoundsInCanvasSpace,
+} from './utils/zoomToFit';
+import { CanvasSearchPanel } from './components/canvas/CanvasSearchPanel';
+import { searchCanvasNodes, stepSearchIndex } from './utils/canvasSearch';
+import { resolveAgentLocalizedName } from './utils/aiI18n';
 import { useNodeActions } from './hooks/useNodeActions';
 import { pickFiles } from './utils/filePicker';
 import { saveMediaAs } from './utils/saveMediaAs';
@@ -54,12 +72,12 @@ import {
 } from './services/aiConfig';
 import type { AIConfigV2 } from './types/aiConfig';
 import { useAppDialog } from './components/AppDialogProvider';
+import { isTextEditingTarget } from './utils/noteClipboard';
 import {
-  buildStickyClipboardPayload,
-  isTextEditingTarget,
-  parseStickyClipboardPayload,
-  stickyPastePosition,
-} from './utils/noteClipboard';
+  buildCanvasClipboardPayload,
+  materializeCanvasClipboard,
+  parseCanvasClipboardPayload,
+} from './utils/canvasClipboard';
 
 /**
  * 已存配置的兜底修正。
@@ -270,58 +288,84 @@ export default function App() {
     lastStickyClickIdRef.current = null;
   }, [activeCanvasId, activeTab]);
 
-  const stickyClipboardRef = useRef({
-    dynamicNodes,
-    activeCanvasId,
-  });
-  stickyClipboardRef.current = { dynamicNodes, activeCanvasId };
+  /**
+   * Ctrl+X 要删掉刚剪走的卡片，但删除逻辑住在下面的 `useNodeActions` 里。
+   * 用 ref 把它转过去，剪贴板监听就不必等到那之后才挂。
+   */
+  const deleteNodesRef = useRef<(ids: string[]) => Promise<void>>(async () => {});
 
+  const clipboardContextRef = useRef({
+    dynamicNodes,
+    edges,
+    activeCanvasId,
+    selectedNodeIds,
+  });
+  clipboardContextRef.current = { dynamicNodes, edges, activeCanvasId, selectedNodeIds };
+
+  /**
+   * Ctrl+C / Ctrl+X / Ctrl+V。
+   *
+   * 复制的对象是**当前选区**；选区为空时退回到最后点过的那张便签，保留 v0.2 的手感
+   * （随手点一张卡就能复制，不必先勾选）。负载走系统剪贴板的纯文本通道，因此可以
+   * 在两个 Spoor 窗口之间、甚至粘进编辑器看一眼。
+   */
   useEffect(() => {
     if (activeTab !== 'personal') return;
 
-    const onCopy = (e: ClipboardEvent) => {
-      if (isTextEditingTarget(e.target)) return;
-      const { dynamicNodes: nodes } = stickyClipboardRef.current;
+    const collectNodesToCopy = (): CanvasNode[] => {
+      const { dynamicNodes: nodes, selectedNodeIds: selection } = clipboardContextRef.current;
+      if (selection.length > 0) {
+        const picked = new Set(selection);
+        return nodes.filter((n) => picked.has(n.id));
+      }
       const focusId = lastStickyClickIdRef.current;
-      if (!focusId) return;
-      const picked = nodes.filter((n) => n.id === focusId && (n.type === 'note' || n.type === 'text'));
-      const payload = buildStickyClipboardPayload(picked);
-      if (!payload) return;
+      if (!focusId) return [];
+      return nodes.filter((n) => n.id === focusId);
+    };
+
+    const writePayload = (e: ClipboardEvent): CanvasNode[] => {
+      const picked = collectNodesToCopy();
+      const payload = buildCanvasClipboardPayload(picked, clipboardContextRef.current.edges);
+      if (!payload) return [];
       e.preventDefault();
       e.clipboardData?.setData('text/plain', JSON.stringify(payload));
+      return picked;
+    };
+
+    const onCopy = (e: ClipboardEvent) => {
+      if (isTextEditingTarget(e.target)) return;
+      writePayload(e);
+    };
+
+    const onCut = (e: ClipboardEvent) => {
+      if (isTextEditingTarget(e.target)) return;
+      const picked = writePayload(e);
+      if (picked.length === 0) return;
+      void deleteNodesRef.current(picked.map((n) => n.id));
     };
 
     const onPaste = (e: ClipboardEvent) => {
       if (isTextEditingTarget(e.target)) return;
       const text = e.clipboardData?.getData('text/plain') ?? '';
-      const payload = parseStickyClipboardPayload(text);
+      const payload = parseCanvasClipboardPayload(text);
       if (!payload) return;
       e.preventDefault();
-      const { activeCanvasId: canvasId } = stickyClipboardRef.current;
+      const { activeCanvasId: canvasId } = clipboardContextRef.current;
       void (async () => {
-        const rows: CanvasNode[] = payload.nodes.map((item) => {
-          const id = crypto.randomUUID();
-          const { x, y } = stickyPastePosition(item);
-          return {
-            id,
-            canvasId,
-            type: item.type,
-            content: item.content ?? '',
-            layout: item.layout,
-            width: item.width,
-            height: item.height,
-            x,
-            y,
-          };
-        });
-        await db.nodes.bulkAdd(rows);
+        // 不传落点：副本压着原件偏一点出现，用户一眼知道粘出来的是哪几张
+        const { nodes, edges: pastedEdges } = materializeCanvasClipboard(payload, canvasId);
+        const createdIds = await addNodesAndEdgesRecorded(canvasId, nodes, pastedEdges);
+        // 选中刚粘出来的这批：接着拖走或再按一次 Ctrl+V 都顺手
+        setSelectedNodes(new Set(createdIds));
       })();
     };
 
     window.addEventListener('copy', onCopy, true);
+    window.addEventListener('cut', onCut, true);
     window.addEventListener('paste', onPaste, true);
     return () => {
       window.removeEventListener('copy', onCopy, true);
+      window.removeEventListener('cut', onCut, true);
       window.removeEventListener('paste', onPaste, true);
     };
   }, [activeTab]);
@@ -330,11 +374,13 @@ export default function App() {
   // Node actions (CRUD, selection, linking)
   const {
     toggleNodeSelection, handleLink, deleteEdge, removeNodeId,
-    createNodeAt, createNodeAtLinkedFrom, linkNodes, addAgentNodeAt, insertFilesAt, insertPathsAt, duplicateNode, pasteStickyAt,
-    clearSelection, deleteNodes, linkNodesToHub,
+    createNodeAt, createNodeAtLinkedFrom, linkNodes, addAgentNodeAt, insertFilesAt, insertPathsAt, duplicateNode, pasteClipboardAt,
+    clearSelection, deleteNodes, linkNodesToHub, duplicateNodes, nudgeNodes,
   } = useNodeActions({
     activeCanvasId, nodesRef, connectingFrom, setConnectingFrom, edges, selectedNodes, setSelectedNodes, transformRef,
   });
+
+  deleteNodesRef.current = deleteNodes;
 
   // 从端口按住拖到目标松手即连；Esc / 右键放弃。点击-点击的老手势仍然可用。
   useCanvasLinkDrag({
@@ -435,6 +481,139 @@ export default function App() {
     dynamicNodes, edges, selectedNodes, setSelectedNodes, setActiveReferenceId, setActiveTab,
   });
 
+  /**
+   * 撤销 / 重做。
+   *
+   * AI 忙的时候整个禁用：流式写入刻意不进撤销栈（见 `canvasHistory` 的边界说明），
+   * 这时候撤销很可能把正在被写入的那张卡删掉，而剩下的流还会继续往一个已经不存在的
+   * 行里写。等它写完再撤，语义才是干净的「删掉这张 AI 卡」。
+   */
+  const { canUndo, canRedo } = useCanvasHistory(activeCanvasId);
+
+  const handleUndo = useCallback(() => {
+    if (isAnyAiBusy) return;
+    void undoCanvasHistory(activeCanvasId);
+  }, [activeCanvasId, isAnyAiBusy]);
+
+  const handleRedo = useCallback(() => {
+    if (isAnyAiBusy) return;
+    void redoCanvasHistory(activeCanvasId);
+  }, [activeCanvasId, isAnyAiBusy]);
+
+  /**
+   * 画布内搜索（Ctrl+F）。
+   *
+   * 命中判定是纯函数（`utils/canvasSearch`），这里只管把结果接到视口上：
+   * 当前画布的命中用回车逐个跳，别的画布的命中按画布聚合列在下方，点了切过去
+   * 并**保留搜索词**——切完画布还要重新打一遍字是最没道理的。
+   */
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchIndex, setSearchIndex] = useState(0);
+
+  /** 只有搜索开着时才全表扫，平时不为一个没打开的面板拖着全库的实时查询。 */
+  const allNodesForSearch = useLiveQuery(
+    () => (isSearchOpen ? db.nodes.toArray() : Promise.resolve([] as CanvasNode[])),
+    [isSearchOpen],
+  ) || [];
+
+  const agentNameById = useCallback(
+    (agentConfigId: string | undefined) => {
+      if (!agentConfigId) return undefined;
+      const agent = agentConfigs.find((a) => a.id === agentConfigId);
+      return agent ? resolveAgentLocalizedName(agent) : undefined;
+    },
+    [agentConfigs],
+  );
+
+  const searchMatches = React.useMemo(
+    () => searchCanvasNodes(dynamicNodes, searchQuery, { agentNameById }),
+    [dynamicNodes, searchQuery, agentNameById],
+  );
+
+  const otherCanvasSearchResults = React.useMemo(() => {
+    if (!isSearchOpen || searchQuery.trim() === '') return [];
+    const foreign = allNodesForSearch.filter(
+      (n) => (n.canvasId || 'default') !== activeCanvasId,
+    );
+    const counts = new Map<string, number>();
+    for (const match of searchCanvasNodes(foreign, searchQuery, { agentNameById })) {
+      counts.set(match.canvasId, (counts.get(match.canvasId) ?? 0) + 1);
+    }
+    return [...counts.entries()].map(([canvasId, count]) => ({
+      canvasId,
+      canvasName: canvases.find((c) => c.id === canvasId)?.name ?? canvasId,
+      count,
+    }));
+  }, [isSearchOpen, allNodesForSearch, searchQuery, activeCanvasId, canvases, agentNameById]);
+
+  /** 把某张卡片移到视口正中并选中它。缩放保持不变（见 computeCenterTransform）。 */
+  const focusNode = useCallback(
+    (nodeId: string) => {
+      const main = mainRef.current;
+      if (!main) return;
+      const rect = main.getBoundingClientRect();
+      const transform = transformRef.current ?? { x: 0, y: 0, scale: 1 };
+      const el = nodesRef.current[nodeId];
+      const bounds = el
+        ? unionNodeBoundsInCanvasSpace([el], rect, transform)
+        : null;
+      if (!bounds) return;
+      setCanvasTransform(
+        computeCenterTransform(bounds, { width: rect.width, height: rect.height }, transform.scale),
+      );
+      setSelectedNodes(new Set([nodeId]));
+    },
+    [transformRef, setCanvasTransform],
+  );
+
+  // 搜索词一变就回到第一条命中
+  useEffect(() => {
+    setSearchIndex(0);
+  }, [searchQuery, activeCanvasId]);
+
+  // 当前命中项换了就把视口跟过去
+  useEffect(() => {
+    if (!isSearchOpen) return;
+    const match = searchMatches[searchIndex];
+    if (!match) return;
+    focusNode(match.nodeId);
+  }, [isSearchOpen, searchMatches, searchIndex, focusNode]);
+
+  const closeSearch = useCallback(() => {
+    setIsSearchOpen(false);
+    setSearchQuery('');
+  }, []);
+
+  /**
+   * 快捷键作用于「当前选区」。
+   *
+   * 选区放在 ref 里再交给 hook：`selectedNodes` 每次变都会生成新的 Set，直接进依赖
+   * 会让键盘监听跟着反复重挂。
+   */
+  const selectionRef = useRef<string[]>(selectedNodeIds);
+  selectionRef.current = selectedNodeIds;
+
+  useCanvasKeyboard({
+    enabled: activeTab === 'personal' && !isSettingsOpen,
+    // 网格开着时一按走一格，关着时按 1px 精调；Shift 在此基础上 ×10
+    nudgeStep: gridEnabled ? CANVAS_GRID_SIZE : 1,
+    onUndo: handleUndo,
+    onRedo: handleRedo,
+    onDeleteSelection: () => void deleteNodes(selectionRef.current),
+    onSelectAll: () => setSelectedNodes(new Set(dynamicNodes.map((n) => n.id))),
+    onDuplicateSelection: () => void duplicateNodes(selectionRef.current),
+    onClearSelection: () => {
+      // 正在拉线时 Esc 归 useCanvasLinkDrag 管——先放下那根线，再按一次才清选区
+      if (connectingFrom) return;
+      clearSelection();
+    },
+    onNudgeSelection: (dx, dy) => void nudgeNodes(selectionRef.current, dx, dy),
+    onResetView: () => setCanvasTransform({ x: 0, y: 0, scale: 1 }),
+    onZoomToFit: handleZoomToFit,
+    onOpenSearch: () => setIsSearchOpen(true),
+  });
+
   /** 另存为：图片/视频用原件路径，生图节点用当前选中的那一张结果。 */
   const saveNodeMediaAsFromCanvas = useCallback(
     async (nodeId: string) => {
@@ -460,7 +639,7 @@ export default function App() {
             : insertFilesAt(picked.files, at),
         ),
       addAgentNode: (agentConfigId, at) => void addAgentNodeAt(agentConfigId, at),
-      pasteSticky: (payload, at) => void pasteStickyAt(payload, at),
+      pasteNodes: (payload, at) => void pasteClipboardAt(payload, at),
       resetView: () => setCanvasTransform({ x: 0, y: 0, scale: 1 }),
       editNode: (nodeId) => setEditingNodeId(nodeId),
       duplicateNode: (nodeId) => void duplicateNode(nodeId),
@@ -490,7 +669,7 @@ export default function App() {
       },
     }),
     [
-      createNodeAt, insertFilesAt, insertPathsAt, addAgentNodeAt, pasteStickyAt, setCanvasTransform,
+      createNodeAt, insertFilesAt, insertPathsAt, addAgentNodeAt, pasteClipboardAt, setCanvasTransform,
       duplicateNode, handleLink, toggleNodeSelection, removeNodeId, deleteEdge,
       linkNodesToHub, handlePublish, clearSelection, deleteNodes, outputAsImageNode,
       saveNodeMediaAsFromCanvas, createNodeAtLinkedFrom, linkNodes,
@@ -524,8 +703,8 @@ export default function App() {
   };
 
   const handleNodeDragEnd = (draggedId: string, finalPos: {x: number, y: number}) => {
-    // Update position in database
-    db.nodes.update(draggedId, { x: finalPos.x, y: finalPos.y });
+    // 落库并记一步撤销。整组拖拽时每张卡各调一次这里，由 moveNodeRecorded 合并成一步。
+    void moveNodeRecorded(activeCanvasId, draggedId, { x: finalPos.x, y: finalPos.y });
 
     const draggedEl = nodesRef.current[draggedId];
     if (!draggedEl) return;
@@ -565,7 +744,9 @@ export default function App() {
             snapped = true;
             // Optionally add edge to visualize snap (analysis runs only from the agent card button).
             if (!edges.find(e => (e.from === agentId && e.to === contextId) || (e.from === contextId && e.to === agentId))) {
-               db.edges.add({ id: crypto.randomUUID(), canvasId: activeCanvasId, from: agentId, to: contextId });
+               void addEdgesRecorded(activeCanvasId, [
+                 { id: crypto.randomUUID(), canvasId: activeCanvasId, from: agentId, to: contextId },
+               ]);
             }
           }
         }
@@ -658,8 +839,43 @@ export default function App() {
           {/* Symmetrical Controls */}
           <CanvasHistoryPopover canvases={canvases} activeCanvasId={activeCanvasId} setActiveCanvasId={setActiveCanvasId} />
 
+          {isSearchOpen && (
+            <CanvasSearchPanel
+              query={searchQuery}
+              onQueryChange={setSearchQuery}
+              matchCount={searchMatches.length}
+              activeIndex={searchIndex}
+              onStep={(step) =>
+                setSearchIndex((prev) => stepSearchIndex(prev, searchMatches.length, step))
+              }
+              onClose={closeSearch}
+              otherCanvases={otherCanvasSearchResults}
+              onOpenCanvas={(canvasId) => setActiveCanvasId(canvasId)}
+            />
+          )}
+
           {/* Transformed content container */}
           <div className="absolute top-6 right-6 flex items-center z-40 gap-3">
+              <Tooltip label={t('canvas.undo')}>
+                <button
+                  data-canvas-undo=""
+                  onClick={handleUndo}
+                  disabled={!canUndo || isAnyAiBusy}
+                  className="bg-app-surface-raised text-app-text p-3 rounded-full shadow-md hover:scale-105 transition-all border border-app-border flex items-center justify-center hover:border-app-accent hover:text-app-accent disabled:opacity-40 disabled:hover:scale-100 disabled:hover:border-app-border disabled:hover:text-app-text disabled:cursor-not-allowed"
+                >
+                  <Undo2 className="w-5 h-5" />
+                </button>
+              </Tooltip>
+              <Tooltip label={t('canvas.redo')}>
+                <button
+                  data-canvas-redo=""
+                  onClick={handleRedo}
+                  disabled={!canRedo || isAnyAiBusy}
+                  className="bg-app-surface-raised text-app-text p-3 rounded-full shadow-md hover:scale-105 transition-all border border-app-border flex items-center justify-center hover:border-app-accent hover:text-app-accent disabled:opacity-40 disabled:hover:scale-100 disabled:hover:border-app-border disabled:hover:text-app-text disabled:cursor-not-allowed"
+                >
+                  <Redo2 className="w-5 h-5" />
+                </button>
+              </Tooltip>
               <Tooltip label={t('canvas.full_screen')}>
                 <button
                   onClick={toggleFullscreen}
@@ -709,7 +925,7 @@ export default function App() {
                     allowPalette={true}
                     onDragEnd={handleNodeDragEnd}
                     onResizeEnd={(size) => {
-                      db.nodes.update(node.id, size);
+                      void resizeNodeRecorded(activeCanvasId, node.id, size);
                     }}
                     glassSurface={
                       (node.type === 'note' || node.type === 'text') && appTheme.noteLayout === 1

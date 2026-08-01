@@ -7,9 +7,9 @@ import { CANVAS_CREATE_ITEMS, CANVAS_INSERT_ITEMS } from '../../constants/canvas
 import { nodeSupportsInlineEdit } from '../../constants/nodeCapabilities';
 import { resolveAgentLocalizedName } from '../../utils/aiI18n';
 import {
-  parseStickyClipboardPayload,
-  type StickyClipboardPayloadV1,
-} from '../../utils/noteClipboard';
+  parseCanvasClipboardPayload,
+  type CanvasClipboardPayloadV2,
+} from '../../utils/canvasClipboard';
 import type { CanvasContextMenuState } from '../../hooks/useCanvasContextMenu';
 import { ContextMenuSurface, type ContextMenuSection } from './ContextMenuSurface';
 
@@ -36,7 +36,7 @@ export interface CanvasContextMenuActions {
   createNode: (nodeType: 'text' | 'theme' | 'imagegen', at: CanvasPoint) => void;
   insertFile: (accept: string, at: CanvasPoint) => void;
   addAgentNode: (agentConfigId: string, at: CanvasPoint) => void;
-  pasteSticky: (payload: StickyClipboardPayloadV1, at: CanvasPoint) => void;
+  pasteNodes: (payload: CanvasClipboardPayloadV2, at: CanvasPoint) => void;
   resetView: () => void;
   editNode: (nodeId: string) => void;
   duplicateNode: (nodeId: string) => void;
@@ -87,10 +87,10 @@ export function CanvasContextMenu({
   const isCanvasTarget = menu.target.kind === 'canvas';
 
   /**
-   * 剪贴板只能异步读，所以「粘贴便签」先禁用、探测到可用负载后再点亮。
+   * 剪贴板只能异步读，所以「粘贴」先禁用、探测到可用负载后再点亮。
    * 读取被拒绝时保持禁用——这比给一个点了没反应的菜单项更诚实。
    */
-  const [pasteable, setPasteable] = useState<StickyClipboardPayloadV1 | null>(null);
+  const [pasteable, setPasteable] = useState<CanvasClipboardPayloadV2 | null>(null);
   useEffect(() => {
     if (!isCanvasTarget) return;
     let cancelled = false;
@@ -98,7 +98,7 @@ export function CanvasContextMenu({
     if (!read) return;
     void read
       .then((text) => {
-        if (!cancelled) setPasteable(parseStickyClipboardPayload(text));
+        if (!cancelled) setPasteable(parseCanvasClipboardPayload(text));
       })
       .catch(() => {
         /* 剪贴板不可读：保持禁用 */
@@ -313,12 +313,12 @@ export function CanvasContextMenu({
       id: 'misc',
       entries: [
         {
-          id: 'paste-sticky',
-          label: t('canvas.menu.paste_sticky'),
+          id: 'paste-nodes',
+          label: t('canvas.menu.paste'),
           icon: Copy,
           disabled: pasteable === null,
           onSelect: () => {
-            if (pasteable) actions.pasteSticky(pasteable, at);
+            if (pasteable) actions.pasteNodes(pasteable, at);
           },
         },
         {

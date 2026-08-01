@@ -3,7 +3,10 @@ import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 
 /**
- * 源码契约：画布节点内联编辑须在 onBlur 中写 IndexedDB。
+ * 源码契约：画布节点内联编辑须在 onBlur 中写库。
+ *
+ * v0.3.0 起写库统一走 `updateNodeRecorded`——它在写 IndexedDB 的同时把这一步记进
+ * 撤销栈。直接调 `db.nodes.update` 会绕开撤销，所以这里连带断言不能再出现它。
  * 若重构 ThemeNode / NoteBody / AiNode，请同步更新本文件中的断言。
  */
 const root = join(__dirname, '../..');
@@ -15,7 +18,8 @@ function readSrc(rel: string): string {
 describe('画布节点 blur 写库源码契约', () => {
   it('ThemeNode：三处字段失焦写库，且聚焦时不被 props 回写（无 onInput 防抖）', () => {
     const src = readSrc('src/components/nodes/ThemeNode.tsx');
-    expect(src).toContain('db.nodes.update(node.id, patch)');
+    expect(src).toContain('updateNodeRecorded(canvasIdOf(node), node.id, patch)');
+    expect(src).not.toContain('db.nodes.update');
     expect(src).toContain("persistField('content')");
     expect(src).toContain("persistField('description')");
     expect(src).toContain("persistField('themeTag')");
@@ -27,13 +31,17 @@ describe('画布节点 blur 写库源码契约', () => {
 
   it('NoteBody：编辑区 onBlur 写入 content', () => {
     const src = readSrc('src/components/nodes/note/NoteBody.tsx');
-    expect(src).toContain('db.nodes.update(node.id, { content: next');
+    expect(src).toContain('updateNodeRecorded(canvasIdOf(node), node.id, { content: next');
+    expect(src).not.toContain('db.nodes.update');
     expect(src).toContain('isContentBlurPersistenceDisabled()');
   });
 
   it('AiNode：AI 回复编辑区 onBlur 写入 content', () => {
     const src = readSrc('src/components/nodes/AiNode.tsx');
-    expect(src).toContain('db.nodes.update(node.id, { content: e.currentTarget.innerText');
+    expect(src).toContain(
+      'updateNodeRecorded(canvasIdOf(node), node.id, { content: e.currentTarget.innerText',
+    );
+    expect(src).not.toContain('db.nodes.update');
     expect(src).toContain('isContentBlurPersistenceDisabled()');
   });
 

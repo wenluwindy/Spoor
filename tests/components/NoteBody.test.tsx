@@ -5,12 +5,9 @@ import { NoteBody } from '../../src/components/nodes/note/NoteBody';
 
 const updateMock = vi.fn();
 
-vi.mock('../../src/db', () => ({
-  db: {
-    nodes: {
-      update: (...args: unknown[]) => updateMock(...args),
-    },
-  },
+vi.mock('../../src/services/canvasMutations', () => ({
+  canvasIdOf: (row: { canvasId?: string }) => row.canvasId || 'default',
+  updateNodeRecorded: (...args: unknown[]) => updateMock(...args),
 }));
 
 const persistenceDisabled = vi.fn(() => true);
@@ -54,7 +51,7 @@ describe('NoteBody', () => {
     editable.innerText = 'persisted line';
     fireEvent.blur(editable);
 
-    expect(updateMock).toHaveBeenCalledWith('n1', { content: 'persisted line' });
+    expect(updateMock).toHaveBeenCalledWith('default', 'n1', { content: 'persisted line' });
     expect(setEditing).toHaveBeenCalledWith(null);
   });
 

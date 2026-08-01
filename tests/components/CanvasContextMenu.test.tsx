@@ -18,7 +18,7 @@ vi.mock('react-i18next', () => ({
         'canvas.menu.insert_video': '插入视频…',
         'canvas.menu.insert_document': '插入文档…',
         'canvas.menu.add_agent': '添加助手',
-        'canvas.menu.paste_sticky': '粘贴便签',
+        'canvas.menu.paste': '粘贴',
         'canvas.menu.reset_view': '重置视图',
         'canvas.menu.edit_content': '编辑内容',
         'canvas.menu.duplicate': '创建副本',
@@ -52,7 +52,7 @@ function makeActions(): CanvasContextMenuActions {
     createNode: vi.fn(),
     insertFile: vi.fn(),
     addAgentNode: vi.fn(),
-    pasteSticky: vi.fn(),
+    pasteNodes: vi.fn(),
     resetView: vi.fn(),
     editNode: vi.fn(),
     duplicateNode: vi.fn(),
@@ -139,7 +139,7 @@ describe('CanvasContextMenu', () => {
         '插入视频…',
         '插入文档…',
         '添加助手',
-        '粘贴便签',
+        '粘贴',
         '重置视图',
       ]);
     });
@@ -193,13 +193,14 @@ describe('CanvasContextMenu', () => {
 
     it('剪贴板不可读时「粘贴便签」保持禁用', () => {
       renderMenu({ target: { kind: 'canvas' } });
-      expect(screen.getByText('粘贴便签').closest('button')).toBeDisabled();
+      expect(screen.getByText('粘贴').closest('button')).toBeDisabled();
     });
 
-    it('剪贴板有便签负载时「粘贴便签」可用并按右键处落点粘贴', async () => {
+    it('剪贴板有画布负载时「粘贴」可用并按右键处落点粘贴', async () => {
       const payload = {
-        kind: 'scribe-sticky-v1',
-        nodes: [{ type: 'text', content: 'hi', x: 5, y: 5 }],
+        kind: 'spoor-canvas-v2',
+        nodes: [{ sourceId: 's1', node: { type: 'text', content: 'hi', x: 5, y: 5 } }],
+        edges: [],
       };
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
@@ -207,12 +208,12 @@ describe('CanvasContextMenu', () => {
       });
 
       const { actions } = renderMenu({ target: { kind: 'canvas' } });
-      const btn = await screen.findByText('粘贴便签');
+      const btn = await screen.findByText('粘贴');
       await vi.waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
 
       fireEvent.pointerDown(btn);
-      expect(actions.pasteSticky).toHaveBeenCalledWith(
-        expect.objectContaining({ kind: 'scribe-sticky-v1' }),
+      expect(actions.pasteNodes).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'spoor-canvas-v2' }),
         { x: 40, y: 25 },
       );
     });
@@ -410,8 +411,8 @@ describe('CanvasContextMenu', () => {
 
     it('禁用项点击无效', () => {
       const { actions, onClose } = renderMenu({ target: { kind: 'canvas' } });
-      fireEvent.pointerDown(screen.getByText('粘贴便签'));
-      expect(actions.pasteSticky).not.toHaveBeenCalled();
+      fireEvent.pointerDown(screen.getByText('粘贴'));
+      expect(actions.pasteNodes).not.toHaveBeenCalled();
       expect(onClose).not.toHaveBeenCalled();
     });
   });

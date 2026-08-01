@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sparkles } from 'lucide-react';
-import { db } from '../../db';
+import { canvasIdOf, updateNodeRecorded } from '../../services/canvasMutations';
 import type { NodeContentProps } from './types';
 import { isContentBlurPersistenceDisabled } from '../../config/persistence';
 import { useAppTheme } from '../../hooks/useAppTheme';
@@ -66,7 +66,7 @@ export function ThemeNode({ node, editingNodeId }: NodeContentProps) {
       field === 'themeTag'
         ? { themeTag: raw.replace(/\s+/g, ' ').trim() }
         : { [field]: raw };
-    void db.nodes.update(node.id, patch);
+    void updateNodeRecorded(canvasIdOf(node), node.id, patch);
   };
 
   return (

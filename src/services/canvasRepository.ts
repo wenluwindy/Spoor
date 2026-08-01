@@ -1,4 +1,5 @@
 import { db } from '../db';
+import { clearCanvasHistory } from './canvasHistory';
 
 /**
  * 画布本身的增删。节点/连线的增删见 `hooks/useNodeActions`。
@@ -31,4 +32,7 @@ export async function deleteCanvasWithContents(canvasId: string): Promise<void> 
   }
 
   await db.canvases.delete(canvasId);
+
+  // 画布都没了，它的撤销栈只会指向一堆已经不存在的行——撤回来也没地方显示
+  clearCanvasHistory(canvasId);
 }

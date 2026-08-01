@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { ThemeNode } from '../../src/components/nodes/ThemeNode';
-import { db } from '../../src/db';
+import { updateNodeRecorded } from '../../src/services/canvasMutations';
 import type { CanvasNode } from '../../src/db';
 
 vi.mock('react-i18next', () => ({
@@ -12,10 +12,9 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('../../src/db', () => ({
-  db: {
-    nodes: { update: vi.fn() },
-  },
+vi.mock('../../src/services/canvasMutations', () => ({
+  canvasIdOf: (row: { canvasId?: string }) => row.canvasId || 'default',
+  updateNodeRecorded: vi.fn(),
 }));
 
 const persistenceDisabled = vi.fn(() => false);
@@ -43,7 +42,7 @@ const makeNode = (overrides?: Partial<CanvasNode>): CanvasNode => ({
 
 describe('ThemeNode blur 持久化', () => {
   beforeEach(() => {
-    vi.mocked(db.nodes.update).mockClear();
+    vi.mocked(updateNodeRecorded).mockClear();
     persistenceDisabled.mockReturnValue(false);
   });
 
@@ -52,7 +51,7 @@ describe('ThemeNode blur 持久化', () => {
     const body = screen.getByText('nodes.theme_default_desc');
     body.innerText = '自定义正文说明';
     fireEvent.blur(body);
-    expect(db.nodes.update).toHaveBeenCalledWith('n1', { description: '自定义正文说明' });
+    expect(updateNodeRecorded).toHaveBeenCalledWith('c1', 'n1', { description: '自定义正文说明' });
   });
 
   it('未聚焦时 props 更新会同步到 DOM（失焦后展示数据库内容）', async () => {
@@ -94,7 +93,7 @@ describe('ThemeNode blur 持久化', () => {
     const title = screen.getByRole('heading', { level: 3 });
     title.innerText = '新标题';
     fireEvent.blur(title);
-    expect(db.nodes.update).toHaveBeenCalledWith('n1', { content: '新标题' });
+    expect(updateNodeRecorded).toHaveBeenCalledWith('c1', 'n1', { content: '新标题' });
   });
 
   it('页脚失焦时持久化 themeTag（空白折叠为 trim）', () => {
@@ -102,7 +101,7 @@ describe('ThemeNode blur 持久化', () => {
     const footer = screen.getByText('nodes.theme_footer_encoding');
     footer.innerText = '  不知为何  ';
     fireEvent.blur(footer);
-    expect(db.nodes.update).toHaveBeenCalledWith('n1', { themeTag: '不知为何' });
+    expect(updateNodeRecorded).toHaveBeenCalledWith('c1', 'n1', { themeTag: '不知为何' });
   });
 
   it('已保存的 description 从 node 渲染，不显示默认占位文案', () => {
@@ -131,7 +130,7 @@ describe('ThemeNode blur 持久化', () => {
       (el as HTMLElement).innerText = '不应写入';
       fireEvent.blur(el);
     }
-    expect(db.nodes.update).not.toHaveBeenCalled();
+    expect(updateNodeRecorded).not.toHaveBeenCalled();
   });
 
   it('三个 contentEditable 区域均存在（结构防回归）', () => {

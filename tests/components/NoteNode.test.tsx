@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { NoteNode } from '../../src/components/nodes/NoteNode';
-import { db } from '../../src/db';
+import { updateNodeRecorded } from '../../src/services/canvasMutations';
 import type { CanvasNode } from '../../src/db';
 import type { AppThemeId } from '../../src/constants/appThemes';
 import { APP_THEME_STORAGE_KEY, resetAppThemeStoreForTests } from '../../src/services/appTheme';
@@ -14,10 +14,9 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('../../src/db', () => ({
-  db: {
-    nodes: { update: vi.fn() },
-  },
+vi.mock('../../src/services/canvasMutations', () => ({
+  canvasIdOf: (row: { canvasId?: string }) => row.canvasId || 'default',
+  updateNodeRecorded: vi.fn(),
 }));
 
 vi.mock('../../src/config/persistence', () => ({
@@ -54,7 +53,7 @@ describe('NoteNode', () => {
   };
 
   beforeEach(() => {
-    vi.mocked(db.nodes.update).mockClear();
+    vi.mocked(updateNodeRecorded).mockClear();
     useTheme('paper');
   });
 
@@ -133,14 +132,14 @@ describe('NoteNode', () => {
     expect(el).toHaveTextContent('Test content');
   });
 
-  it('失焦且允许持久化时调用 db.nodes.update 并退出编辑', () => {
+  it('失焦且允许持久化时记一步可撤销的写库并退出编辑', () => {
     const setEditing = vi.fn();
     render(<NoteNode node={makeNode()} editingNodeId="n1" setEditingNodeId={setEditing} />);
     const el = document.querySelector('[contenteditable="true"]') as HTMLElement;
     expect(el).toBeTruthy();
     el.innerText = 'Updated body';
     fireEvent.blur(el);
-    expect(db.nodes.update).toHaveBeenCalledWith('n1', { content: 'Updated body' });
+    expect(updateNodeRecorded).toHaveBeenCalledWith('c1', 'n1', { content: 'Updated body' });
     expect(setEditing).toHaveBeenCalledWith(null);
   });
 });

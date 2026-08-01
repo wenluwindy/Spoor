@@ -3,13 +3,12 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { AiNode } from '../../src/components/nodes/AiNode';
-import { db } from '../../src/db';
+import { updateNodeRecorded } from '../../src/services/canvasMutations';
 import type { CanvasNode } from '../../src/db';
 
-vi.mock('../../src/db', () => ({
-  db: {
-    nodes: { update: vi.fn() },
-  },
+vi.mock('../../src/services/canvasMutations', () => ({
+  canvasIdOf: (row: { canvasId?: string }) => row.canvasId || 'default',
+  updateNodeRecorded: vi.fn(),
 }));
 
 vi.mock('../../src/config/persistence', () => ({
@@ -48,7 +47,7 @@ const baseAi = (overrides?: Partial<CanvasNode>): CanvasNode => ({
 describe('AiNode', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(db.nodes.update).mockClear();
+    vi.mocked(updateNodeRecorded).mockClear();
   });
 
   it('编辑 AI 回复失焦时持久化 content', () => {
@@ -64,7 +63,7 @@ describe('AiNode', () => {
     expect(editable).toBeTruthy();
     editable.innerText = '更新后的回复';
     fireEvent.blur(editable);
-    expect(db.nodes.update).toHaveBeenCalledWith('ai-1', { content: '更新后的回复' });
+    expect(updateNodeRecorded).toHaveBeenCalledWith('default', 'ai-1', { content: '更新后的回复' });
     expect(setEditing).toHaveBeenCalledWith(null);
   });
 

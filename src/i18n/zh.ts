@@ -74,7 +74,7 @@ export const zh = {
       "insert_video": "插入视频…",
       "insert_document": "插入文档…",
       "add_agent": "添加助手",
-      "paste_sticky": "粘贴便签",
+      "paste": "粘贴",
       "reset_view": "重置视图",
       "edit_content": "编辑内容",
       "duplicate": "创建副本",
@@ -90,7 +90,20 @@ export const zh = {
       "delete_selected": "批量删除（{{count}} 张）"
     },
     "zoom_to_fit": "缩放至适应全部内容",
-    "toggle_grid": "网格与吸附"
+    "toggle_grid": "网格与吸附",
+    "undo": "撤销（Ctrl+Z）",
+    "redo": "重做（Ctrl+Shift+Z）",
+    "search": {
+      "open": "搜索画布（Ctrl+F）",
+      "placeholder": "搜索便签、主题、文件名…",
+      "position": "{{index}}/{{total}}",
+      "no_match": "无结果",
+      "previous": "上一个（Shift+Enter）",
+      "next": "下一个（Enter）",
+      "close": "关闭搜索（Esc）",
+      "other_canvases": "其它画布",
+      "match_count": "命中 {{count}}"
+    }
   },
   "imagegen": {
     "title": "AI 生图",

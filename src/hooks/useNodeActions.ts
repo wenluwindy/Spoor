@@ -6,7 +6,19 @@ import { getCanvasCenterPosition } from '../utils/canvas';
 import { readFileContent } from '../utils/file';
 import { importFileToNodeData, importPathToNodeData } from '../services/fileImport';
 import { isTauriRuntime } from '../utils/isTauriRuntime';
-import { isStickyNoteType, type StickyClipboardPayloadV1 } from '../utils/noteClipboard';
+import {
+  materializeCanvasClipboard,
+  type CanvasClipboardPayloadV2,
+} from '../utils/canvasClipboard';
+import {
+  addEdgesRecorded,
+  addNodesAndEdgesRecorded,
+  addNodesRecorded,
+  deleteEdgeRecorded,
+  deleteNodesRecorded,
+  moveNodeRecorded,
+  recordAddedNodes,
+} from '../services/canvasMutations';
 
 export interface CanvasPoint {
   x: number;
@@ -54,7 +66,9 @@ export function useNodeActions({
   const handleLink = (id: string) => {
     if (connectingFrom) {
       if (connectingFrom !== id && !edges.find(e => (e.from === connectingFrom && e.to === id) || (e.from === id && e.to === connectingFrom))) {
-        db.edges.add({ id: crypto.randomUUID(), canvasId: activeCanvasId, from: connectingFrom, to: id });
+        void addEdgesRecorded(activeCanvasId, [
+          { id: crypto.randomUUID(), canvasId: activeCanvasId, from: connectingFrom, to: id },
+        ]);
       }
       setConnectingFrom(null);
     } else {
@@ -63,12 +77,11 @@ export function useNodeActions({
   };
 
   const deleteEdge = (id: string) => {
-    db.edges.delete(id);
+    void deleteEdgeRecorded(activeCanvasId, id);
   };
 
   const removeNodeId = (id: string) => {
-    db.nodes.delete(id);
-    db.edges.where('from').equals(id).or('to').equals(id).delete();
+    void deleteNodesRecorded(activeCanvasId, [id]);
     setSelectedNodes(prev => {
       if (!prev.has(id)) return prev;
       const next = new Set(prev);
@@ -83,9 +96,7 @@ export function useNodeActions({
   const deleteNodes = async (ids: string[]) => {
     if (ids.length === 0) return;
     const idSet = new Set(ids);
-    await db.nodes.bulkDelete(ids);
-    const related = await db.edges.filter((e) => idSet.has(e.from) || idSet.has(e.to)).toArray();
-    if (related.length > 0) await db.edges.bulkDelete(related.map((e) => e.id));
+    await deleteNodesRecorded(activeCanvasId, ids);
     setSelectedNodes((prev) => {
       const next = new Set([...prev].filter((id) => !idSet.has(id)));
       return next.size === prev.size ? prev : next;
@@ -108,27 +119,31 @@ export function useNodeActions({
     const rows = [...others]
       .filter((id) => !alreadyLinked.has(id))
       .map((id) => ({ id: crypto.randomUUID(), canvasId: activeCanvasId, from: hubId, to: id }));
-    if (rows.length > 0) await db.edges.bulkAdd(rows);
+    await addEdgesRecorded(activeCanvasId, rows);
   };
 
   const addTextNode = async (at?: CanvasPoint) => {
     const { x, y } = resolvePosition(at);
     const id = crypto.randomUUID();
-    await db.nodes.add({ id, canvasId: activeCanvasId, type: 'text', content: '', x, y });
+    await addNodesRecorded(activeCanvasId, [
+      { id, canvasId: activeCanvasId, type: 'text', content: '', x, y },
+    ]);
     return id;
   };
 
   const addThemeNode = async (at?: CanvasPoint) => {
     const { x, y } = resolvePosition(at);
     const id = crypto.randomUUID();
-    await db.nodes.add({
-      id,
-      canvasId: activeCanvasId,
-      type: 'theme',
-      content: i18n.t('nodes.new_theme_title'),
-      x,
-      y,
-    });
+    await addNodesRecorded(activeCanvasId, [
+      {
+        id,
+        canvasId: activeCanvasId,
+        type: 'theme',
+        content: i18n.t('nodes.new_theme_title'),
+        x,
+        y,
+      },
+    ]);
     return id;
   };
 
@@ -136,14 +151,16 @@ export function useNodeActions({
   const addImageGenNode = async (at?: CanvasPoint) => {
     const { x, y } = resolvePosition(at);
     const id = crypto.randomUUID();
-    await db.nodes.add({
-      id,
-      canvasId: activeCanvasId,
-      type: 'imagegen',
-      x,
-      y,
-      width: 340,
-    });
+    await addNodesRecorded(activeCanvasId, [
+      {
+        id,
+        canvasId: activeCanvasId,
+        type: 'imagegen',
+        x,
+        y,
+        width: 340,
+      },
+    ]);
     return id;
   };
 
@@ -161,7 +178,9 @@ export function useNodeActions({
       .filter((e) => (e.from === fromId && e.to === toId) || (e.from === toId && e.to === fromId))
       .first();
     if (exists) return;
-    await db.edges.add({ id: crypto.randomUUID(), canvasId: activeCanvasId, from: fromId, to: toId });
+    await addEdgesRecorded(activeCanvasId, [
+      { id: crypto.randomUUID(), canvasId: activeCanvasId, from: fromId, to: toId },
+    ]);
   };
 
   /**
@@ -182,14 +201,16 @@ export function useNodeActions({
 
   const addAgentNodeAt = async (agentConfigId: string, at?: CanvasPoint) => {
     const { x, y } = resolvePosition(at);
-    await db.nodes.add({
-      id: crypto.randomUUID(),
-      canvasId: activeCanvasId,
-      type: 'agent',
-      agentConfigId,
-      x,
-      y,
-    });
+    await addNodesRecorded(activeCanvasId, [
+      {
+        id: crypto.randomUUID(),
+        canvasId: activeCanvasId,
+        type: 'agent',
+        agentConfigId,
+        x,
+        y,
+      },
+    ]);
   };
 
   /**
@@ -209,23 +230,27 @@ export function useNodeActions({
     const created: string[] = [];
     if (files.length === 0) return created;
     const origin = resolvePosition(at);
+    // 逐个落库让卡片挨个出现，最后整批补记一步撤销（见 recordAddedNodes 注释）
+    const rows: CanvasNode[] = [];
     for (let index = 0; index < files.length; index++) {
       const file = files[index];
       try {
         const data = await buildNodeDataForFile(file);
-        const id = crypto.randomUUID();
-        await db.nodes.add({
-          id,
+        const row: CanvasNode = {
+          id: crypto.randomUUID(),
           canvasId: activeCanvasId,
           ...data,
           x: origin.x + index * MULTI_INSERT_STAGGER,
           y: origin.y + index * MULTI_INSERT_STAGGER,
-        });
-        created.push(id);
+        };
+        await db.nodes.add(row);
+        rows.push(row);
+        created.push(row.id);
       } catch (err) {
         console.error('Failed to process file:', file.name, err);
       }
     }
+    recordAddedNodes(activeCanvasId, rows);
     return created;
   };
 
@@ -239,22 +264,25 @@ export function useNodeActions({
     const created: string[] = [];
     if (paths.length === 0) return created;
     const origin = resolvePosition(at);
+    const rows: CanvasNode[] = [];
     for (let index = 0; index < paths.length; index++) {
       try {
         const data = await importPathToNodeData(paths[index], i18n.t('nodes.empty_document_body'));
-        const id = crypto.randomUUID();
-        await db.nodes.add({
-          id,
+        const row: CanvasNode = {
+          id: crypto.randomUUID(),
           canvasId: activeCanvasId,
           ...data,
           x: origin.x + index * MULTI_INSERT_STAGGER,
           y: origin.y + index * MULTI_INSERT_STAGGER,
-        });
-        created.push(id);
+        };
+        await db.nodes.add(row);
+        rows.push(row);
+        created.push(row.id);
       } catch (err) {
         console.error('Failed to import file:', paths[index], err);
       }
     }
+    recordAddedNodes(activeCanvasId, rows);
     return created;
   };
 
@@ -263,33 +291,62 @@ export function useNodeActions({
     const node = await db.nodes.get(id);
     if (!node) return;
     const { id: _omit, ...rest } = node;
-    await db.nodes.add({
-      ...rest,
-      id: crypto.randomUUID(),
-      canvasId: activeCanvasId,
-      x: node.x + MULTI_INSERT_STAGGER,
-      y: node.y + MULTI_INSERT_STAGGER,
-    });
+    await addNodesRecorded(activeCanvasId, [
+      {
+        ...rest,
+        id: crypto.randomUUID(),
+        canvasId: activeCanvasId,
+        x: node.x + MULTI_INSERT_STAGGER,
+        y: node.y + MULTI_INSERT_STAGGER,
+      },
+    ]);
   };
 
-  /** 按剪贴板负载建便签；保留多张之间的相对位置，整体落到 `at`。 */
-  const pasteStickyAt = async (payload: StickyClipboardPayloadV1, at?: CanvasPoint) => {
-    if (payload.nodes.length === 0) return;
+  /**
+   * 批量复制：整个选区一起偏移一点复制出来，算**一步**撤销。
+   *
+   * 不复用 `duplicateNode` 循环调用——那样复制五张卡要按五次 Ctrl+Z 才撤干净。
+   * 与单节点复制一样不带连线：复制出来的卡片之间该不该连，用户自己说了算。
+   */
+  const duplicateNodes = async (ids: string[]) => {
+    if (ids.length === 0) return [];
+    const rows = await db.nodes.bulkGet(ids);
+    const copies: CanvasNode[] = [];
+    for (const node of rows) {
+      if (!node) continue;
+      const { id: _omit, ...rest } = node;
+      copies.push({
+        ...rest,
+        id: crypto.randomUUID(),
+        canvasId: activeCanvasId,
+        x: node.x + MULTI_INSERT_STAGGER,
+        y: node.y + MULTI_INSERT_STAGGER,
+      });
+    }
+    return addNodesRecorded(activeCanvasId, copies);
+  };
+
+  /**
+   * 方向键微调：把选区整体平移 `(dx, dy)`。
+   *
+   * 每张卡各写一次库，但它们都落在同一个合并窗口里，因此长按方向键连续走一路
+   * 也只占一步撤销（见 `canvasHistory` 的合并规则）。
+   */
+  const nudgeNodes = async (ids: string[], dx: number, dy: number) => {
+    if (ids.length === 0 || (dx === 0 && dy === 0)) return;
+    const rows = await db.nodes.bulkGet(ids);
+    for (const node of rows) {
+      if (!node) continue;
+      await moveNodeRecorded(activeCanvasId, node.id, { x: node.x + dx, y: node.y + dy });
+    }
+  };
+
+  /** 按剪贴板负载建节点与其间的连线；保留多张之间的相对位置，整体落到 `at`。 */
+  const pasteClipboardAt = async (payload: CanvasClipboardPayloadV2, at?: CanvasPoint) => {
+    if (payload.nodes.length === 0) return [];
     const origin = resolvePosition(at);
-    const baseX = Math.min(...payload.nodes.map((n) => n.x));
-    const baseY = Math.min(...payload.nodes.map((n) => n.y));
-    const rows: CanvasNode[] = payload.nodes.map((item) => ({
-      id: crypto.randomUUID(),
-      canvasId: activeCanvasId,
-      type: item.type,
-      content: item.content ?? '',
-      layout: item.layout,
-      width: item.width,
-      height: item.height,
-      x: origin.x + (item.x - baseX),
-      y: origin.y + (item.y - baseY),
-    }));
-    await db.nodes.bulkAdd(rows);
+    const { nodes, edges } = materializeCanvasClipboard(payload, activeCanvasId, origin);
+    return addNodesAndEdgesRecorded(activeCanvasId, nodes, edges);
   };
 
   return {
@@ -307,7 +364,9 @@ export function useNodeActions({
     insertFilesAt,
     insertPathsAt,
     duplicateNode,
-    pasteStickyAt,
+    duplicateNodes,
+    nudgeNodes,
+    pasteClipboardAt,
     clearSelection,
     deleteNodes,
     linkNodesToHub,

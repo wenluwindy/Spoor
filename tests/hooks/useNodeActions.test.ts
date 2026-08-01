@@ -215,18 +215,19 @@ describe('useNodeActions', () => {
     });
   });
 
-  describe('pasteStickyAt', () => {
+  describe('pasteClipboardAt', () => {
     it('整体落到目标点并保留多张之间的相对位置', async () => {
       const { result } = renderHook(() => useTestNodeActions());
 
       await act(async () => {
-        await result.current.pasteStickyAt(
+        await result.current.pasteClipboardAt(
           {
-            kind: 'scribe-sticky-v1',
+            kind: 'spoor-canvas-v2',
             nodes: [
-              { type: 'text', content: 'a', x: 100, y: 200 },
-              { type: 'text', content: 'b', x: 140, y: 260 },
+              { sourceId: 'a', node: { type: 'text', content: 'a', x: 100, y: 200 } },
+              { sourceId: 'b', node: { type: 'text', content: 'b', x: 140, y: 260 } },
             ],
+            edges: [],
           },
           { x: 0, y: 0 },
         );
@@ -340,5 +341,58 @@ describe('useNodeActions', () => {
 
     const edges = await db.edges.toArray();
     expect(edges.length).toBe(0);
+  });
+
+  describe('批量复制与方向键微调', () => {
+    beforeEach(async () => {
+      await db.nodes.bulkAdd([
+        { id: 'n1', canvasId: 'default', type: 'text', content: '甲', x: 0, y: 0 },
+        { id: 'n2', canvasId: 'default', type: 'note', content: '乙', x: 100, y: 40, width: 260 },
+      ]);
+    });
+
+    it('duplicateNodes 一次复制整个选区，内容与尺寸照抄、位置错开', async () => {
+      const { result } = renderHook(() => useTestNodeActions());
+
+      let createdIds: string[] = [];
+      await act(async () => {
+        createdIds = (await result.current.duplicateNodes(['n1', 'n2'])) ?? [];
+      });
+
+      expect(createdIds).toHaveLength(2);
+      expect(await db.nodes.count()).toBe(4);
+
+      const copyOfN2 = await db.nodes.get(createdIds[1]);
+      expect(copyOfN2).toMatchObject({ type: 'note', content: '乙', width: 260 });
+      expect(copyOfN2!.x).toBeGreaterThan(100);
+      expect(copyOfN2!.y).toBeGreaterThan(40);
+    });
+
+    it('duplicateNodes 跳过已经不存在的 id', async () => {
+      const { result } = renderHook(() => useTestNodeActions());
+      await act(async () => {
+        await result.current.duplicateNodes(['n1', '不存在']);
+      });
+      expect(await db.nodes.count()).toBe(3);
+    });
+
+    it('nudgeNodes 把整个选区平移同样的距离', async () => {
+      const { result } = renderHook(() => useTestNodeActions());
+
+      await act(async () => {
+        await result.current.nudgeNodes(['n1', 'n2'], 24, -24);
+      });
+
+      expect(await db.nodes.get('n1')).toMatchObject({ x: 24, y: -24 });
+      expect(await db.nodes.get('n2')).toMatchObject({ x: 124, y: 16 });
+    });
+
+    it('nudgeNodes 收到零位移时什么都不做', async () => {
+      const { result } = renderHook(() => useTestNodeActions());
+      await act(async () => {
+        await result.current.nudgeNodes(['n1'], 0, 0);
+      });
+      expect(await db.nodes.get('n1')).toMatchObject({ x: 0, y: 0 });
+    });
   });
 });

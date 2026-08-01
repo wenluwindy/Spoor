@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
-import { db } from '../../../db';
 import type { CanvasNode } from '../../../db';
+import { canvasIdOf, updateNodeRecorded } from '../../../services/canvasMutations';
 import { isContentBlurPersistenceDisabled } from '../../../config/persistence';
 import { CANVAS_NODE_CONTEXT_TEXT_ATTR } from '../../../utils/canvasNodeContextText';
 
@@ -30,7 +30,7 @@ export function NoteBody({
 }: NoteBodyProps) {
   const isEditing = editingNodeId === node.id;
 
-  /** 乐观值：onBlur 写库后立即生效，避开 db.nodes.update -> useLiveQuery 异步刷新之间的"老内容闪一下"间隙；
+  /** 乐观值：onBlur 写库后立即生效，避开写库 -> useLiveQuery 异步刷新之间的"老内容闪一下"间隙；
    *  当 props 上的 node.content 与乐观值一致（即 IndexedDB 已同步回组件），自动清空 */
   const [pendingContent, setPendingContent] = useState<string | null>(null);
   useEffect(() => {
@@ -54,7 +54,7 @@ export function NoteBody({
           onBlur={(e) => {
             const next = e.currentTarget.innerText;
             if (!isContentBlurPersistenceDisabled()) {
-              db.nodes.update(node.id, { content: next });
+              void updateNodeRecorded(canvasIdOf(node), node.id, { content: next });
               setPendingContent(next);
             }
             setEditingNodeId(null);

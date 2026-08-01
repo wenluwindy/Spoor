@@ -2,7 +2,7 @@ import React, { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, Send, Sparkles } from 'lucide-react';
 import Markdown from 'react-markdown';
-import { db } from '../../db';
+import { canvasIdOf, updateNodeRecorded } from '../../services/canvasMutations';
 import type { AiNodeProps } from './types';
 import { isContentBlurPersistenceDisabled } from '../../config/persistence';
 import { CANVAS_NODE_CONTEXT_TEXT_ATTR } from '../../utils/canvasNodeContextText';
@@ -47,7 +47,7 @@ export function AiNode({
         suppressContentEditableWarning
         onBlur={(e) => {
           if (!isContentBlurPersistenceDisabled()) {
-            db.nodes.update(node.id, { content: e.currentTarget.innerText });
+            void updateNodeRecorded(canvasIdOf(node), node.id, { content: e.currentTarget.innerText });
           }
           setEditingNodeId(null);
         }}

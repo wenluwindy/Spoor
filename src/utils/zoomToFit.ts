@@ -50,6 +50,26 @@ export function unionNodeBoundsInCanvasSpace(
 }
 
 /**
+ * 保持当前缩放，把包围盒挪到视口正中。
+ *
+ * 搜索定位用它而不是 `computeFitTransform`：跳到一张卡片时把画布缩放也一起改掉，
+ * 会让人当场失去方位感——"我刚才在多大的比例上看"这件事必须保持不变。
+ */
+export function computeCenterTransform(
+  bounds: Bounds,
+  viewport: { width: number; height: number },
+  scale: number,
+): CanvasViewTransform {
+  const centerX = (bounds.left + bounds.right) / 2;
+  const centerY = (bounds.top + bounds.bottom) / 2;
+  return {
+    x: viewport.width / 2 - centerX * scale,
+    y: viewport.height / 2 - centerY * scale,
+    scale,
+  };
+}
+
+/**
  * 算出让整个包围盒落在视口内的 transform。
  *
  * `maxScale` 默认 1：内容很少时不放大到失真，只居中。

@@ -37,6 +37,8 @@ export function useDraggable(
   const posRef = useRef(pos);
   const groupIdsRef = useRef(groupIds);
   const onDragEndRef = useRef(onDragEnd);
+  /** 拖拽进行中（自己被按住，或作为 follower 跟着整组走）。 */
+  const draggingRef = useRef(false);
   scaleRef.current = scale;
   snapRef.current = snap;
   groupIdsRef.current = groupIds;
@@ -46,6 +48,20 @@ export function useDraggable(
   useEffect(() => {
      posRef.current = pos;
   }, [pos]);
+
+  /**
+   * 外部改了坐标就跟上。
+   *
+   * 本地 `pos` 是拖拽的权威值，但库里的坐标也会被别人改——撤销一次移动、
+   * 方向键微调、将来的对齐命令，改的都是库。少了这段，撤销之后数据回去了、
+   * 卡片却还停在原地，直到下次重挂组件才"跳"回来。
+   *
+   * 拖拽进行中不接管：那会儿本地值才是最新的，让库里的旧坐标插进来会把卡片拽回去。
+   */
+  useEffect(() => {
+    if (draggingRef.current) return;
+    setPos((prev) => (prev.x === initialX && prev.y === initialY ? prev : { x: initialX, y: initialY }));
+  }, [initialX, initialY]);
 
   /**
    * follower 侧：跟着 leader 的位移走。
@@ -63,6 +79,7 @@ export function useDraggable(
 
       if (event.type === 'begin') {
         base = event.ids.includes(id) ? { ...posRef.current } : null;
+        draggingRef.current = base !== null;
         return;
       }
       if (!base) return;
@@ -73,6 +90,7 @@ export function useDraggable(
       // end
       const settled = posRef.current;
       base = null;
+      draggingRef.current = false;
       onDragEndRef.current?.(settled);
     });
   }, [id]);
@@ -94,6 +112,7 @@ export function useDraggable(
 
     maxZIndex += 1;
     setZIndex(maxZIndex);
+    draggingRef.current = true;
 
     const startX = e.clientX;
     const startY = e.clientY;
@@ -118,6 +137,7 @@ export function useDraggable(
     const onPointerUp = () => {
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
+      draggingRef.current = false;
       if (isGroupLeader) endGroupDrag(id!);
       if (onDragEnd) {
         // use a small timeout to let state settle

@@ -74,7 +74,7 @@ export const en = {
       "insert_video": "Insert video…",
       "insert_document": "Insert document…",
       "add_agent": "Add persona",
-      "paste_sticky": "Paste note",
+      "paste": "Paste",
       "reset_view": "Reset view",
       "edit_content": "Edit content",
       "duplicate": "Duplicate",
@@ -90,7 +90,20 @@ export const en = {
       "delete_selected": "Delete {{count}} nodes"
     },
     "zoom_to_fit": "Fit all content",
-    "toggle_grid": "Grid & snapping"
+    "toggle_grid": "Grid & snapping",
+    "undo": "Undo (Ctrl+Z)",
+    "redo": "Redo (Ctrl+Shift+Z)",
+    "search": {
+      "open": "Search canvas (Ctrl+F)",
+      "placeholder": "Search notes, themes, file names…",
+      "position": "{{index}}/{{total}}",
+      "no_match": "No results",
+      "previous": "Previous (Shift+Enter)",
+      "next": "Next (Enter)",
+      "close": "Close search (Esc)",
+      "other_canvases": "Other canvases",
+      "match_count": "Matches: {{count}}"
+    }
   },
   "imagegen": {
     "title": "AI image",
