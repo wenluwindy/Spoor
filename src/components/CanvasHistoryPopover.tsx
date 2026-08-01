@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, Edit3, History, Plus, Trash2, Upload } from 'lucide-react';
+import { Download, Edit3, FileText, History, Plus, Trash2, Upload } from 'lucide-react';
 import { db } from '../db';
 import type { Canvas } from '../db';
 import { Tooltip } from './ui/Tooltip';
 import { useAppDialog } from './AppDialogProvider';
 import { deleteCanvasWithContents } from '../services/canvasRepository';
-import { exportCanvasToFile, importCanvasFromFile } from '../services/canvasPortability';
+import {
+  exportCanvasAsMarkdown,
+  exportCanvasToFile,
+  importCanvasFromFile,
+} from '../services/canvasPortability';
 
 export interface CanvasHistoryPopoverProps {
   canvases: Canvas[];
@@ -64,6 +68,22 @@ export function CanvasHistoryPopover({ canvases, activeCanvasId, setActiveCanvas
     const active = canvases.find((c) => c.id === activeCanvasId);
     setIsOpen(false);
     await exportCanvasToFile(activeCanvasId, active?.name ?? activeCanvasId);
+  };
+
+  /** 导出 Markdown 包：一篇正文 + 一个 assets/ 目录，用来把内容带去别处。 */
+  const exportActiveCanvasAsMarkdown = async () => {
+    const active = canvases.find((c) => c.id === activeCanvasId);
+    setIsOpen(false);
+    const outcome = await exportCanvasAsMarkdown(
+      activeCanvasId,
+      active?.name ?? activeCanvasId,
+      new Date(),
+    );
+    if (!outcome) return;
+    // 有图没能复制出来时说一声——安静少几张图，回头才发现是最难查的
+    if (outcome.assetsMissing > 0) {
+      await appAlert({ message: t('canvas.export_markdown_missing', { count: outcome.assetsMissing }) });
+    }
   };
 
   /**
@@ -193,6 +213,13 @@ export function CanvasHistoryPopover({ canvases, activeCanvasId, setActiveCanvas
               >
                 <Download className="w-4 h-4" />
                 {t('canvas.export_json_canvas')}
+              </button>
+              <button
+                onClick={() => void exportActiveCanvasAsMarkdown()}
+                className="w-full text-left px-3 py-2 text-sm text-app-text-muted hover:bg-app-surface-subtle hover:text-app-text rounded-lg flex items-center gap-2 transition-colors"
+              >
+                <FileText className="w-4 h-4" />
+                {t('canvas.export_markdown')}
               </button>
               <button
                 onClick={() => void importCanvas()}

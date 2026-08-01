@@ -511,6 +511,13 @@ pub fn media_import_bytes(
 pub fn media_export(rel: String, dest_path: String) -> Result<(), String> {
     let root = data_root();
     let src = resolve_media_path(root, &rel).ok_or("not_found")?;
+    // 导出 Markdown 包时目标是 `<用户选的目录>/assets/x.png`，assets 还不存在。
+    // 用户已经指定了落点，替他把中间目录建出来是意料之中的行为。
+    if let Some(parent) = std::path::Path::new(&dest_path).parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|e| format!("disk_write_failed: {e}"))?;
+        }
+    }
     fs::copy(&src, &dest_path).map_err(|e| format!("disk_write_failed: {e}"))?;
     Ok(())
 }

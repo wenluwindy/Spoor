@@ -2,18 +2,29 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { db } from '../../src/db';
 
 const saveTextFile = vi.fn(async () => true);
+const saveTextFileTo = vi.fn(async () => {});
+const pickDirectory = vi.fn<() => Promise<string | null>>(async () => null);
 const openTextFile = vi.fn<() => Promise<{ fileName: string; text: string } | null>>(
   async () => null,
 );
+const mediaExport = vi.fn(async () => {});
+const isTauriRuntime = vi.fn(() => false);
 
 vi.mock('../../src/utils/userTextFile', () => ({
   saveTextFile: (...args: unknown[]) => saveTextFile(...(args as [])),
+  saveTextFileTo: (...args: unknown[]) => saveTextFileTo(...(args as [])),
+  pickDirectory: () => pickDirectory(),
   openTextFile: () => openTextFile(),
 }));
 
-const { exportCanvasToFile, importCanvasFromFile, toSafeFileName } = await import(
-  '../../src/services/canvasPortability'
-);
+vi.mock('../../src/utils/isTauriRuntime', () => ({ isTauriRuntime: () => isTauriRuntime() }));
+
+vi.mock('../../src/services/mediaStore', () => ({
+  mediaExport: (...args: unknown[]) => mediaExport(...(args as [])),
+}));
+
+const { exportCanvasAsMarkdown, exportCanvasToFile, importCanvasFromFile, toSafeFileName } =
+  await import('../../src/services/canvasPortability');
 
 describe('canvasPortability', () => {
   beforeEach(async () => {
@@ -22,8 +33,13 @@ describe('canvasPortability', () => {
     await db.canvases.clear();
     await db.agents.clear();
     saveTextFile.mockClear();
+    saveTextFileTo.mockClear();
+    pickDirectory.mockClear();
     openTextFile.mockClear();
+    mediaExport.mockClear();
     saveTextFile.mockResolvedValue(true);
+    mediaExport.mockResolvedValue(undefined);
+    isTauriRuntime.mockReturnValue(false);
   });
 
   describe('导出', () => {
@@ -133,6 +149,80 @@ describe('canvasPortability', () => {
 
       const outcome = (await importCanvasFromFile())!;
       expect(outcome.degraded).toEqual({ links: 1, groups: 1, skipped: 1 });
+    });
+  });
+
+  describe('导出 Markdown 包', () => {
+    const NOW = new Date(2026, 7, 1);
+
+    beforeEach(async () => {
+      await db.nodes.bulkAdd([
+        { id: 'n1', canvasId: 'c1', type: 'text', content: '一段想法', x: 0, y: 0 },
+        {
+          id: 'n2',
+          canvasId: 'c1',
+          type: 'image',
+          filePath: 'media/uploaded/a.png',
+          fileName: 'a.png',
+          x: 0,
+          y: 400,
+        },
+      ]);
+    });
+
+    it('桌面端写正文并把媒体复制进 assets/', async () => {
+      isTauriRuntime.mockReturnValue(true);
+      pickDirectory.mockResolvedValue('D:/导出');
+
+      const outcome = (await exportCanvasAsMarkdown('c1', '第一张', NOW))!;
+
+      expect(saveTextFileTo).toHaveBeenCalledWith('D:/导出/第一张.md', expect.stringContaining('一段想法'));
+      expect(mediaExport).toHaveBeenCalledWith('media/uploaded/a.png', 'D:/导出/assets/a.png');
+      expect(outcome).toMatchObject({ directory: 'D:/导出', assetsCopied: 1, assetsMissing: 0 });
+    });
+
+    it('正文里的图片链接指向包内的 assets/', async () => {
+      isTauriRuntime.mockReturnValue(true);
+      pickDirectory.mockResolvedValue('D:/导出');
+
+      await exportCanvasAsMarkdown('c1', '第一张', NOW);
+
+      const [, markdown] = saveTextFileTo.mock.calls[0] as unknown as [string, string];
+      expect(markdown).toContain('](assets/a.png)');
+    });
+
+    it('某个原件复制失败时照样出包，并如实计数', async () => {
+      isTauriRuntime.mockReturnValue(true);
+      pickDirectory.mockResolvedValue('D:/导出');
+      mediaExport.mockRejectedValue(new Error('not_found'));
+
+      const outcome = (await exportCanvasAsMarkdown('c1', '第一张', NOW))!;
+
+      expect(saveTextFileTo).toHaveBeenCalled();
+      expect(outcome).toMatchObject({ assetsCopied: 0, assetsMissing: 1 });
+    });
+
+    it('用户取消选目录时什么都不写', async () => {
+      isTauriRuntime.mockReturnValue(true);
+      pickDirectory.mockResolvedValue(null);
+
+      expect(await exportCanvasAsMarkdown('c1', '第一张', NOW)).toBeNull();
+      expect(saveTextFileTo).not.toHaveBeenCalled();
+      expect(mediaExport).not.toHaveBeenCalled();
+    });
+
+    it('浏览器调试时退回只下载一个 .md', async () => {
+      isTauriRuntime.mockReturnValue(false);
+
+      const outcome = (await exportCanvasAsMarkdown('c1', '第一张', NOW))!;
+
+      expect(saveTextFile).toHaveBeenCalledWith(
+        '第一张.md',
+        expect.stringContaining('一段想法'),
+        expect.anything(),
+      );
+      expect(outcome.directory).toBeNull();
+      expect(mediaExport).not.toHaveBeenCalled();
     });
   });
 });

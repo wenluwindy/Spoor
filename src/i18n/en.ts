@@ -61,6 +61,8 @@ export const en = {
     "delete_canvas_last": "At least one canvas must remain",
     "export_json_canvas": "Export as .canvas",
     "import_json_canvas": "Import .canvas…",
+    "export_markdown": "Export as Markdown bundle…",
+    "export_markdown_missing": "{{count}} media file(s) could not be copied — the originals may have been deleted or moved.",
     "import_done": "Imported “{{name}}” with {{count}} nodes.",
     "import_degraded": "{{links}} link node(s) became text cards, {{groups}} group(s) became theme cards, and {{skipped}} row(s) were skipped as unrecognized.",
     "import_failed": "That file is not valid JSON Canvas. Nothing was imported.",

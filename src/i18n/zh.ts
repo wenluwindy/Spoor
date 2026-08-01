@@ -61,6 +61,8 @@ export const zh = {
     "delete_canvas_last": "至少要保留一张画布",
     "export_json_canvas": "导出为 .canvas",
     "import_json_canvas": "导入 .canvas…",
+    "export_markdown": "导出为 Markdown 包…",
+    "export_markdown_missing": "有 {{count}} 个媒体文件没能复制出来，原件可能已被删除或移动。",
     "import_done": "已导入「{{name}}」，共 {{count}} 个节点。",
     "import_degraded": "其中链接节点 {{links}} 个降级为文本卡、分组 {{groups}} 个降级为主题卡，另有 {{skipped}} 条无法识别已跳过。",
     "import_failed": "这个文件不是有效的 JSON Canvas，没有导入任何内容。",

@@ -56,6 +56,28 @@ export async function saveTextFile(
   return true;
 }
 
+/**
+ * 往一个**已经确定的**路径写文本，不再弹对话框。
+ *
+ * 给 Markdown 包用：目录是用户刚选的，包里各个文件的位置由代码决定，不该为每个文件
+ * 再问一次。仅限桌面端。
+ */
+export async function saveTextFileTo(destPath: string, contents: string): Promise<void> {
+  await callTauri('user_file_write_text', { destPath, contents });
+}
+
+/**
+ * 让用户挑一个**目录**（导出 Markdown 包时要往里写正文与 assets/）。
+ *
+ * 浏览器里没有目录选择这回事，返回 null；调用方据此退回「只下载单个文件」。
+ */
+export async function pickDirectory(): Promise<string | null> {
+  if (!isTauriRuntime()) return null;
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const picked = await open({ directory: true, multiple: false });
+  return typeof picked === 'string' ? picked : null;
+}
+
 export interface OpenedTextFile {
   fileName: string;
   text: string;
