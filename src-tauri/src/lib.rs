@@ -2,6 +2,7 @@ mod cc_switch;
 mod imagegen;
 mod local_llama;
 mod media;
+mod snapshot;
 mod updater;
 mod userfile;
 
@@ -335,7 +336,10 @@ pub fn run() {
       imagegen::image_generate,
       imagegen::image_generate_cancel,
       userfile::user_file_write_text,
-      userfile::user_file_read_text
+      userfile::user_file_read_text,
+      snapshot::snapshot_write,
+      snapshot::snapshot_list,
+      snapshot::snapshot_read
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

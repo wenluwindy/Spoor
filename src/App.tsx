@@ -27,6 +27,8 @@ import { ResearchLab } from './components/ResearchLab';
 import { AgentsStudio } from './components/AgentsStudio';
 import { callUniversalAI } from './services/ai';
 import { autoCheckForUpdateOnce } from './services/appUpdate';
+import { runDailySnapshot } from './services/autoBackup';
+import { getAppVersion } from './utils/appVersion';
 import { MIMO_TOKEN_PLAN_BASE_URL } from './constants/mimo';
 import { DOUBAO_ARK_BASE_URL } from './constants/doubao';
 import { NodeRenderer } from './components/nodes/NodeRenderer';
@@ -256,6 +258,11 @@ export default function App() {
   // 启动静默自检：有新版就在侧边栏设置按钮上挂个点，查不到就安静躺下，不打断
   useEffect(() => {
     autoCheckForUpdateOnce();
+  }, []);
+
+  // 每天第一次启动留一份自动快照。失败只记日志——备份是后台的好意，不该拦在启动路径上
+  useEffect(() => {
+    void getAppVersion().then((version) => runDailySnapshot(version, Date.now()));
   }, []);
 
   useEffect(() => {

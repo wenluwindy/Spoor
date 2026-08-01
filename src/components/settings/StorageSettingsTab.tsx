@@ -4,6 +4,7 @@ import { AlertTriangle, FolderOpen, HardDrive, Loader2 } from 'lucide-react';
 import { mediaOpenRoot, mediaStoreInfo, type MediaStoreInfo } from '../../services/mediaStore';
 import { isTauriRuntime } from '../../utils/isTauriRuntime';
 import { formatBytes } from './formatBytes';
+import { BackupCard } from './BackupCard';
 import { MediaAssetManager } from './MediaAssetManager';
 
 /** 存储页：数据目录概览 + 资产管理器。 */
@@ -79,6 +80,8 @@ export function StorageSettingsTab() {
           {t('settings.storage_open_folder')}
         </button>
       </div>
+
+      <BackupCard />
 
       <MediaAssetManager />
 
