@@ -53,6 +53,7 @@ function makeActions(): CanvasContextMenuActions {
     insertFile: vi.fn(),
     addAgentNode: vi.fn(),
     addCanvasLink: vi.fn(),
+    recomputeFrom: vi.fn(),
     pasteNodes: vi.fn(),
     resetView: vi.fn(),
     editNode: vi.fn(),
@@ -113,6 +114,7 @@ function renderMenu({
       agentConfigs={agents}
       canvases={canvases}
       activeCanvasId={activeCanvasId}
+      edges={[]}
       nodesById={nodesMap(nodes)}
       selectedNodes={selected}
       actions={actions}

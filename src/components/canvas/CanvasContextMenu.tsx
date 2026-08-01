@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Copy, Download, ImageDown, Layers, Link2, Pencil, PenLine, RotateCcw, Square, SquareCheckBig, Trash2 } from 'lucide-react';
+import { Bot, Copy, Download, ImageDown, Layers, Link2, Pencil, PenLine, RefreshCw, RotateCcw, Square, SquareCheckBig, Trash2 } from 'lucide-react';
 import type { AgentConfig, Canvas, CanvasNode } from '../../db';
 import { isTauriRuntime } from '../../utils/isTauriRuntime';
 import { CANVAS_CREATE_ITEMS, CANVAS_INSERT_ITEMS } from '../../constants/canvasMenuItems';
 import { nodeSupportsInlineEdit } from '../../constants/nodeCapabilities';
+import { planRecompute } from '../../services/canvasRecompute';
 import { resolveAgentLocalizedName } from '../../utils/aiI18n';
 import {
   parseCanvasClipboardPayload,
@@ -49,6 +50,7 @@ export interface CanvasContextMenuActions {
   linkNodesToHub: (nodeIds: string[], hubId: string) => void;
   /** 生图节点：把当前结果输出成独立的 image 节点并连线。 */
   outputAsImageNode: (nodeId: string) => void;
+  recomputeFrom: (nodeId: string, includeStart: boolean) => void;
   /** 图片/视频/生图结果：另存到用户选定的位置。 */
   saveNodeMediaAs: (nodeId: string) => void;
   /** 连线拖到空白处：建一张卡并从 `fromId` 连过去。 */
@@ -71,6 +73,10 @@ export interface CanvasContextMenuProps {
   /** 供「链接到画布」子菜单列出可跳转的目标。 */
   canvases: Canvas[];
   activeCanvasId: string;
+  /** 沿边重算要按连线走一遍，才知道下游有没有可重算的节点。 */
+  edges: { from: string; to: string; id: string; canvasId?: string }[];
+  /** AI 或重算正忙时禁用重算入口。 */
+  isRecomputeDisabled?: boolean;
   nodesById: Map<string, CanvasNode>;
   selectedNodes: Set<string>;
   actions: CanvasContextMenuActions;
@@ -84,6 +90,8 @@ export function CanvasContextMenu({
   agentConfigs,
   canvases,
   activeCanvasId,
+  edges,
+  isRecomputeDisabled = false,
   nodesById,
   selectedNodes,
   actions,
@@ -208,6 +216,32 @@ export function CanvasContextMenu({
           onSelect: () => actions.startLink(nodeId),
         },
       );
+      /*
+        沿边重算。两个入口分开给，因为它们回答的是两个不同的问题：
+        - 站在一张 AI / 生图卡上：「这张过时了，重新生成」——含自己
+        - 站在一张便签上：「我刚改了它，把顺着线的下游都刷一遍」——不含自己
+        下游没有可重算节点时不显示，免得给一个点了什么都不会发生的菜单项。
+      */
+      const hasRecomputableDownstream =
+        planRecompute(nodeId, [...nodesById.values()], edges).length > 0;
+      if (nodeType === 'ai' || nodeType === 'imagegen') {
+        primary.push({
+          id: 'regenerate',
+          label: t('canvas.menu.regenerate'),
+          icon: RefreshCw,
+          disabled: isRecomputeDisabled,
+          onSelect: () => actions.recomputeFrom(nodeId, true),
+        });
+      }
+      if (hasRecomputableDownstream) {
+        primary.push({
+          id: 'recompute-downstream',
+          label: t('canvas.menu.recompute_downstream'),
+          icon: RefreshCw,
+          disabled: isRecomputeDisabled,
+          onSelect: () => actions.recomputeFrom(nodeId, false),
+        });
+      }
       // 生图节点：把当前结果固化成一个普通图片节点，方便当作下游参考图或导出
       if (nodeType === 'imagegen' && (node?.imageGenResults?.length ?? 0) > 0) {
         primary.push({
@@ -357,7 +391,7 @@ export function CanvasContextMenu({
     });
 
     return result;
-  }, [menu, t, actions, agentConfigs, canvases, activeCanvasId, nodesById, selectedNodes, pasteable, isSynthesizeDisabled]);
+  }, [menu, t, actions, agentConfigs, canvases, activeCanvasId, edges, isRecomputeDisabled, nodesById, selectedNodes, pasteable, isSynthesizeDisabled]);
 
   return (
     <ContextMenuSurface

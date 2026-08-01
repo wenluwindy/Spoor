@@ -646,10 +646,77 @@ export function useAiActions({
     }
   };
 
+  /**
+   * 就地重跑一张 AI 卡片。
+   *
+   * 只有**带着来历**的卡片能重跑：知道当初是哪个人设、基于哪张便签生成的
+   * （`threadAgentConfigId` + `threadRootContextNodeId`），才谈得上"用同样的方式再来一次"。
+   * 工具栏随手生成的卡片没有记下提示词，重跑出来的会是另一回事，所以直接跳过而不是瞎猜。
+   *
+   * 内容写回**同一个节点**，不新建卡片：沿边重算的语义是"这张卡过时了，刷新它"，
+   * 每重算一次多出一张卡的话，跑三轮画布上就堆了一片。
+   *
+   * @returns 'ok' 跑完了；'skipped' 这张卡没有来历；'failed' 调用出错
+   */
+  const regenerateAiNode = async (nodeId: string): Promise<'ok' | 'skipped' | 'failed'> => {
+    const node = dynamicNodes.find((n) => n.id === nodeId);
+    if (!node || node.type !== 'ai') return 'skipped';
+
+    const agentConfigId = node.threadAgentConfigId;
+    const contextNodeId = node.threadRootContextNodeId;
+    const agentConfig = agentConfigId ? agentConfigs.find((a) => a.id === agentConfigId) : undefined;
+    if (!agentConfig || !contextNodeId) return 'skipped';
+
+    const contextEl = nodesRef.current[contextNodeId];
+    const contextText = contextEl ? getCanvasNodeContextText(contextEl).trim() : '';
+    if (!contextText) return 'skipped';
+
+    const images = resolveImageDataUrlsFromNodeIds(node.threadContextImageNodeIds, dynamicNodes);
+    const followUp = node.userTurn?.trim();
+    // 追问卡要连着上文一起重跑，否则重跑出来的回答会脱离对话
+    const chain = collectAiThreadChain(dynamicNodes, edges, nodeId);
+    const history = formatAgentThreadDialogueHistory(chain.filter((c) => c.id !== nodeId));
+
+    setStreamingAiNodeId(nodeId);
+    try {
+      await runCanvasStreamingAiCall({
+        nodeId,
+        callAi: (onStreamChunk) =>
+          callUniversalAI({
+            config: aiConfig,
+            systemInstruction: buildAgentSystemInstruction(agentConfig),
+            prompt: followUp
+              ? t('ai.prompts.agentThreadFollowUp', {
+                  initialContext: contextText,
+                  dialogueHistory: history,
+                  request: followUp,
+                })
+              : t('ai.prompts.agentContext', { content: contextText }),
+            temperature: agentConfig.temperature ?? 0.7,
+            topP: agentConfig.creativity ?? 0.4,
+            images: images.length > 0 ? images : undefined,
+            onStreamChunk,
+          }),
+      });
+      return 'ok';
+    } catch (e) {
+      console.error('[Spoor] regenerateAiNode failed', {
+        error: formatAiError(e),
+        provider: aiConfig.provider,
+        model: aiConfig.model,
+        apiKey: maskApiKeyForLog(aiConfig.apiKey),
+      });
+      return 'failed';
+    } finally {
+      setStreamingAiNodeId(null);
+    }
+  };
+
   return {
     isPublishing,
     isToolbarAiLoading,
     analyzingAgentNodeId,
+    regenerateAiNode,
     followUpParentId,
     streamingAiNodeId,
     isAnyAiBusy,

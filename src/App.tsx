@@ -72,6 +72,7 @@ import { useAiActions } from './hooks/useAiActions';
 import { useNativeFileDrop } from './hooks/useNativeFileDrop';
 import { useImageGenActions } from './hooks/useImageGenActions';
 import { useWebNodeActions } from './hooks/useWebNodeActions';
+import { useCanvasRecompute } from './hooks/useCanvasRecompute';
 import { isFetchableUrl } from './services/webPage';
 import { migrateBase64MediaNodes } from './services/migrateBase64Media';
 import {
@@ -540,6 +541,7 @@ export default function App() {
     isToolbarAiLoading,
     isToolbarIntentPreflight,
     analyzingAgentNodeId,
+    regenerateAiNode,
     followUpParentId,
     streamingAiNodeId,
     isAnyAiBusy,
@@ -722,6 +724,29 @@ export default function App() {
     }
   }, [activeCanvasId, canvases, transformRef, appAlert, t]);
 
+  /**
+   * 沿边重算：改了上游之后，把顺着连线的下游 AI 卡与生图节点按依赖顺序重跑一遍。
+   * 这是 Flora / Figma Weave 那类节点画布的核心心智，Spoor 早就有边，缺的只是执行器。
+   */
+  const { recompute, recomputingNodeIds, isRecomputing } = useCanvasRecompute({
+    nodes: dynamicNodes,
+    edges,
+    regenerateAiNode,
+    regenerateImageNode: generateImage,
+  });
+
+  const runRecompute = useCallback(
+    async (nodeId: string, includeStart: boolean) => {
+      const summary = await recompute(nodeId, includeStart);
+      // 全跳过时说一声：多半是这些卡片没记下来历（工具栏随手生成的），
+      // 静默什么都不发生会让人以为功能坏了
+      if (summary.ran === 0 && summary.skipped > 0) {
+        await appAlert({ message: t('canvas.recompute_all_skipped', { count: summary.skipped }) });
+      }
+    },
+    [recompute, appAlert, t],
+  );
+
   /** 另存为：图片/视频用原件路径，生图节点用当前选中的那一张结果。 */
   const saveNodeMediaAsFromCanvas = useCallback(
     async (nodeId: string) => {
@@ -761,6 +786,7 @@ export default function App() {
       clearSelection: () => clearSelection(),
       deleteNodes: (nodeIds) => void deleteNodes(nodeIds),
       outputAsImageNode: (nodeId) => void outputAsImageNode(nodeId),
+      recomputeFrom: (nodeId, includeStart) => void runRecompute(nodeId, includeStart),
       saveNodeMediaAs: (nodeId) => void saveNodeMediaAsFromCanvas(nodeId),
       createNodeLinkedFrom: (nodeType, at, fromId) => {
         setConnectingFrom(null);
@@ -781,7 +807,7 @@ export default function App() {
       createNodeAt, insertFilesAt, insertPathsAt, addAgentNodeAt, addCanvasLinkNodeAt, pasteClipboardAt, setCanvasTransform,
       duplicateNode, handleLink, toggleNodeSelection, removeNodeId, deleteEdge,
       linkNodesToHub, handlePublish, clearSelection, deleteNodes, outputAsImageNode,
-      saveNodeMediaAsFromCanvas, createNodeAtLinkedFrom, linkNodes,
+      saveNodeMediaAsFromCanvas, createNodeAtLinkedFrom, linkNodes, runRecompute,
     ],
   );
 
@@ -1129,6 +1155,8 @@ export default function App() {
             agentConfigs={agentConfigs}
             canvases={canvases}
             activeCanvasId={activeCanvasId}
+            edges={edges}
+            isRecomputeDisabled={isAnyAiBusy || isRecomputing}
             nodesById={nodesById}
             selectedNodes={selectedNodes}
             actions={contextMenuActions}
