@@ -164,6 +164,16 @@ export function useNodeActions({
     return id;
   };
 
+  /** 跨画布传送门：一张指向另一张画布的卡片。 */
+  const addCanvasLinkNodeAt = async (targetCanvasId: string, at?: CanvasPoint) => {
+    const { x, y } = resolvePosition(at);
+    const id = crypto.randomUUID();
+    await addNodesRecorded(activeCanvasId, [
+      { id, canvasId: activeCanvasId, type: 'canvasLink', targetCanvasId, x, y, width: 260 },
+    ]);
+    return id;
+  };
+
   /** 供右键菜单按 `CanvasCreateItemDef.nodeType` 统一分发。返回新节点 id。 */
   const createNodeAt = async (nodeType: 'text' | 'theme' | 'imagegen', at?: CanvasPoint) => {
     if (nodeType === 'theme') return addThemeNode(at);
@@ -361,6 +371,7 @@ export function useNodeActions({
     createNodeAtLinkedFrom,
     linkNodes,
     addAgentNodeAt,
+    addCanvasLinkNodeAt,
     insertFilesAt,
     insertPathsAt,
     duplicateNode,

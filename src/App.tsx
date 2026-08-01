@@ -388,7 +388,7 @@ export default function App() {
   const {
     toggleNodeSelection, handleLink, deleteEdge, removeNodeId,
     createNodeAt, createNodeAtLinkedFrom, linkNodes, addAgentNodeAt, insertFilesAt, insertPathsAt, duplicateNode, pasteClipboardAt,
-    clearSelection, deleteNodes, linkNodesToHub, duplicateNodes, nudgeNodes,
+    clearSelection, deleteNodes, linkNodesToHub, duplicateNodes, nudgeNodes, addCanvasLinkNodeAt,
   } = useNodeActions({
     activeCanvasId, nodesRef, connectingFrom, setConnectingFrom, edges, selectedNodes, setSelectedNodes, transformRef,
   });
@@ -456,6 +456,42 @@ export default function App() {
     () => new Map(dynamicNodes.map((n) => [n.id, n])),
     [dynamicNodes],
   );
+
+  /**
+   * 跨画布传送门。
+   *
+   * `type` 上有索引，所以「全库的传送门」这个查询很便宜，可以一直挂着——反链
+   * （谁指向当前画布）要靠它，而反链要在切画布后立刻是对的。
+   */
+  const canvasLinkNodes = useLiveQuery(() => db.nodes.where('type').equals('canvasLink').toArray()) || [];
+
+  /** 当前画布上的传送门指向了哪些画布，各有多少张卡片。 */
+  const portalTargetIds = React.useMemo(
+    () => [...new Set(dynamicNodes.filter((n) => n.type === 'canvasLink' && n.targetCanvasId).map((n) => n.targetCanvasId!))],
+    [dynamicNodes],
+  );
+  const portalTargetKey = portalTargetIds.join(',');
+  const targetNodeCountByCanvasId = useLiveQuery(async () => {
+    const counts = new Map<string, number>();
+    for (const id of portalTargetIds) {
+      counts.set(id, await db.nodes.filter((n) => (n.canvasId || 'default') === id).count());
+    }
+    return counts;
+  }, [portalTargetKey]) || new Map<string, number>();
+
+  /** 反链：目标画布 id → 指向它的那些画布 id（去重）。 */
+  const backlinksByCanvasId = React.useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const node of canvasLinkNodes) {
+      if (!node.targetCanvasId) continue;
+      const source = node.canvasId || 'default';
+      if (source === node.targetCanvasId) continue;
+      const list = map.get(node.targetCanvasId) ?? [];
+      if (!list.includes(source)) list.push(source);
+      map.set(node.targetCanvasId, list);
+    }
+    return map;
+  }, [canvasLinkNodes]);
 
   /** 右键落在已多选的成员上时走批量菜单；否则按单节点处理且不清空既有选中。 */
   const openNodeContextMenu = useCallback(
@@ -681,6 +717,7 @@ export default function App() {
             : insertFilesAt(picked.files, at),
         ),
       addAgentNode: (agentConfigId, at) => void addAgentNodeAt(agentConfigId, at),
+      addCanvasLink: (targetCanvasId, at) => void addCanvasLinkNodeAt(targetCanvasId, at),
       pasteNodes: (payload, at) => void pasteClipboardAt(payload, at),
       resetView: () => setCanvasTransform({ x: 0, y: 0, scale: 1 }),
       editNode: (nodeId) => setEditingNodeId(nodeId),
@@ -711,7 +748,7 @@ export default function App() {
       },
     }),
     [
-      createNodeAt, insertFilesAt, insertPathsAt, addAgentNodeAt, pasteClipboardAt, setCanvasTransform,
+      createNodeAt, insertFilesAt, insertPathsAt, addAgentNodeAt, addCanvasLinkNodeAt, pasteClipboardAt, setCanvasTransform,
       duplicateNode, handleLink, toggleNodeSelection, removeNodeId, deleteEdge,
       linkNodesToHub, handlePublish, clearSelection, deleteNodes, outputAsImageNode,
       saveNodeMediaAsFromCanvas, createNodeAtLinkedFrom, linkNodes,
@@ -884,6 +921,7 @@ export default function App() {
             activeCanvasId={activeCanvasId}
             setActiveCanvasId={setActiveCanvasId}
             onExportImage={() => void exportCanvasImage()}
+            backlinksByCanvasId={backlinksByCanvasId}
           />
 
           {isSearchOpen && (
@@ -1007,6 +1045,9 @@ export default function App() {
                     onImageGenPatch={(id, patch) => void patchImageGenNode(id, patch)}
                     onImageGenDeleteResult={(id, index) => void deleteImageResult(id, index)}
                     onImageGenSetActiveIndex={(id, index) => void setImageActiveIndex(id, index)}
+                    canvases={canvases}
+                    targetNodeCountByCanvasId={targetNodeCountByCanvasId}
+                    onOpenCanvas={setActiveCanvasId}
                   />
                 </DraggableNode>
               );
@@ -1048,6 +1089,8 @@ export default function App() {
             menu={contextMenu}
             onClose={closeContextMenu}
             agentConfigs={agentConfigs}
+            canvases={canvases}
+            activeCanvasId={activeCanvasId}
             nodesById={nodesById}
             selectedNodes={selectedNodes}
             actions={contextMenuActions}

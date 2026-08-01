@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, Edit3, FileText, History, ImageDown, Plus, Trash2, Upload } from 'lucide-react';
+import { CornerUpLeft, Download, Edit3, FileText, History, ImageDown, Plus, Trash2, Upload } from 'lucide-react';
 import { db } from '../db';
 import type { Canvas } from '../db';
 import { Tooltip } from './ui/Tooltip';
@@ -18,6 +18,8 @@ export interface CanvasHistoryPopoverProps {
   setActiveCanvasId: (id: string) => void;
   /** 导出 PNG。实现在 App——它要摸画布 DOM 才能量出内容包围盒。 */
   onExportImage: () => void;
+  /** 反链：画布 id → 有传送门指向它的那些画布 id。 */
+  backlinksByCanvasId?: Map<string, string[]>;
 }
 
 export function CanvasHistoryPopover({
@@ -25,6 +27,7 @@ export function CanvasHistoryPopover({
   activeCanvasId,
   setActiveCanvasId,
   onExportImage,
+  backlinksByCanvasId,
 }: CanvasHistoryPopoverProps) {
   const { t } = useTranslation();
   const { alert: appAlert, confirm } = useAppDialog();
@@ -203,6 +206,32 @@ export function CanvasHistoryPopover({
                     </div>
                   )}
                   <div className="text-[10px] text-app-text-faint">{new Date(canvas.createdAt).toLocaleString()}</div>
+                  {/*
+                    反链只在当前画布这一行展开：一次只回答一个问题——「现在这张画布，
+                    是从哪些地方指过来的」。每行都展开会把列表撑成一片链接墙。
+                  */}
+                  {activeCanvasId === canvas.id && (backlinksByCanvasId?.get(canvas.id)?.length ?? 0) > 0 && (
+                    <div className="mt-1.5 pt-1.5 border-t border-app-surface-subtle">
+                      <div className="text-[10px] text-app-text-faint mb-0.5">
+                        {t('canvas.backlinks', {
+                          count: backlinksByCanvasId!.get(canvas.id)!.length,
+                        })}
+                      </div>
+                      {backlinksByCanvasId!.get(canvas.id)!.map((sourceId) => (
+                        <button
+                          key={sourceId}
+                          onClick={() => {
+                            setActiveCanvasId(sourceId);
+                            setIsOpen(false);
+                          }}
+                          className="w-full text-left text-[11px] text-app-text-muted hover:text-app-accent truncate py-0.5 flex items-center gap-1"
+                        >
+                          <CornerUpLeft className="w-3 h-3 shrink-0" />
+                          {canvases.find((c) => c.id === sourceId)?.name ?? sourceId}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

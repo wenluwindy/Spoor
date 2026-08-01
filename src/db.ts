@@ -34,6 +34,37 @@ export interface CanvasNode {
   /** Agent 分析链：首轮附带的多模态图片节点 id（便签/Agent 邻接 image）；子卡从父卡复制 */
   threadContextImageNodeIds?: string[];
 
+  // ── type === 'canvasLink'（跨画布传送门）──
+  /**
+   * 指向哪张画布。目标被删掉时这里会指向一个不存在的 id——渲染层据此显示「已删除」，
+   * 而不是把卡片一起删掉：留着这张卡至少还看得出"这里原本连去别处"。
+   */
+  targetCanvasId?: string;
+
+  // ── type === 'web'（网页卡片）──
+  url?: string;
+  urlTitle?: string;
+  urlSiteName?: string;
+  /** 正文摘要，同时作为 AI 上下文。 */
+  urlExcerpt?: string;
+  /** 封面图的**远程**地址（不落盘：一张封面不值得占一份本地存储）。 */
+  urlImage?: string;
+  urlFetchedAt?: number;
+  /** 抓取失败的原因码，重开画布时仍显示错误态。 */
+  urlError?: string;
+
+  // ── type === 'document' 且 fileType === 'pdf' ──
+  /** 上次读到第几页（1 起）。 */
+  pdfPage?: number;
+  pdfPageCount?: number;
+
+  // ── type === 'frame'（区域框）──
+  /**
+   * 框内成员**按几何关系判定**（拖动时取框内的卡片），不存 parentId。
+   * 存一份成员表意味着每次移动、删除、撤销都要维护它的一致性，而画布上"在不在框里"
+   * 本来就是看出来的——让数据跟着眼睛走，比让眼睛跟着数据走可靠。
+   */
+
   // ── type === 'imagegen' ──
   /** 用哪个服务商/模型生图；为空时用设置里的全局默认。 */
   imageGenProviderId?: string;

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import type { AgentConfig, CanvasNode } from '../../src/db';
+import type { AgentConfig, Canvas, CanvasNode } from '../../src/db';
 import {
   CanvasContextMenu,
   type CanvasContextMenuActions,
@@ -52,6 +52,7 @@ function makeActions(): CanvasContextMenuActions {
     createNode: vi.fn(),
     insertFile: vi.fn(),
     addAgentNode: vi.fn(),
+    addCanvasLink: vi.fn(),
     pasteNodes: vi.fn(),
     resetView: vi.fn(),
     editNode: vi.fn(),
@@ -92,6 +93,8 @@ function renderMenu({
   actions = makeActions(),
   onClose = vi.fn(),
   isSynthesizeDisabled = false,
+  canvases = [],
+  activeCanvasId = 'c1',
 }: {
   target: CanvasContextMenuState['target'];
   nodes?: CanvasNode[];
@@ -100,12 +103,16 @@ function renderMenu({
   actions?: CanvasContextMenuActions;
   onClose?: () => void;
   isSynthesizeDisabled?: boolean;
+  canvases?: Canvas[];
+  activeCanvasId?: string;
 }) {
   render(
     <CanvasContextMenu
       menu={makeMenu(target)}
       onClose={onClose}
       agentConfigs={agents}
+      canvases={canvases}
+      activeCanvasId={activeCanvasId}
       nodesById={nodesMap(nodes)}
       selectedNodes={selected}
       actions={actions}

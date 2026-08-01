@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Copy, Download, ImageDown, Link2, Pencil, PenLine, RotateCcw, Square, SquareCheckBig, Trash2 } from 'lucide-react';
-import type { AgentConfig, CanvasNode } from '../../db';
+import { Bot, Copy, Download, ImageDown, Layers, Link2, Pencil, PenLine, RotateCcw, Square, SquareCheckBig, Trash2 } from 'lucide-react';
+import type { AgentConfig, Canvas, CanvasNode } from '../../db';
 import { isTauriRuntime } from '../../utils/isTauriRuntime';
 import { CANVAS_CREATE_ITEMS, CANVAS_INSERT_ITEMS } from '../../constants/canvasMenuItems';
 import { nodeSupportsInlineEdit } from '../../constants/nodeCapabilities';
@@ -36,6 +36,7 @@ export interface CanvasContextMenuActions {
   createNode: (nodeType: 'text' | 'theme' | 'imagegen', at: CanvasPoint) => void;
   insertFile: (accept: string, at: CanvasPoint) => void;
   addAgentNode: (agentConfigId: string, at: CanvasPoint) => void;
+  addCanvasLink: (targetCanvasId: string, at: CanvasPoint) => void;
   pasteNodes: (payload: CanvasClipboardPayloadV2, at: CanvasPoint) => void;
   resetView: () => void;
   editNode: (nodeId: string) => void;
@@ -67,6 +68,9 @@ export interface CanvasContextMenuProps {
   menu: CanvasContextMenuState;
   onClose: () => void;
   agentConfigs: AgentConfig[];
+  /** 供「链接到画布」子菜单列出可跳转的目标。 */
+  canvases: Canvas[];
+  activeCanvasId: string;
   nodesById: Map<string, CanvasNode>;
   selectedNodes: Set<string>;
   actions: CanvasContextMenuActions;
@@ -78,6 +82,8 @@ export function CanvasContextMenu({
   menu,
   onClose,
   agentConfigs,
+  canvases,
+  activeCanvasId,
   nodesById,
   selectedNodes,
   actions,
@@ -309,6 +315,26 @@ export function CanvasContextMenu({
       });
     }
 
+    // 只有存在别的画布时才给这一项：链接到自己没有意义
+    const linkTargets = canvases.filter((c) => c.id !== activeCanvasId);
+    if (linkTargets.length > 0) {
+      result.push({
+        id: 'canvas-links',
+        entries: [
+          {
+            id: 'add-canvas-link',
+            label: t('canvas.menu.link_to_canvas'),
+            icon: Layers,
+            submenu: linkTargets.map((canvas) => ({
+              id: `canvas-link-${canvas.id}`,
+              label: canvas.name,
+              onSelect: () => actions.addCanvasLink(canvas.id, at),
+            })),
+          },
+        ],
+      });
+    }
+
     result.push({
       id: 'misc',
       entries: [
@@ -331,7 +357,7 @@ export function CanvasContextMenu({
     });
 
     return result;
-  }, [menu, t, actions, agentConfigs, nodesById, selectedNodes, pasteable, isSynthesizeDisabled]);
+  }, [menu, t, actions, agentConfigs, canvases, activeCanvasId, nodesById, selectedNodes, pasteable, isSynthesizeDisabled]);
 
   return (
     <ContextMenuSurface
