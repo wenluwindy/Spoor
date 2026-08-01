@@ -388,3 +388,32 @@ html[data-theme='neo'] {
   .doc-content blockquote { border-left: 3px solid var(--color-app-border); padding-left: 1em; margin: 0 0 0.8em; font-style: italic; }
   .doc-content a { color: var(--color-app-accent); text-decoration: underline; }
 }
+
+/*
+ * PDF 文字层：pdf.js 按页面视口把每段文字绝对定位在这里，透明地压在渲染好的画布上。
+ * 它唯一的作用是让文字**可以选中**——「摘录选中的部分」正是 PDF 卡片存在的理由。
+ * 不能改成 visibility:hidden 或 display:none：那样选区就选不到了。
+ */
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0.25;
+  line-height: 1;
+  /* pdf.js 内部按这个变量算字号缩放 */
+  --total-scale-factor: 1;
+}
+
+.pdf-text-layer span,
+.pdf-text-layer br {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.pdf-text-layer ::selection {
+  background: var(--color-app-accent);
+  color: transparent;
+}

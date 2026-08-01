@@ -79,9 +79,9 @@ export const CANVAS_INSERT_ITEMS: readonly CanvasInsertItemDef[] = [
     id: 'document',
     labelKey: 'canvas.menu.insert_document',
     icon: FileText,
-    accept: '.docx,.txt,.md',
+    accept: '.pdf,.docx,.txt,.md',
   },
 ] as const;
 
 /** 上传按钮/拖放沿用的全类型 accept（与 `CANVAS_INSERT_ITEMS` 的并集一致）。 */
-export const CANVAS_ALL_FILE_ACCEPT = 'image/*,video/*,.docx,.txt,.md';
+export const CANVAS_ALL_FILE_ACCEPT = 'image/*,video/*,.pdf,.docx,.txt,.md';

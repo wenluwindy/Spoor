@@ -10,6 +10,7 @@ import { AgentNode } from './AgentNode';
 import { ImageGenNode } from './ImageGenNode';
 import { CanvasLinkNode } from './CanvasLinkNode';
 import { WebNode } from './WebNode';
+import { PdfNode } from './PdfNode';
 import type { AIConfigV2 } from '../../types/aiConfig';
 
 /** 画布对某些 `type` 挂载的控件与各分支对应关系见 `src/constants/nodeCapabilities.ts`。 */
@@ -43,6 +44,9 @@ interface NodeRendererProps {
   /** 网页卡片：抓取中的节点集合与「抓一次」动作。 */
   fetchingWebNodeIds?: Set<string>;
   onWebFetch?: (nodeId: string, url: string) => void;
+  /** PDF：摘录成便签、记住读到第几页。 */
+  onPdfExtract?: (nodeId: string, text: string) => void;
+  onPdfPageChange?: (nodeId: string, page: number, pageCount: number) => void;
 }
 
 export function NodeRenderer({
@@ -71,6 +75,8 @@ export function NodeRenderer({
   onOpenCanvas,
   fetchingWebNodeIds,
   onWebFetch,
+  onPdfExtract,
+  onPdfPageChange,
 }: NodeRendererProps) {
   switch (node.type) {
     case 'theme':
@@ -101,6 +107,20 @@ export function NodeRenderer({
     case 'video':
       return <VideoNode node={node} editingNodeId={editingNodeId} setEditingNodeId={setEditingNodeId} />;
     case 'document':
+      // PDF 与 docx/txt 都是 document 类型，但一个要翻页阅读、一个只是正文
+      if (node.fileType === 'pdf') {
+        return (
+          <PdfNode
+            node={node}
+            editingNodeId={editingNodeId}
+            setEditingNodeId={setEditingNodeId}
+            onExtract={onPdfExtract ? (text) => onPdfExtract(node.id, text) : undefined}
+            onPageChange={
+              onPdfPageChange ? (page, count) => onPdfPageChange(node.id, page, count) : undefined
+            }
+          />
+        );
+      }
       return <DocumentNode node={node} editingNodeId={editingNodeId} setEditingNodeId={setEditingNodeId} />;
     case 'imagegen':
       // 配置/连线没传进来说明调用方还没接生图（比如某些独立渲染场景），不渲染比崩掉好

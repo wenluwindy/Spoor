@@ -176,6 +176,37 @@ export function useNodeActions({
     return id;
   };
 
+  /**
+   * 从某张卡片里摘一段出来，变成旁边一张便签，并连一条边回去。
+   *
+   * PDF 摘录用它。**连线不是装饰**：三个月后想弄清"这句话是从哪来的"，
+   * 靠的就是这条线。因此便签与连线记成同一步撤销——撤销一次应该两个都没了。
+   */
+  const extractNoteFrom = async (sourceNodeId: string, text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return null;
+    const source = await db.nodes.get(sourceNodeId);
+    if (!source) return null;
+
+    const noteId = crypto.randomUUID();
+    const [created] = await addNodesAndEdgesRecorded(
+      activeCanvasId,
+      [
+        {
+          id: noteId,
+          canvasId: activeCanvasId,
+          type: 'text',
+          content: trimmed,
+          x: source.x + (source.width ?? 320) + 60,
+          y: source.y,
+          width: 300,
+        },
+      ],
+      [{ id: crypto.randomUUID(), canvasId: activeCanvasId, from: sourceNodeId, to: noteId }],
+    );
+    return created ?? null;
+  };
+
   /** 跨画布传送门：一张指向另一张画布的卡片。 */
   const addCanvasLinkNodeAt = async (targetCanvasId: string, at?: CanvasPoint) => {
     const { x, y } = resolvePosition(at);
@@ -386,6 +417,7 @@ export function useNodeActions({
     addAgentNodeAt,
     addCanvasLinkNodeAt,
     addWebNodeAt,
+    extractNoteFrom,
     insertFilesAt,
     insertPathsAt,
     duplicateNode,

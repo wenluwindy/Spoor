@@ -52,6 +52,9 @@ export function classifyFile(name: string, mime = ''): {
   const ext = extensionOf(name).toLowerCase();
 
   if (ext === 'docx') return { kind: 'document', fileType: 'docx' };
+  // PDF 走文档节点，但正文不入库：整本书的文字塞进 IndexedDB 没有意义，
+  // 阅读与摘录都由 PdfNode 现场从原件里解析
+  if (ext === 'pdf') return { kind: 'document', fileType: 'pdf' };
   if (ext === 'txt') return { kind: 'text', fileType: 'text/plain' };
   if (ext === 'md' || ext === 'markdown') return { kind: 'text', fileType: 'text/markdown' };
   if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif'].includes(ext)) {

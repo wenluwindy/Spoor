@@ -178,7 +178,7 @@ describe('CanvasContextMenu', () => {
     it('插入文档的 accept 覆盖 docx/txt/md', () => {
       const { actions } = renderMenu({ target: { kind: 'canvas' } });
       fireEvent.pointerDown(screen.getByText('插入文档…'));
-      expect(actions.insertFile).toHaveBeenCalledWith('.docx,.txt,.md', { x: 40, y: 25 });
+      expect(actions.insertFile).toHaveBeenCalledWith('.pdf,.docx,.txt,.md', { x: 40, y: 25 });
     });
 
     it('助手为二级菜单，悬停后列出全部人设', () => {

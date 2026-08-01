@@ -403,7 +403,7 @@ export default function App() {
   const {
     toggleNodeSelection, handleLink, deleteEdge, removeNodeId,
     createNodeAt, createNodeAtLinkedFrom, linkNodes, addAgentNodeAt, insertFilesAt, insertPathsAt, duplicateNode, pasteClipboardAt,
-    clearSelection, deleteNodes, linkNodesToHub, duplicateNodes, nudgeNodes, addCanvasLinkNodeAt, addWebNodeAt,
+    clearSelection, deleteNodes, linkNodesToHub, duplicateNodes, nudgeNodes, addCanvasLinkNodeAt, addWebNodeAt, extractNoteFrom,
   } = useNodeActions({
     activeCanvasId, nodesRef, connectingFrom, setConnectingFrom, edges, selectedNodes, setSelectedNodes, transformRef,
   });
@@ -1080,6 +1080,12 @@ export default function App() {
                     onOpenCanvas={setActiveCanvasId}
                     fetchingWebNodeIds={fetchingWebNodeIds}
                     onWebFetch={(id, url) => void fetchWebNode(id, url)}
+                    onPdfExtract={(id, text) => void extractNoteFrom(id, text)}
+                    onPdfPageChange={(id, page, pageCount) => {
+                      // 读到第几页不是一次编辑，不进撤销栈——Ctrl+Z 应该撤掉的是内容改动，
+                      // 而不是把人翻回上一页
+                      void db.nodes.update(id, { pdfPage: page, pdfPageCount: pageCount });
+                    }}
                   />
                 </DraggableNode>
               );
