@@ -60,6 +60,7 @@ import {
 import { CanvasSearchPanel } from './components/canvas/CanvasSearchPanel';
 import { searchCanvasNodes, stepSearchIndex } from './utils/canvasSearch';
 import { DEFAULT_FRAME_HEIGHT, DEFAULT_FRAME_WIDTH, groupIdsForDrag } from './services/canvasFrame';
+import { visibleNodeIds } from './utils/viewportCulling';
 import {
   CanvasImageExportError,
   renderCanvasImage,
@@ -220,21 +221,74 @@ export default function App() {
     [editingNodeId, dynamicNodes, handlePanStart, handleMarqueeStart, connectingFrom, dropLinkOnCanvas],
   );
 
+  /**
+   * 视口裁剪。
+   *
+   * 卡片超过阈值时只渲染看得见的那些（与可见节点相连的也留着，否则连线会整根消失）。
+   * 导出与「缩放至适应内容」要量全部内容的包围盒，靠 `withAllNodesRendered` 临时关掉它。
+   *
+   * 视口尺寸从 DOM 现取、以 transform 为依赖：平移缩放都会重算。窗口缩放而不平移的
+   * 极端情况下会短暂失准，下一次平移即自愈——不值得为它再挂一个 resize 监听。
+   */
+  const [renderAllNodes, setRenderAllNodes] = useState(false);
+
+  const culledNodeIds = React.useMemo(() => {
+    if (renderAllNodes) return null;
+    const rect = mainRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    return visibleNodeIds(
+      dynamicNodes,
+      edges,
+      { width: rect.width, height: rect.height },
+      canvasTransform,
+    );
+  }, [renderAllNodes, dynamicNodes, edges, canvasTransform]);
+
+  const renderedNodes = React.useMemo(
+    () => (culledNodeIds ? dynamicNodes.filter((n) => culledNodeIds.has(n.id)) : dynamicNodes),
+    [culledNodeIds, dynamicNodes],
+  );
+
+  /**
+   * 临时全量渲染，跑完再恢复。
+   *
+   * 导出图片与缩放至适应内容都靠 DOM 量包围盒，裁剪开着的话它们只能看到当前屏幕这一块。
+   * 等两帧是为了让 React 提交完这次渲染——只等一帧时 DOM 还没落地。
+   */
+  const withAllNodesRendered = useCallback(
+    async <T,>(fn: () => T | Promise<T>): Promise<T> => {
+      if (!culledNodeIds) return fn();
+      setRenderAllNodes(true);
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve(null))),
+      );
+      try {
+        return await fn();
+      } finally {
+        setRenderAllNodes(false);
+      }
+    },
+    [culledNodeIds],
+  );
+
   /** 缩放至适应全部内容：把所有节点的包围盒装进视口。 */
   const handleZoomToFit = useCallback(() => {
-    const main = mainRef.current;
-    if (!main) return;
-    const containerRect = main.getBoundingClientRect();
-    const bounds = unionNodeBoundsInCanvasSpace(
-      Object.values(nodesRef.current),
-      containerRect,
-      transformRef.current ?? { x: 0, y: 0, scale: 1 },
-    );
-    if (!bounds) return;
-    setCanvasTransform(
-      computeFitTransform(bounds, { width: containerRect.width, height: containerRect.height }),
-    );
-  }, [transformRef, setCanvasTransform]);
+    // 裁剪开着时先把全部节点渲染出来，否则量到的只是当前屏幕这一块
+    void withAllNodesRendered(() => {
+      const main = mainRef.current;
+      if (!main) return;
+      const containerRect = main.getBoundingClientRect();
+      const bounds = unionNodeBoundsInCanvasSpace(
+        Object.values(nodesRef.current),
+        containerRect,
+        transformRef.current ?? { x: 0, y: 0, scale: 1 },
+      );
+      if (!bounds) return;
+      setCanvasTransform(
+        computeFitTransform(bounds, { width: containerRect.width, height: containerRect.height }),
+      );
+    });
+  }, [transformRef, setCanvasTransform, withAllNodesRendered]);
 
   /**
    * 配置以 v2（多服务商）存放，读出来时统一过一遍 normalizeAiConfig：
@@ -710,21 +764,24 @@ export default function App() {
 
     const canvasName = canvases.find((c) => c.id === activeCanvasId)?.name ?? activeCanvasId;
     try {
-      const dataUrl = await renderCanvasImage({
-        contentContainer: content,
-        viewport: main,
-        transform: transformRef.current ?? { x: 0, y: 0, scale: 1 },
-        nodeElements: Object.values(nodesRef.current),
-        format: 'png',
-        // 底色跟着当前主题走，导出的图才和屏幕上看到的是同一张
-        backgroundColor: getComputedStyle(main).backgroundColor || '#ffffff',
-      });
+      // 同上：导的是整张画布，裁剪期间必须先把全部节点渲染出来
+      const dataUrl = await withAllNodesRendered(() =>
+        renderCanvasImage({
+          contentContainer: content,
+          viewport: main,
+          transform: transformRef.current ?? { x: 0, y: 0, scale: 1 },
+          nodeElements: Object.values(nodesRef.current),
+          format: 'png',
+          // 底色跟着当前主题走，导出的图才和屏幕上看到的是同一张
+          backgroundColor: getComputedStyle(main).backgroundColor || '#ffffff',
+        }),
+      );
       await saveCanvasImage(`${toSafeFileName(canvasName)}.png`, dataUrl);
     } catch (e) {
       const code = e instanceof CanvasImageExportError ? e.code : 'render_failed';
       await appAlert({ message: t(`canvas.export_image_${code}`) });
     }
-  }, [activeCanvasId, canvases, transformRef, appAlert, t]);
+  }, [activeCanvasId, canvases, transformRef, appAlert, t, withAllNodesRendered]);
 
   /**
    * 沿边重算：改了上游之后，把顺着连线的下游 AI 卡与生图节点按依赖顺序重跑一遍。
@@ -1072,7 +1129,7 @@ export default function App() {
 
             <div className="absolute inset-0 z-30 w-[1px] h-[1px] pointer-events-none"> 
               {/* All Nodes from Database */}
-              {dynamicNodes.map((node) => {
+              {renderedNodes.map((node) => {
                 /** 只有经典外壳（layout 0）带手写便签式的轻微倾斜；形态现在来自全局主题。 */
                 const rotation = 
                   (node.type === 'note' || node.type === 'text') ? (appTheme.noteLayout === 0 ? 1 : 0) :

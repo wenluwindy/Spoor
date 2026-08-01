@@ -1,7 +1,7 @@
-# Build Windows NSIS installer and publish to GitHub Releases on v* tags.
+# Build desktop installers and publish to GitHub Releases on v* tags.
 # Docs: https://v2.tauri.app/distribute/pipelines/github/
 
-name: Release Desktop (Windows)
+name: Release Desktop
 
 on:
   push:
@@ -14,7 +14,22 @@ permissions:
 
 jobs:
   publish-tauri:
-    runs-on: windows-latest
+    strategy:
+      # 一个平台挂掉不该把另一个平台已经跑好的产物一起取消
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            rust-targets: x86_64-pc-windows-msvc
+            args: ''
+          # macOS 出通用二进制：一个 dmg 同时覆盖 Intel 与 Apple Silicon，省得用户自己挑。
+          # `--bundles dmg` 在命令行上覆盖 tauri.conf.json 里的 `["nsis"]`——
+          # 不去动那份配置，Windows 这条已经跑通的链路就一点没被碰过。
+          - platform: macos-latest
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            args: '--target universal-apple-darwin --bundles dmg'
+
+    runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,7 +43,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-pc-windows-msvc
+          targets: ${{ matrix.rust-targets }}
 
       # tauri-action 不装前端依赖（官方示例里也是单列一步）。少了这步，
       # 下面的 `npm run tauri` 找不到 node_modules 里的 tauri CLI，一秒就退出码 1。
@@ -53,7 +68,17 @@ jobs:
             - 首次使用：在应用 **设置 → 模型服务** 中配置 AI 服务商与 API Key（仅存本机）
             - 本地 GGUF 可选，见 [LOCAL_LLM.md](https://github.com/wenluwindy/Spoor/blob/main/docs/guide/LOCAL_LLM.md)
 
+            ## macOS 安装
+
+            下载 **`Spoor_*_universal.dmg`**（Intel 与 Apple Silicon 通用），拖进「应用程序」。
+
+            > **这个包没有签名与公证**：首次打开会被 Gatekeeper 拦下，提示"无法验证开发者"。
+            > 在 Finder 里**右键点击应用 → 打开**，再确认一次即可；或到
+            > 系统设置 → 隐私与安全性 里点"仍要打开"。macOS 上的自动更新同样受此影响，
+            > 请以手动下载新版为准。
+
             完整说明：[发布说明](https://github.com/wenluwindy/Spoor/tree/main/docs/release) · [DESKTOP_INSTALL.md](https://github.com/wenluwindy/Spoor/blob/main/docs/guide/DESKTOP_INSTALL.md)
           releaseDraft: false
           prerelease: false
           tauriScript: npm run tauri
+          args: ${{ matrix.args }}
