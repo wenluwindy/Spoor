@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { History, Plus, Edit3, Trash2 } from 'lucide-react';
+import { Download, Edit3, History, Plus, Trash2, Upload } from 'lucide-react';
 import { db } from '../db';
 import type { Canvas } from '../db';
 import { Tooltip } from './ui/Tooltip';
 import { useAppDialog } from './AppDialogProvider';
 import { deleteCanvasWithContents } from '../services/canvasRepository';
+import { exportCanvasToFile, importCanvasFromFile } from '../services/canvasPortability';
 
 export interface CanvasHistoryPopoverProps {
   canvases: Canvas[];
@@ -15,7 +16,7 @@ export interface CanvasHistoryPopoverProps {
 
 export function CanvasHistoryPopover({ canvases, activeCanvasId, setActiveCanvasId }: CanvasHistoryPopoverProps) {
   const { t } = useTranslation();
-  const { confirm } = useAppDialog();
+  const { alert: appAlert, confirm } = useAppDialog();
   const [isOpen, setIsOpen] = useState(false);
   const [editingCanvasId, setEditingCanvasId] = useState<string | null>(null);
   const [editingCanvasName, setEditingCanvasName] = useState('');
@@ -56,6 +57,39 @@ export function CanvasHistoryPopover({ canvases, activeCanvasId, setActiveCanvas
     });
     setActiveCanvasId(id);
     setIsOpen(false);
+  };
+
+  /** 导出当前画布为 `.canvas`（JSON Canvas，Obsidian 等工具能直接打开）。 */
+  const exportActiveCanvas = async () => {
+    const active = canvases.find((c) => c.id === activeCanvasId);
+    setIsOpen(false);
+    await exportCanvasToFile(activeCanvasId, active?.name ?? activeCanvasId);
+  };
+
+  /**
+   * 导入 `.canvas`：落到一张新画布并切过去。
+   *
+   * 降级情况（链接节点、分组、认不出来的行）如实报出来——静默丢数据是最糟的做法。
+   */
+  const importCanvas = async () => {
+    setIsOpen(false);
+    try {
+      const outcome = await importCanvasFromFile();
+      if (!outcome) return;
+
+      setActiveCanvasId(outcome.canvasId);
+
+      const { links, groups, skipped } = outcome.degraded;
+      const notes = [
+        t('canvas.import_done', { count: outcome.nodeCount, name: outcome.canvasName }),
+        links + groups + skipped > 0
+          ? t('canvas.import_degraded', { links, groups, skipped })
+          : '',
+      ].filter(Boolean);
+      await appAlert({ message: notes.join('\n\n') });
+    } catch {
+      await appAlert({ message: t('canvas.import_failed') });
+    }
   };
 
   return (
@@ -146,12 +180,26 @@ export function CanvasHistoryPopover({ canvases, activeCanvasId, setActiveCanvas
               ))}
             </div>
             <div className="p-1 mt-1 border-t border-app-surface-subtle">
-              <button 
+              <button
                 onClick={createNewCanvas}
                 className="w-full text-left px-3 py-2 text-sm text-app-accent font-bold hover:bg-app-surface-subtle rounded-lg flex items-center gap-2 transition-colors"
               >
                 <Plus className="w-4 h-4" />
                 {t('canvas.new_canvas')}
+              </button>
+              <button
+                onClick={() => void exportActiveCanvas()}
+                className="w-full text-left px-3 py-2 text-sm text-app-text-muted hover:bg-app-surface-subtle hover:text-app-text rounded-lg flex items-center gap-2 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                {t('canvas.export_json_canvas')}
+              </button>
+              <button
+                onClick={() => void importCanvas()}
+                className="w-full text-left px-3 py-2 text-sm text-app-text-muted hover:bg-app-surface-subtle hover:text-app-text rounded-lg flex items-center gap-2 transition-colors"
+              >
+                <Upload className="w-4 h-4" />
+                {t('canvas.import_json_canvas')}
               </button>
             </div>
           </div>

@@ -3,6 +3,7 @@ mod imagegen;
 mod local_llama;
 mod media;
 mod updater;
+mod userfile;
 
 use futures_util::StreamExt;
 use serde_json::Value;
@@ -332,7 +333,9 @@ pub fn run() {
       media::media_open_root,
       media::media_gc,
       imagegen::image_generate,
-      imagegen::image_generate_cancel
+      imagegen::image_generate_cancel,
+      userfile::user_file_write_text,
+      userfile::user_file_read_text
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

@@ -6,7 +6,10 @@ import { CanvasHistoryPopover } from '../../src/components/CanvasHistoryPopover'
 import type { Canvas } from '../../src/db';
 
 const confirmMock = vi.hoisted(() => vi.fn());
+const alertMock = vi.hoisted(() => vi.fn());
 const deleteCanvasWithContents = vi.hoisted(() => vi.fn());
+const exportCanvasToFile = vi.hoisted(() => vi.fn());
+const importCanvasFromFile = vi.hoisted(() => vi.fn());
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -14,6 +17,8 @@ vi.mock('react-i18next', () => ({
       opts?.name ? `${key}:${opts.name}` : key,
     i18n: { language: 'zh', changeLanguage: vi.fn() },
   }),
+  // 组件现在经 canvasPortability → aiI18n 拉到 src/i18n，那里要 use(initReactI18next)
+  initReactI18next: { type: '3rdParty', init: vi.fn() },
 }));
 
 vi.mock('lucide-react', async (importOriginal) => {
@@ -24,10 +29,15 @@ vi.mock('lucide-react', async (importOriginal) => {
 // 只换掉 useAppDialog：tests/testing-library.tsx 会用真的 AppDialogProvider 包一层
 vi.mock('../../src/components/AppDialogProvider', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/components/AppDialogProvider')>()),
-  useAppDialog: () => ({ confirm: confirmMock, alert: vi.fn() }),
+  useAppDialog: () => ({ confirm: confirmMock, alert: alertMock }),
 }));
 
 vi.mock('../../src/services/canvasRepository', () => ({ deleteCanvasWithContents }));
+
+vi.mock('../../src/services/canvasPortability', () => ({
+  exportCanvasToFile,
+  importCanvasFromFile,
+}));
 
 vi.mock('../../src/db', () => ({
   db: { canvases: { update: vi.fn(), add: vi.fn() } },
@@ -146,5 +156,87 @@ describe('CanvasHistoryPopover 删除画布', () => {
     renderPopover();
     await openPopover(user);
     expect(screen.getAllByRole('button', { name: 'canvas.rename' })).toHaveLength(2);
+  });
+});
+
+describe('CanvasHistoryPopover 导入导出', () => {
+  const NO_DEGRADATION = { links: 0, groups: 0, skipped: 0 };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    exportCanvasToFile.mockResolvedValue(true);
+    importCanvasFromFile.mockResolvedValue(null);
+  });
+
+  it('导出的是当前画布，并带上它的名字', async () => {
+    const user = userEvent.setup();
+    renderPopover({ activeCanvasId: 'c2' });
+    await openPopover(user);
+
+    await user.click(screen.getByText('canvas.export_json_canvas'));
+
+    await waitFor(() => expect(exportCanvasToFile).toHaveBeenCalledWith('c2', '第二张'));
+  });
+
+  it('导入成功后切到新画布并报出节点数', async () => {
+    const user = userEvent.setup();
+    importCanvasFromFile.mockResolvedValue({
+      canvasId: 'imported',
+      canvasName: '别处来的',
+      nodeCount: 12,
+      edgeCount: 3,
+      degraded: NO_DEGRADATION,
+    });
+    const { setActiveCanvasId } = renderPopover();
+    await openPopover(user);
+
+    await user.click(screen.getByText('canvas.import_json_canvas'));
+
+    await waitFor(() => expect(setActiveCanvasId).toHaveBeenCalledWith('imported'));
+    expect(alertMock).toHaveBeenCalledTimes(1);
+    expect(String(alertMock.mock.calls[0][0].message)).toContain('canvas.import_done');
+    expect(String(alertMock.mock.calls[0][0].message)).not.toContain('canvas.import_degraded');
+  });
+
+  it('有降级时一并说明，不静默丢数据', async () => {
+    const user = userEvent.setup();
+    importCanvasFromFile.mockResolvedValue({
+      canvasId: 'imported',
+      canvasName: 'x',
+      nodeCount: 3,
+      edgeCount: 0,
+      degraded: { links: 1, groups: 2, skipped: 0 },
+    });
+    renderPopover();
+    await openPopover(user);
+
+    await user.click(screen.getByText('canvas.import_json_canvas'));
+
+    await waitFor(() => expect(alertMock).toHaveBeenCalled());
+    expect(String(alertMock.mock.calls[0][0].message)).toContain('canvas.import_degraded');
+  });
+
+  it('用户在文件对话框里取消时不提示、不切画布', async () => {
+    const user = userEvent.setup();
+    const { setActiveCanvasId } = renderPopover();
+    await openPopover(user);
+
+    await user.click(screen.getByText('canvas.import_json_canvas'));
+
+    await waitFor(() => expect(importCanvasFromFile).toHaveBeenCalled());
+    expect(alertMock).not.toHaveBeenCalled();
+    expect(setActiveCanvasId).not.toHaveBeenCalled();
+  });
+
+  it('文件格式不对时给一条明确的提示', async () => {
+    const user = userEvent.setup();
+    importCanvasFromFile.mockRejectedValue(new Error('invalid_json_canvas'));
+    const { setActiveCanvasId } = renderPopover();
+    await openPopover(user);
+
+    await user.click(screen.getByText('canvas.import_json_canvas'));
+
+    await waitFor(() => expect(alertMock).toHaveBeenCalledWith({ message: 'canvas.import_failed' }));
+    expect(setActiveCanvasId).not.toHaveBeenCalled();
   });
 });
