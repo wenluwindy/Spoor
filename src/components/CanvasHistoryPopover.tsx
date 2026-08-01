@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, Edit3, FileText, History, Plus, Trash2, Upload } from 'lucide-react';
+import { Download, Edit3, FileText, History, ImageDown, Plus, Trash2, Upload } from 'lucide-react';
 import { db } from '../db';
 import type { Canvas } from '../db';
 import { Tooltip } from './ui/Tooltip';
@@ -16,9 +16,16 @@ export interface CanvasHistoryPopoverProps {
   canvases: Canvas[];
   activeCanvasId: string;
   setActiveCanvasId: (id: string) => void;
+  /** 导出 PNG。实现在 App——它要摸画布 DOM 才能量出内容包围盒。 */
+  onExportImage: () => void;
 }
 
-export function CanvasHistoryPopover({ canvases, activeCanvasId, setActiveCanvasId }: CanvasHistoryPopoverProps) {
+export function CanvasHistoryPopover({
+  canvases,
+  activeCanvasId,
+  setActiveCanvasId,
+  onExportImage,
+}: CanvasHistoryPopoverProps) {
   const { t } = useTranslation();
   const { alert: appAlert, confirm } = useAppDialog();
   const [isOpen, setIsOpen] = useState(false);
@@ -220,6 +227,16 @@ export function CanvasHistoryPopover({ canvases, activeCanvasId, setActiveCanvas
               >
                 <FileText className="w-4 h-4" />
                 {t('canvas.export_markdown')}
+              </button>
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  onExportImage();
+                }}
+                className="w-full text-left px-3 py-2 text-sm text-app-text-muted hover:bg-app-surface-subtle hover:text-app-text rounded-lg flex items-center gap-2 transition-colors"
+              >
+                <ImageDown className="w-4 h-4" />
+                {t('canvas.export_image')}
               </button>
               <button
                 onClick={() => void importCanvas()}

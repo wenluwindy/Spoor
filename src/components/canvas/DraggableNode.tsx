@@ -140,6 +140,7 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
       {onToggleSelect && (
         <Tooltip label={t('canvas.select_note')}>
           <button
+            data-export-hide=""
             onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onToggleSelect(); }}
             className={`absolute -top-3 -left-3 w-6 h-6 bg-app-surface-raised border ${isSelected ? 'border-app-accent text-app-accent opacity-100' : 'border-app-border text-transparent hover:border-app-accent opacity-0 group-hover:opacity-40'} rounded-full flex items-center justify-center transition-all z-10 shadow-sm ${hideChrome ? '!opacity-0 pointer-events-none' : ''}`}
           >
@@ -154,6 +155,7 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
       <Tooltip label={t('canvas.port_in')}>
         <button
           data-port="in"
+          data-export-hide=""
           onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onLink(id); }}
           className={`absolute top-1/2 -mt-2.5 -left-2.5 w-5 h-5 rounded-full border-2 transition-all z-10 shadow-sm ${
             isConnecting
@@ -171,6 +173,7 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
       <Tooltip label={t('canvas.port_out')}>
         <button
           data-port="out"
+          data-export-hide=""
           onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onLink(id); }}
           className={`absolute top-1/2 -mt-3 -right-3 w-6 h-6 bg-app-surface-raised border border-app-border rounded-full flex items-center justify-center text-app-text-faint hover:text-app-accent hover:border-app-accent transition-all z-10 shadow-sm ${
             hideChrome
@@ -184,6 +187,7 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
         </button>
       </Tooltip>
       <div
+        data-export-hide=""
         className={`absolute -bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 transition-opacity z-10 ${
           hideChrome
             ? '!opacity-0 pointer-events-none'
@@ -207,6 +211,7 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
       
       {/* Resize Handle */}
       <div 
+        data-export-hide=""
         onPointerDown={onResizePointerDown}
         className={`absolute -bottom-1 -right-1 w-4 h-4 cursor-nwse-resize flex items-center justify-center transition-opacity z-20 ${
           hideChrome
@@ -221,6 +226,7 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
 
       {showPalette && allowPalette && (
         <div 
+          data-export-hide=""
           className="node-palette absolute -bottom-14 left-0 bg-app-surface-raised/90 backdrop-blur-md border border-app-border shadow-xl rounded-lg p-2 z-50 flex items-center gap-4 cursor-default pointer-events-auto"
           onPointerDown={(e) => e.stopPropagation()} /* Prevent drag when clicking palette */
         >

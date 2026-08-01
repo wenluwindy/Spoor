@@ -58,6 +58,12 @@ import {
 } from './utils/zoomToFit';
 import { CanvasSearchPanel } from './components/canvas/CanvasSearchPanel';
 import { searchCanvasNodes, stepSearchIndex } from './utils/canvasSearch';
+import {
+  CanvasImageExportError,
+  renderCanvasImage,
+  saveCanvasImage,
+} from './services/canvasImageExport';
+import { toSafeFileName } from './services/canvasPortability';
 import { resolveAgentLocalizedName } from './utils/aiI18n';
 import { useNodeActions } from './hooks/useNodeActions';
 import { pickFiles } from './utils/filePicker';
@@ -621,6 +627,35 @@ export default function App() {
     onOpenSearch: () => setIsSearchOpen(true),
   });
 
+  /**
+   * 把整张画布导出成 PNG。
+   *
+   * 落在 App 而不是画布历史面板里，是因为它要摸 DOM：导的是**全部内容**而非当前视口，
+   * 得先量出所有卡片的包围盒（见 `services/canvasImageExport`）。
+   */
+  const exportCanvasImage = useCallback(async () => {
+    const main = mainRef.current;
+    const content = contentContainerRef.current;
+    if (!main || !content) return;
+
+    const canvasName = canvases.find((c) => c.id === activeCanvasId)?.name ?? activeCanvasId;
+    try {
+      const dataUrl = await renderCanvasImage({
+        contentContainer: content,
+        viewport: main,
+        transform: transformRef.current ?? { x: 0, y: 0, scale: 1 },
+        nodeElements: Object.values(nodesRef.current),
+        format: 'png',
+        // 底色跟着当前主题走，导出的图才和屏幕上看到的是同一张
+        backgroundColor: getComputedStyle(main).backgroundColor || '#ffffff',
+      });
+      await saveCanvasImage(`${toSafeFileName(canvasName)}.png`, dataUrl);
+    } catch (e) {
+      const code = e instanceof CanvasImageExportError ? e.code : 'render_failed';
+      await appAlert({ message: t(`canvas.export_image_${code}`) });
+    }
+  }, [activeCanvasId, canvases, transformRef, appAlert, t]);
+
   /** 另存为：图片/视频用原件路径，生图节点用当前选中的那一张结果。 */
   const saveNodeMediaAsFromCanvas = useCallback(
     async (nodeId: string) => {
@@ -844,7 +879,12 @@ export default function App() {
           )}
 
           {/* Symmetrical Controls */}
-          <CanvasHistoryPopover canvases={canvases} activeCanvasId={activeCanvasId} setActiveCanvasId={setActiveCanvasId} />
+          <CanvasHistoryPopover
+            canvases={canvases}
+            activeCanvasId={activeCanvasId}
+            setActiveCanvasId={setActiveCanvasId}
+            onExportImage={() => void exportCanvasImage()}
+          />
 
           {isSearchOpen && (
             <CanvasSearchPanel

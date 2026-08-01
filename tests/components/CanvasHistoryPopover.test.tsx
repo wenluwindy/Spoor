@@ -10,6 +10,7 @@ const alertMock = vi.hoisted(() => vi.fn());
 const deleteCanvasWithContents = vi.hoisted(() => vi.fn());
 const exportCanvasToFile = vi.hoisted(() => vi.fn());
 const importCanvasFromFile = vi.hoisted(() => vi.fn());
+const exportCanvasAsMarkdown = vi.hoisted(() => vi.fn());
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -36,6 +37,7 @@ vi.mock('../../src/services/canvasRepository', () => ({ deleteCanvasWithContents
 
 vi.mock('../../src/services/canvasPortability', () => ({
   exportCanvasToFile,
+  exportCanvasAsMarkdown,
   importCanvasFromFile,
 }));
 
@@ -54,15 +56,17 @@ async function openPopover(user: ReturnType<typeof userEvent.setup>) {
 
 function renderPopover(props: Partial<React.ComponentProps<typeof CanvasHistoryPopover>> = {}) {
   const setActiveCanvasId = vi.fn();
+  const onExportImage = vi.fn();
   render(
     <CanvasHistoryPopover
       canvases={CANVASES}
       activeCanvasId="default"
       setActiveCanvasId={setActiveCanvasId}
+      onExportImage={onExportImage}
       {...props}
     />,
   );
-  return { setActiveCanvasId };
+  return { setActiveCanvasId, onExportImage };
 }
 
 describe('CanvasHistoryPopover 删除画布', () => {
@@ -165,6 +169,7 @@ describe('CanvasHistoryPopover 导入导出', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     exportCanvasToFile.mockResolvedValue(true);
+    exportCanvasAsMarkdown.mockResolvedValue(null);
     importCanvasFromFile.mockResolvedValue(null);
   });
 
@@ -238,5 +243,60 @@ describe('CanvasHistoryPopover 导入导出', () => {
 
     await waitFor(() => expect(alertMock).toHaveBeenCalledWith({ message: 'canvas.import_failed' }));
     expect(setActiveCanvasId).not.toHaveBeenCalled();
+  });
+
+  it('导出 Markdown 包走的也是当前画布', async () => {
+    const user = userEvent.setup();
+    renderPopover({ activeCanvasId: 'c2' });
+    await openPopover(user);
+
+    await user.click(screen.getByText('canvas.export_markdown'));
+
+    await waitFor(() =>
+      expect(exportCanvasAsMarkdown).toHaveBeenCalledWith('c2', '第二张', expect.any(Date)),
+    );
+  });
+
+  it('有原件没能复制出来时说一声', async () => {
+    const user = userEvent.setup();
+    exportCanvasAsMarkdown.mockResolvedValue({
+      directory: 'D:/x',
+      assetsCopied: 2,
+      assetsMissing: 3,
+    });
+    renderPopover();
+    await openPopover(user);
+
+    await user.click(screen.getByText('canvas.export_markdown'));
+
+    await waitFor(() => expect(alertMock).toHaveBeenCalled());
+    expect(alertMock.mock.calls[0][0].message).toBe('canvas.export_markdown_missing');
+  });
+
+  it('全部原件都复制成功时不打扰', async () => {
+    const user = userEvent.setup();
+    exportCanvasAsMarkdown.mockResolvedValue({
+      directory: 'D:/x',
+      assetsCopied: 2,
+      assetsMissing: 0,
+    });
+    renderPopover();
+    await openPopover(user);
+
+    await user.click(screen.getByText('canvas.export_markdown'));
+
+    await waitFor(() => expect(exportCanvasAsMarkdown).toHaveBeenCalled());
+    expect(alertMock).not.toHaveBeenCalled();
+  });
+
+  it('导出 PNG 交给 App（它才够得着画布 DOM）并收起面板', async () => {
+    const user = userEvent.setup();
+    const { onExportImage } = renderPopover();
+    await openPopover(user);
+
+    await user.click(screen.getByText('canvas.export_image'));
+
+    expect(onExportImage).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('canvas.export_image')).not.toBeInTheDocument();
   });
 });

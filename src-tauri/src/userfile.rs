@@ -13,18 +13,38 @@
 
 use std::fs;
 
+use base64::Engine;
+
 /// 可读入的文本文件上限。`.canvas` 与备份 JSON 都是纯文本，正常远小于此。
 const MAX_TEXT_BYTES: u64 = 64 * 1024 * 1024;
 
-/// 把文本写到用户选定的路径。已存在则覆盖——对话框自己已经问过要不要覆盖了。
-#[tauri::command]
-pub fn user_file_write_text(dest_path: String, contents: String) -> Result<(), String> {
-    if let Some(parent) = std::path::Path::new(&dest_path).parent() {
+fn ensure_parent(dest_path: &str) -> Result<(), String> {
+    if let Some(parent) = std::path::Path::new(dest_path).parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent).map_err(|e| format!("disk_write_failed: {e}"))?;
         }
     }
+    Ok(())
+}
+
+/// 把文本写到用户选定的路径。已存在则覆盖——对话框自己已经问过要不要覆盖了。
+#[tauri::command]
+pub fn user_file_write_text(dest_path: String, contents: String) -> Result<(), String> {
+    ensure_parent(&dest_path)?;
     fs::write(&dest_path, contents).map_err(|e| format!("disk_write_failed: {e}"))
+}
+
+/// 把 base64 编码的字节写到用户选定的路径。
+///
+/// 导出 PNG 用：浏览器侧只能拿到 data URL，字节要么在 JS 里转成二进制再过 IPC，
+/// 要么就这样把 base64 原样递过来由 Rust 解。后者少一次转换，也少一个出错的地方。
+#[tauri::command]
+pub fn user_file_write_base64(dest_path: String, contents: String) -> Result<(), String> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(contents.as_bytes())
+        .map_err(|e| format!("bad_base64: {e}"))?;
+    ensure_parent(&dest_path)?;
+    fs::write(&dest_path, bytes).map_err(|e| format!("disk_write_failed: {e}"))
 }
 
 /// 读取用户选定的文本文件。

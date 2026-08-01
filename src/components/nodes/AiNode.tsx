@@ -95,7 +95,8 @@ export function AiNode({
 
       {showFollowUp ? (
         <div className="mt-2 shrink-0">
-          <div className="relative">
+          {/* 追问输入框是控件不是内容：导出成图时把它滤掉（见 canvasImageExport） */}
+          <div className="relative" data-export-hide="">
             <textarea
               ref={followUpTaRef}
               value={draft}

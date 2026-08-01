@@ -336,6 +336,7 @@ pub fn run() {
       imagegen::image_generate,
       imagegen::image_generate_cancel,
       userfile::user_file_write_text,
+      userfile::user_file_write_base64,
       userfile::user_file_read_text,
       snapshot::snapshot_write,
       snapshot::snapshot_list,
