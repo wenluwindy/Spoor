@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { createPortal } from 'react-dom';
 import { ChevronRight } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { acquireKeyboardLayer, isTopKeyboardLayer } from '../../services/keyboardLayers';
 
 /**
  * 上下文菜单的呈现层：定位翻转、键盘导航、二级菜单、点击外部收起。
@@ -242,6 +243,9 @@ export function ContextMenuSurface({ x, y, sections, onClose }: ContextMenuSurfa
     rootRef.current?.focus({ preventScroll: true });
   }, []);
 
+  // 菜单在场即占 'menu' 层：压住画布的 Esc 清选区，同时让位给更高的弹层
+  useEffect(() => acquireKeyboardLayer('menu'), []);
+
   // 点击菜单以外任意位置收起。菜单项本身用 pointerdown 且已 stopPropagation。
   useEffect(() => {
     const onPointerDown = (e: PointerEvent) => {
@@ -303,6 +307,8 @@ export function ContextMenuSurface({ x, y, sections, onClose }: ContextMenuSurfa
         break;
       }
       case 'Escape':
+        // 更高的层（对话框等）在场时这下 Esc 不归菜单
+        if (!isTopKeyboardLayer('menu')) break;
         e.preventDefault();
         onClose();
         break;

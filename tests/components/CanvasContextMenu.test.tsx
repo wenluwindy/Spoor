@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import type { AgentConfig, Canvas, CanvasNode } from '../../src/db';
+import type { AgentConfig, Canvas, CanvasNode, CanvasTemplate } from '../../src/db';
 import {
   CanvasContextMenu,
   type CanvasContextMenuActions,
@@ -32,6 +32,13 @@ vi.mock('react-i18next', () => ({
         'canvas.menu.align': '对齐',
         'canvas.menu.distribute': '等间距分布',
         'canvas.menu.save_as_template': '存为模板…',
+        'canvas.menu.insert_template': '从模板插入',
+        'canvas.menu.rename_template': '重命名模板',
+        'canvas.menu.delete_template': '删除模板',
+        'canvas.menu.organize_selected': 'AI 分组整理（{{count}} 张）…',
+        'canvas.menu.relay_to_agent': '让人格接着说',
+        'canvas.presentation.start': '开始演示',
+        'canvas.presentation.start_here': '从这里开始讲',
           'canvas.menu.clear_selection': '全部取消选中',
           'canvas.menu.link_all_to_this': '全部连到此节点（{{count}} 条）',
           'canvas.menu.synthesize_selected': '合成长文（{{count}} 张）',
@@ -62,7 +69,11 @@ function makeActions(): CanvasContextMenuActions {
     alignNodes: vi.fn(),
     distributeNodes: vi.fn(),
     saveAsTemplate: vi.fn(),
+    organizeNodes: vi.fn(),
+    relayToAgent: vi.fn(),
+    startPresentation: vi.fn(),
     insertTemplate: vi.fn(),
+    renameTemplate: vi.fn(),
     deleteTemplate: vi.fn(),
     pasteNodes: vi.fn(),
     resetView: vi.fn(),
@@ -106,6 +117,7 @@ function renderMenu({
   isSynthesizeDisabled = false,
   canvases = [],
   activeCanvasId = 'c1',
+  templates = [],
 }: {
   target: CanvasContextMenuState['target'];
   nodes?: CanvasNode[];
@@ -116,6 +128,7 @@ function renderMenu({
   isSynthesizeDisabled?: boolean;
   canvases?: Canvas[];
   activeCanvasId?: string;
+  templates?: CanvasTemplate[];
 }) {
   render(
     <CanvasContextMenu
@@ -125,7 +138,7 @@ function renderMenu({
       canvases={canvases}
       activeCanvasId={activeCanvasId}
       edges={[]}
-      templates={[]}
+      templates={templates}
       nodesById={nodesMap(nodes)}
       selectedNodes={selected}
       actions={actions}
@@ -162,6 +175,7 @@ describe('CanvasContextMenu', () => {
         '插入文档…',
         '添加助手',
         '粘贴',
+        '开始演示',
         '重置视图',
       ]);
     });
@@ -258,8 +272,10 @@ describe('CanvasContextMenu', () => {
         '编辑内容',
         '创建副本',
         '开始连线',
+        '让人格接着说',
         '标签…',
         '存为模板…',
+        '从这里开始讲',
         '选中',
         '删除节点',
       ]);
@@ -318,8 +334,10 @@ describe('CanvasContextMenu', () => {
         '等间距分布',
         '全部连到此节点（2 条）',
         '合成长文（3 张）',
+        'AI 分组整理（3 张）…',
         '标签…',
         '存为模板…',
+        '从这里开始讲',
         '全部取消选中',
         '批量删除（3 张）',
       ]);
@@ -506,6 +524,58 @@ describe('CanvasContextMenu', () => {
       });
       fireEvent.pointerDown(screen.getByText('另存为…'));
       expect(actions.saveNodeMediaAs).toHaveBeenCalledWith('img');
+    });
+  });
+
+  describe('模板管理', () => {
+    const TEMPLATES: CanvasTemplate[] = [
+      { id: 't1', name: '阅读卡组', createdAt: 1, nodes: [], edges: [] },
+      { id: 't2', name: '头脑风暴', createdAt: 2, nodes: [], edges: [] },
+    ];
+
+    it('没有模板时不出现模板相关菜单项', () => {
+      renderMenu({ target: { kind: 'canvas' } });
+      expect(screen.queryByText('从模板插入')).toBeNull();
+      expect(screen.queryByText('重命名模板')).toBeNull();
+      expect(screen.queryByText('删除模板')).toBeNull();
+    });
+
+    it('有模板时给出插入/重命名/删除三个子菜单', () => {
+      renderMenu({ target: { kind: 'canvas' }, templates: TEMPLATES });
+      for (const label of ['从模板插入', '重命名模板', '删除模板']) {
+        expect(screen.getByText(label).closest('button')).toHaveAttribute('aria-haspopup', 'menu');
+      }
+    });
+
+    it('重命名子菜单列出全部模板，点选后带模板 id 回调', () => {
+      const actions = makeActions();
+      renderMenu({ target: { kind: 'canvas' }, templates: TEMPLATES, actions });
+
+      fireEvent.pointerEnter(screen.getByText('重命名模板').closest('button')!);
+      expect(screen.getByText('阅读卡组')).toBeInTheDocument();
+
+      fireEvent.pointerDown(screen.getByText('头脑风暴'));
+      expect(actions.renameTemplate).toHaveBeenCalledWith('t2');
+      expect(actions.deleteTemplate).not.toHaveBeenCalled();
+      expect(actions.insertTemplate).not.toHaveBeenCalled();
+    });
+
+    it('插入子菜单点选后带模板 id 与右键落点回调', () => {
+      const actions = makeActions();
+      renderMenu({ target: { kind: 'canvas' }, templates: TEMPLATES, actions });
+
+      fireEvent.pointerEnter(screen.getByText('从模板插入').closest('button')!);
+      fireEvent.pointerDown(screen.getByText('阅读卡组'));
+      expect(actions.insertTemplate).toHaveBeenCalledWith('t1', { x: 40, y: 25 });
+    });
+
+    it('删除子菜单点选后带模板 id 回调', () => {
+      const actions = makeActions();
+      renderMenu({ target: { kind: 'canvas' }, templates: TEMPLATES, actions });
+
+      fireEvent.pointerEnter(screen.getByText('删除模板').closest('button')!);
+      fireEvent.pointerDown(screen.getByText('阅读卡组'));
+      expect(actions.deleteTemplate).toHaveBeenCalledWith('t1');
     });
   });
 

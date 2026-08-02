@@ -5,6 +5,7 @@ import {
   useCanvasKeyboard,
   type UseCanvasKeyboardParams,
 } from '../../src/hooks/useCanvasKeyboard';
+import { acquireKeyboardLayer } from '../../src/services/keyboardLayers';
 
 function press(key: string, init: KeyboardEventInit = {}, target: EventTarget = window) {
   const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
@@ -89,8 +90,29 @@ describe('useCanvasKeyboard', () => {
     expect(handlers.onOpenSearch).toHaveBeenCalledTimes(1);
   });
 
+  it('Ctrl+Shift+F 让给全局搜索：不开画布内搜索也不吞事件', () => {
+    mount();
+    const event = press('f', { ctrlKey: true, shiftKey: true });
+    expect(handlers.onOpenSearch).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it('Esc 清空选区', () => {
     mount();
+    press('Escape');
+    expect(handlers.onClearSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it('上面有弹层（拉线/菜单等）占着键盘层时 Esc 不清选区', () => {
+    mount();
+    const release = acquireKeyboardLayer('linkdrag');
+    try {
+      press('Escape');
+      expect(handlers.onClearSelection).not.toHaveBeenCalled();
+    } finally {
+      release();
+    }
+    // 弹层退场后画布重新成为最高层
     press('Escape');
     expect(handlers.onClearSelection).toHaveBeenCalledTimes(1);
   });

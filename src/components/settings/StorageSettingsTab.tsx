@@ -110,6 +110,12 @@ export function StorageSettingsTab() {
           </div>
         )}
 
+        {/* 0.5.0 笔记落文件：告诉用户笔记本体现在也在这个目录里（notes/），
+            连同网盘同步的提示——这是"把 SpoorData 放进同步文件夹"方案的完整版 */}
+        <div className="flex gap-2 text-[11px] text-app-text-muted leading-relaxed bg-app-surface-raised border border-app-border rounded-lg p-2.5">
+          <span>{t('settings.storage_notes_mirror_hint')}</span>
+        </div>
+
         {migrating && (
           <div className="space-y-1.5">
             <p className="text-[11px] text-app-text-muted flex items-center gap-1.5">

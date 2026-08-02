@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useCanvasLinkDrag, LINK_DRAG_THRESHOLD_PX } from '../../src/hooks/useCanvasLinkDrag';
+import { acquireKeyboardLayer, isTopKeyboardLayer } from '../../src/services/keyboardLayers';
 
 /**
  * 连线的拖放结算。
@@ -137,6 +138,26 @@ describe('useCanvasLinkDrag', () => {
     setup(null);
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(handlers.onCancel).not.toHaveBeenCalled();
+  });
+
+  it('连线中占住 linkdrag 层压过画布；上面还有更高的层时 Esc 让给它们', () => {
+    const { unmount } = setup('source-node');
+    // 连线态挂上后画布不再是最高层——同一下 Esc 不会又落到清选区
+    expect(isTopKeyboardLayer('canvas')).toBe(false);
+    expect(isTopKeyboardLayer('linkdrag')).toBe(true);
+
+    const release = acquireKeyboardLayer('modal');
+    try {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(handlers.onCancel).not.toHaveBeenCalled();
+    } finally {
+      release();
+    }
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(handlers.onCancel).toHaveBeenCalledTimes(1);
+
+    unmount();
+    expect(isTopKeyboardLayer('canvas')).toBe(true);
   });
 
   it('连线途中右键取消，并且不让右键菜单弹出来', () => {

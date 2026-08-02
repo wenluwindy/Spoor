@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { acquireKeyboardLayer, isTopKeyboardLayer } from '../services/keyboardLayers';
 
 /**
  * 连线的「拖一下就连上」与取消手势。
@@ -43,6 +44,14 @@ export function useCanvasLinkDrag({
   connectingRef.current = connectingFrom;
   handlersRef.current = { onDropOnNode, onDropOnCanvas, onCancel };
 
+  // 键盘层占用跟着连线态走：拉着线时 'linkdrag' 压住画布层，Esc 先放线；
+  // 释放发生在 connectingFrom 清空后的下一次渲染，晚于本次 Esc 的事件分发——
+  // 因此同一下 Esc 不会又落到画布去清选区，要再按一次才清。
+  useEffect(() => {
+    if (!connectingFrom) return;
+    return acquireKeyboardLayer('linkdrag');
+  }, [connectingFrom]);
+
   useEffect(() => {
     const onPointerDownCapture = (e: PointerEvent) => {
       pressRef.current = { x: e.clientX, y: e.clientY };
@@ -78,6 +87,8 @@ export function useCanvasLinkDrag({
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || !connectingRef.current) return;
+      // 上面还有更高的层（对话框/搜索/演示）时这下 Esc 不归连线
+      if (!isTopKeyboardLayer('linkdrag')) return;
       handlersRef.current.onCancel();
     };
 

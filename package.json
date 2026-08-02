@@ -2,7 +2,7 @@
   "name": "spoor",
   "private": true,
   "license": "PolyForm-Noncommercial-1.0.0",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -17,7 +17,8 @@
     "lint:tooltips": "node scripts/audit-tooltips.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@google/genai": "^1.51.0",
@@ -38,6 +39,7 @@
     "remark-breaks": "^4.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4.1.14",
     "@tauri-apps/cli": "^2.11.0",
     "@testing-library/jest-dom": "^6.9.1",

@@ -32,6 +32,7 @@ import {
   X,
 } from 'lucide-react';
 import type { CallAIFn } from '../types/ai';
+import { acquireKeyboardLayer, isTopKeyboardLayer } from '../services/keyboardLayers';
 import { useAppDialog } from './AppDialogProvider';
 import { Tooltip } from './ui/Tooltip';
 import { ResearchRunView } from './ResearchRunView';
@@ -102,6 +103,13 @@ export type ResearchReportBody = {
   conclusion: string;
 };
 
+/** 执行视图里单步落卡时交给 App 的快照（见 `services/researchStepToCanvas`）。 */
+export interface ResearchStepSpawnPayload {
+  title: string;
+  analysis: string;
+  sources: { title: string; link: string; snippet: string }[];
+}
+
 export interface ResearchLabProps {
   /** 「落到画布」：把这次研究整块放进当前画布的一个区域框里，然后切过去。 */
   onSpawnToCanvas?: (session: {
@@ -109,6 +117,17 @@ export interface ResearchLabProps {
     researchPlan: { title: string; desc: string }[];
     researchReport: { intro: string; points: { title: string; text: string }[]; conclusion: string };
   }) => void;
+  /**
+   * 「中途落卡」：把执行视图里某个已完成步骤落到当前画布（主题卡 + 来源 web 卡），
+   * 不切换页签。缺席时执行视图不渲染落卡按钮——与 `onSpawnToCanvas` 同一接线通道。
+   */
+  onSpawnStepToCanvas?: (step: ResearchStepSpawnPayload) => void | Promise<void>;
+  /**
+   * 全局搜索跳转（0.5.0 B5）：挂载/变化时打开这条历史会话的报告页。
+   * 消费完通过 `onInitialSessionConsumed` 归还——否则下次进实验室又会被拽回同一条。
+   */
+  initialSessionId?: string | null;
+  onInitialSessionConsumed?: () => void;
   aiConfig: {
     provider: string;
     apiKey: string;
@@ -169,7 +188,14 @@ function labPhaseReducer(_phase: LabPhase, action: LabPhaseAction): LabPhase {
   }
 }
 
-export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabProps) {
+export function ResearchLab({
+  aiConfig,
+  callAI,
+  onSpawnToCanvas,
+  onSpawnStepToCanvas,
+  initialSessionId,
+  onInitialSessionConsumed,
+}: ResearchLabProps) {
   const { t, i18n } = useTranslation();
   const { confirm } = useAppDialog();
   const [phase, dispatchPhase] = useReducer(labPhaseReducer, 'idle');
@@ -201,13 +227,18 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
     []
   ) ?? [];
 
+  // 来源详情是遮罩弹层，按 modal 级占键盘层（见 keyboardLayers）
   useEffect(() => {
     if (!sourceDetail) return;
+    const releaseLayer = acquireKeyboardLayer('modal');
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSourceDetail(null);
+      if (e.key === 'Escape' && isTopKeyboardLayer('modal')) setSourceDetail(null);
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      releaseLayer();
+    };
   }, [sourceDetail]);
 
   const openHistorySession = (session: ResearchSession) => {
@@ -225,6 +256,22 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
     run.reset();
     dispatchPhase({ type: 'open_history' });
   };
+
+  /** 全局搜索跳进来：按 id 打开那条历史。查不到（已删）就静默归还，停在大纲页。 */
+  useEffect(() => {
+    if (!initialSessionId) return;
+    let cancelled = false;
+    void db.researchSessions.get(initialSessionId).then((session) => {
+      if (cancelled) return;
+      if (session) openHistorySession(session);
+      onInitialSessionConsumed?.();
+    });
+    return () => {
+      cancelled = true;
+    };
+    // openHistorySession 每次渲染都是新引用，按 id 触发即可
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSessionId]);
 
   const deleteResearchSession = async (sessionId: string) => {
     const ok = await confirm({
@@ -459,6 +506,28 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
     setSourceDetail(null);
     dispatchPhase({ type: 'back_to_plan' });
   };
+
+  /**
+   * 中途落卡（roadmap C10）：把执行视图里某个已完成步骤的产出交给 App 落到当前画布。
+   * 只做快照与转发——布局、落库、撤销都在 App 一侧（`researchStepToCanvas` + `canvasMutations`）。
+   */
+  const spawnStepToCanvas = useCallback(
+    async (stepIndex: number) => {
+      if (!onSpawnStepToCanvas) return;
+      const step = run.state.steps[stepIndex];
+      if (!step || step.status !== 'done') return;
+      await onSpawnStepToCanvas({
+        title: step.title,
+        analysis: step.analysis,
+        sources: step.sources.map((s) => ({
+          title: s.title,
+          link: s.link,
+          snippet: s.snippet,
+        })),
+      });
+    },
+    [onSpawnStepToCanvas, run.state.steps],
+  );
 
   /** 历史会话续跑：query 和 plan 已在状态里，回到大纲页让用户改后重跑。 */
   const rebaseFromSession = () => {
@@ -824,6 +893,7 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
              onRetry={() => void executeResearch()}
              onBackToPlan={backToPlan}
              onShowSource={setSourceDetail}
+             onSpawnStep={onSpawnStepToCanvas ? spawnStepToCanvas : undefined}
            />
          )}
 

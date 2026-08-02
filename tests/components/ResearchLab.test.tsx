@@ -76,6 +76,9 @@ vi.mock('react-i18next', () => ({
         'lab.step_subquery_label': 'Search query:',
         'lab.step_sources_label': 'Sources for this step',
         'lab.rebase_from_session': 'Reuse as new research',
+        'lab.spawn_step_to_canvas': 'Send step to canvas',
+        'lab.spawn_step_done': 'Step on canvas',
+        'lab.spawn_step_hint': 'Added to canvas',
         'lab.conclusion_label': 'Agent recommendation and conclusion:',
         'nodes.ai_loading': 'Synthesizing...',
       };
@@ -784,6 +787,142 @@ describe('ResearchLab', () => {
       expect(screen.getByLabelText('Step 1 title')).toHaveValue('lab.plan_fallback.step1_title');
     });
     expect(callAI).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not render per-step spawn buttons when onSpawnStepToCanvas is absent', async () => {
+    let releaseAnalysis!: () => void;
+    const gate = new Promise<void>((res) => {
+      releaseAnalysis = res;
+    });
+    const callAI = makeRouterCallAI({
+      onAnalysis: async (n) => {
+        if (n === 2) await gate;
+      },
+    });
+
+    render(<ResearchLab aiConfig={baseConfig} callAI={callAI} />);
+
+    await submitTopic('no spawn wiring');
+    fireEvent.click(screen.getByRole('button', { name: /Approve & Execute/i }));
+
+    // 第一步已完成（analysis-1 在屏），但 App 没接回调 → 不渲染落卡按钮
+    await waitFor(() => {
+      expect(screen.getByText('analysis-1')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('lab-run-step-0-spawn')).toBeNull();
+
+    releaseAnalysis();
+    await waitFor(async () => {
+      expect(await db.researchSessions.count()).toBe(1);
+    });
+  });
+
+  it('spawns a finished step to canvas with its sources, marks it spawned and shows a hint', async () => {
+    mockMetasoSearch.mockResolvedValue({
+      credits: 1,
+      total: 3,
+      webpages: [
+        { title: 'A', link: 'https://a.com', snippet: 'Sa', score: '', date: '' },
+        { title: 'B', link: 'https://b.com', snippet: 'Sb', score: '', date: '' },
+        { title: 'C', link: 'https://c.com', snippet: 'Sc', score: '', date: '' },
+      ],
+    });
+    const onSpawnStepToCanvas = vi.fn().mockResolvedValue(undefined);
+    let releaseAnalysis!: () => void;
+    const gate = new Promise<void>((res) => {
+      releaseAnalysis = res;
+    });
+    const callAI = makeRouterCallAI({
+      onAnalysis: async (n) => {
+        if (n === 2) await gate;
+      },
+    });
+
+    render(
+      <ResearchLab
+        aiConfig={{ ...baseConfig, searchApiKey: 'sk-m' }}
+        callAI={callAI}
+        onSpawnStepToCanvas={onSpawnStepToCanvas}
+      />,
+    );
+
+    await submitTopic('spawn step topic');
+    fireEvent.click(screen.getByRole('button', { name: /Approve & Execute/i }));
+
+    // 第一步已完成 → 有落卡按钮；第二步执行中 → 没有
+    await waitFor(() => {
+      expect(screen.getByTestId('lab-run-step-0-spawn')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('lab-run-step-1-spawn')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('lab-run-step-0-spawn'));
+
+    await waitFor(() => {
+      expect(onSpawnStepToCanvas).toHaveBeenCalledTimes(1);
+    });
+    expect(onSpawnStepToCanvas).toHaveBeenCalledWith({
+      title: 'Step 1',
+      analysis: 'analysis-1',
+      sources: [
+        { title: 'A', link: 'https://a.com', snippet: 'Sa' },
+        { title: 'B', link: 'https://b.com', snippet: 'Sb' },
+        { title: 'C', link: 'https://c.com', snippet: 'Sc' },
+      ],
+    });
+
+    // 已落状态 + 轻提示；再点不再触发
+    await waitFor(() => {
+      expect(screen.getByTestId('lab-run-step-0-spawn')).toBeDisabled();
+    });
+    expect(screen.getByTestId('lab-run-step-0-spawn').textContent).toContain('Step on canvas');
+    expect(screen.getByTestId('lab-run-step-0-spawn-hint')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('lab-run-step-0-spawn'));
+    expect(onSpawnStepToCanvas).toHaveBeenCalledTimes(1);
+
+    releaseAnalysis();
+    await waitFor(() => {
+      expect(screen.getByText('Synth intro')).toBeTruthy();
+    });
+  });
+
+  it('spawn buttons stay available for finished steps after the run is stopped', async () => {
+    const onSpawnStepToCanvas = vi.fn().mockResolvedValue(undefined);
+    let releaseAnalysis!: () => void;
+    const gate = new Promise<void>((res) => {
+      releaseAnalysis = res;
+    });
+    const callAI = makeRouterCallAI({
+      onAnalysis: async (n) => {
+        if (n === 2) await gate;
+      },
+    });
+
+    render(
+      <ResearchLab aiConfig={baseConfig} callAI={callAI} onSpawnStepToCanvas={onSpawnStepToCanvas} />,
+    );
+
+    await submitTopic('stop then spawn');
+    fireEvent.click(screen.getByRole('button', { name: /Approve & Execute/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('analysis-1')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('lab-stop-run'));
+    releaseAnalysis();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('lab-run-stopped')).toBeTruthy();
+    });
+
+    // 已完成的第一步仍可落卡（无搜索 Key → 来源为空数组）
+    fireEvent.click(screen.getByTestId('lab-run-step-0-spawn'));
+    await waitFor(() => {
+      expect(onSpawnStepToCanvas).toHaveBeenCalledWith({
+        title: 'Step 1',
+        analysis: 'analysis-1',
+        sources: [],
+      });
+    });
   });
 
   it('keeps plan unchanged when AI revision returns empty array', async () => {

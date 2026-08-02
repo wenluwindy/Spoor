@@ -31,6 +31,7 @@
  */
 
 import type { CanvasNode, Edge } from '../db';
+import { collectSpoorExtension, pickSpoorExtension } from './nodeFieldRegistry';
 
 export const JSON_CANVAS_FILE_EXTENSION = 'canvas';
 
@@ -56,24 +57,12 @@ export interface JsonCanvasNode {
   spoor?: SpoorNodeExtension;
 }
 
-export interface SpoorNodeExtension {
-  /** 原始节点类型，导回时据此还原。 */
-  type: string;
-  layout?: number;
-  description?: string;
-  themeTag?: string;
-  agentConfigId?: string;
-  fileType?: string;
-  fileName?: string;
-  userTurn?: string;
-  imageGenPrompt?: string;
-  /** v5 起：节点标签与色板外观，随导出走、导回不丢。 */
-  tags?: string[];
-  styleOverrides?: { bg?: string; text?: string; font?: string; border?: string };
-  /** 网页卡片的抓取缓存，导回后不用重抓也能显示。 */
-  urlTitle?: string;
-  urlExcerpt?: string;
-}
+/**
+ * `spoor` 命名空间的形状由 `nodeFieldRegistry` 决定（policy === 'spoor' 的全部字段）。
+ * 0.5.0 起不再手写字段清单——手写清单在 0.4.x 造成过导出即丢
+ * （followUpSent、追问链 id、生图参数、PDF 页码都曾不随导出走）。
+ */
+export type SpoorNodeExtension = { type: string } & Record<string, unknown>;
 
 export interface JsonCanvasEdge {
   id: string;
@@ -125,21 +114,12 @@ export function aiNodeToMarkdown(node: CanvasNode): string {
 }
 
 function buildExtension(node: CanvasNode): SpoorNodeExtension {
-  const ext: SpoorNodeExtension = { type: node.type };
-  if (node.layout !== undefined) ext.layout = node.layout;
-  if (node.description) ext.description = node.description;
-  if (node.themeTag) ext.themeTag = node.themeTag;
-  if (node.agentConfigId) ext.agentConfigId = node.agentConfigId;
-  if (node.fileType) ext.fileType = node.fileType;
-  if (node.fileName) ext.fileName = node.fileName;
-  if (node.userTurn) ext.userTurn = node.userTurn;
-  if (node.imageGenPrompt) ext.imageGenPrompt = node.imageGenPrompt;
-  if (node.tags?.length) ext.tags = node.tags;
-  if (node.styleOverrides && Object.values(node.styleOverrides).some(Boolean)) {
-    ext.styleOverrides = node.styleOverrides;
+  const ext: SpoorNodeExtension = { ...collectSpoorExtension(node), type: node.type };
+  // ai/theme 卡的原生 text 是**派生投影**（追问引用块 / 三段拼接），不是原始 content。
+  // 原始值进扩展字段，导回/镜像对账才不会把投影当正文写回去。
+  if ((node.type === 'ai' || node.type === 'theme') && node.content) {
+    ext.content = node.content;
   }
-  if (node.urlTitle) ext.urlTitle = node.urlTitle;
-  if (node.urlExcerpt) ext.urlExcerpt = node.urlExcerpt;
   return ext;
 }
 
@@ -304,18 +284,19 @@ export function importJsonCanvas(
 
     const id = newId();
     const ext = readExtension(raw.spoor);
+    // 注册表捡回全部 spoor 字段（0.5.0 起完整往返：追问链、生图参数、PDF 页码都不丢），
+    // 再叠加规范原生属性与分支特有的覆盖
     const common = {
+      ...pickSpoorExtension(ext),
       id,
       canvasId,
       x,
       y,
       width: Number.isFinite(raw.width) ? Number(raw.width) : undefined,
       height: Number.isFinite(raw.height) ? Number(raw.height) : undefined,
-      layout: ext?.layout,
-      tags: ext?.tags?.length ? ext.tags : undefined,
       // 扩展字段优先；没有时把规范的 color（仅认 hex，"1"-"6" 预设无从对应）当背景色
       styleOverrides:
-        ext?.styleOverrides ??
+        ext?.styleOverrides as CanvasNode['styleOverrides'] ??
         (typeof raw.color === 'string' && raw.color.startsWith('#')
           ? { bg: raw.color }
           : undefined),
@@ -329,19 +310,14 @@ export function importJsonCanvas(
         // 扩展字段里的原始类型优先：imagegen 导出的是当前结果图，导回来该还是图片卡
         type: ext?.type === 'imagegen' ? 'image' : (ext?.type ?? fileNodeType(raw.file)),
         filePath: raw.file,
-        fileName: ext?.fileName ?? raw.file.split('/').pop(),
-        fileType: ext?.fileType,
+        fileName: (ext?.fileName as string | undefined) ?? raw.file.split('/').pop(),
       };
     } else if (raw.type === 'text' && typeof raw.text === 'string') {
       row = {
         ...common,
         type: ext?.type ?? 'text',
-        content: raw.text,
-        description: ext?.description,
-        themeTag: ext?.themeTag,
-        agentConfigId: ext?.agentConfigId,
-        userTurn: ext?.userTurn,
-        imageGenPrompt: ext?.imageGenPrompt,
+        // 扩展里带了原始 content（ai/theme 的派生投影场景）就用它，别把投影当正文
+        content: typeof ext?.content === 'string' ? ext.content : raw.text,
       };
     } else if (raw.type === 'link' && typeof raw.url === 'string') {
       // 0.3.1 起有网页卡片：link 原样落成 web 节点，抓取缓存从扩展字段带回
@@ -349,8 +325,6 @@ export function importJsonCanvas(
         ...common,
         type: 'web',
         url: raw.url,
-        urlTitle: ext?.urlTitle,
-        urlExcerpt: ext?.urlExcerpt,
       };
     } else if (raw.type === 'group') {
       // 0.3.1 起有区域框：group 原样落成 frame

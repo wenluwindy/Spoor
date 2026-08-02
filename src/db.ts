@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import { notifyMirrorChange } from './services/mirrorSignals';
 
 export interface CanvasNode {
   id: string;
@@ -191,6 +192,20 @@ export interface CanvasTemplate {
   edges: Edge[];
 }
 
+/**
+ * 文件镜像的记账行（v6 起，见 services/canvasMirror）。
+ * `id` 是画布 id 或全局作用域名（'articles' 等）。这张表**没有**变更钩子：
+ * 它记录的是"我们最后一次写/合并镜像文件时文件里的 savedAt"，
+ * 启动对账拿它判断文件是否被别的机器改过。
+ */
+export interface MirrorStateRow {
+  id: string;
+  /** 镜像文件的单调修订号（本机每次写 +1；合并外部变更后取两侧较大值 +1）。 */
+  revision: number;
+  /** 我们最后写入/合并的那份文件里的 savedAt。与文件当前值不等 = 外部改过。 */
+  lastSavedAt: number;
+}
+
 /** 深度研究实验室：一次已完成研究的本地快照（独立于 articles）。 */
 export interface ResearchPlanStepRecord {
   title: string;
@@ -242,6 +257,7 @@ export class MyDatabase extends Dexie {
   agentSandboxThreads!: Table<AgentSandboxThread>;
   aiTurns!: Table<AiTurn>;
   templates!: Table<CanvasTemplate>;
+  mirrorState!: Table<MirrorStateRow>;
 
   /** name 参数仅供迁移测试用另一个库名走一遍完整升级链，产品代码不传。 */
   constructor(name = 'CortexLocalDB') {
@@ -294,6 +310,11 @@ export class MyDatabase extends Dexie {
         });
       });
 
+    /** v6：文件镜像记账表（0.5.0 笔记落文件）。纯新增表，无数据迁移。 */
+    this.version(6).stores({
+      mirrorState: 'id',
+    });
+
     /**
      * 时间戳与 canvasId 由 hook 统一盖章，而不是散在每个调用点：
      * 漏一个调用点就会出现 `where('canvasId')` 查不到的"幽灵行"，hook 让这类 bug 不可能发生。
@@ -304,17 +325,57 @@ export class MyDatabase extends Dexie {
       if (!obj.canvasId) obj.canvasId = 'default';
       obj.createdAt ??= now;
       obj.updatedAt ??= now;
+      notifyMirrorChange(obj.canvasId);
     });
-    this.nodes.hook('updating', (mods: Partial<CanvasNode>) => {
+    this.nodes.hook('updating', (mods: Partial<CanvasNode>, _pk, obj: CanvasNode) => {
       // 空修改（比如迁移 modify 扫过但没改的行）不算一次编辑，不盖章。
       if (Object.keys(mods).length === 0) return undefined;
+      notifyMirrorChange(obj.canvasId || 'default');
       if ('updatedAt' in mods) return undefined;
       return { updatedAt: Date.now() };
     });
     this.edges.hook('creating', (_pk, obj: Edge) => {
       if (!obj.canvasId) obj.canvasId = 'default';
       obj.createdAt ??= Date.now();
+      notifyMirrorChange(obj.canvasId);
     });
+
+    /**
+     * 镜像脏信号（v0.5.0 笔记落文件）：任何会改变镜像文件内容的写入都喊一声，
+     * 调度器（services/mirrorScheduler）防抖后把对应画布/全局文件重写到 SpoorData/notes/。
+     * 删除也要喊——文件里少一张卡同样是内容变化。`mirrorState` 表刻意**没有**钩子：
+     * 它存的是镜像自己的记账（revision/lastSavedAt），有钩子就自激循环了。
+     */
+    this.nodes.hook('deleting', (_pk, obj: CanvasNode | undefined) => {
+      if (obj) notifyMirrorChange(obj.canvasId || 'default');
+    });
+    this.edges.hook('deleting', (_pk, obj: Edge | undefined) => {
+      if (obj) notifyMirrorChange(obj.canvasId || 'default');
+    });
+    this.aiTurns.hook('creating', (_pk, obj: AiTurn) => notifyMirrorChange(obj.canvasId));
+    this.aiTurns.hook('deleting', (_pk, obj: AiTurn | undefined) => {
+      if (obj) notifyMirrorChange(obj.canvasId);
+    });
+    this.canvases.hook('creating', (_pk, obj: Canvas) => notifyMirrorChange(obj.id));
+    this.canvases.hook('updating', (mods, _pk, obj: Canvas) => {
+      if (Object.keys(mods as object).length > 0) notifyMirrorChange(obj.id);
+      return undefined;
+    });
+    this.canvases.hook('deleting', (_pk, obj: Canvas | undefined) => {
+      if (obj) notifyMirrorChange(obj.id);
+    });
+    for (const [table, scope] of [
+      [this.articles, 'articles'],
+      [this.agents, 'agents'],
+      [this.templates, 'templates'],
+    ] as const) {
+      table.hook('creating', () => notifyMirrorChange(scope));
+      table.hook('updating', (mods) => {
+        if (Object.keys(mods as object).length > 0) notifyMirrorChange(scope);
+        return undefined;
+      });
+      table.hook('deleting', () => notifyMirrorChange(scope));
+    }
   }
 }
 

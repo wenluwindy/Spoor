@@ -19,11 +19,18 @@ export function AgentNode({
   const runDisabled = isAnalyzing || isAgentAnalysisActionDisabled || !onRunAnalysis;
 
   return (
-    <div className="w-full h-full bg-app-surface-raised text-app-text p-4 shadow-lg border border-app-border rounded-lg relative overflow-hidden flex flex-col">
+    <div
+      className="w-full h-full bg-app-surface-raised text-app-text p-4 shadow-lg border border-app-border rounded-lg relative overflow-hidden flex flex-col"
+      // 人格强调色（AgentsStudio 里设置）：只覆盖边框，未设置时维持主题描边
+      style={conf?.color ? { borderColor: conf.color } : undefined}
+    >
       <div className="absolute inset-0 bg-gradient-to-br from-app-accent/8 to-transparent pointer-events-none" aria-hidden />
       <NodeTypeLabel label={t('nodes.agent_label')} className="relative z-10 mb-2" />
       <div className="flex items-start gap-3 relative z-10">
-        <div className="w-9 h-9 rounded-lg bg-app-surface-subtle border border-app-border flex items-center justify-center text-app-accent shrink-0 overflow-hidden">
+        <div
+          className="w-9 h-9 rounded-lg bg-app-surface-subtle border border-app-border flex items-center justify-center text-app-accent shrink-0 overflow-hidden"
+          style={conf?.color ? { borderColor: conf.color, borderWidth: 2 } : undefined}
+        >
           <AgentIcon
             agentId={conf?.id}
             className="w-full h-full"

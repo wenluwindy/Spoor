@@ -7,6 +7,7 @@ import React, {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { acquireKeyboardLayer, isTopKeyboardLayer } from '../services/keyboardLayers';
 
 export interface AppConfirmOptions {
   title?: string;
@@ -99,10 +100,17 @@ export function AppDialogProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  // 对话框在场即占 'modal' 层：这是键盘栈的最高层，压住其下所有 Esc 处理者
+  useEffect(() => {
+    if (!dialog) return;
+    return acquireKeyboardLayer('modal');
+  }, [dialog]);
+
   useEffect(() => {
     if (!dialog) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      if (!isTopKeyboardLayer('modal')) return;
       if (dialog.kind === 'confirm') close(false);
       else if (dialog.kind === 'prompt') closePrompt(null);
     };

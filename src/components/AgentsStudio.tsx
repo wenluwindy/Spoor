@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { AgentConfig, AgentMarkdownKnowledgeFile } from '../db';
 import { db } from '../db';
+import { colorPresets } from '../constants/presets';
 import type { CallAIFn } from '../types/ai';
 import { formatAiError } from '../services/ai';
 import { resolveErrorMessage } from '../utils/resolveErrorMessage';
@@ -117,6 +118,14 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
   const handleUpdateActiveAgent = (field: string, value: string | number) => {
     if (!activeAgentId) return;
     setAgentConfigs(agentConfigs.map((a) => (a.id === activeAgentId ? { ...a, [field]: value } : a)));
+  };
+
+  /** 强调色单独一个 setter：清除时要把字段整个抹掉（undefined），而不是存空串。 */
+  const handleUpdateActiveAgentColor = (color?: string) => {
+    if (!activeAgentId) return;
+    setAgentConfigs(
+      agentConfigs.map((a) => (a.id === activeAgentId ? { ...a, color: color || undefined } : a)),
+    );
   };
 
   const setActiveAgentKnowledgeFiles = (next: AgentMarkdownKnowledgeFile[] | undefined) => {
@@ -345,7 +354,11 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                 className={`p-4 cursor-pointer transition-colors border-l-4 ${activeAgentId === agent.id ? 'bg-app-surface-subtle border-app-accent' : 'hover:bg-app-surface-subtle/50 border-transparent'}`}
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-app-accent-wash border border-app-border flex items-center justify-center overflow-hidden">
+                  <div
+                    className="w-10 h-10 rounded-lg bg-app-accent-wash border border-app-border flex items-center justify-center overflow-hidden"
+                    // 人格强调色只做边框点缀，不动内部布局
+                    style={agent.color ? { borderColor: agent.color, borderWidth: 2 } : undefined}
+                  >
                     <AgentIcon
                       agentId={agent.id}
                       className="w-full h-full"
@@ -369,7 +382,10 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
           <>
             <div className="sticky top-0 bg-app-surface/80 backdrop-blur-md px-10 py-6 border-b border-app-border flex flex-col sm:flex-row justify-between items-start sm:items-end z-10 gap-4">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-12 h-12 rounded-xl bg-app-accent-wash border border-app-border flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                <div
+                  className="w-12 h-12 rounded-xl bg-app-accent-wash border border-app-border flex items-center justify-center shrink-0 shadow-sm overflow-hidden"
+                  style={activeAgent.color ? { borderColor: activeAgent.color, borderWidth: 2 } : undefined}
+                >
                   <AgentIcon
                     agentId={activeAgent.id}
                     className="w-full h-full"
@@ -434,6 +450,42 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
                       onChange={e => handleUpdateActiveAgent('prompt', e.target.value)}
                       placeholder={t('agents.prompt_placeholder')}
                     />
+                  </div>
+                  {/* 强调色：落到左侧人格列表与画布 AgentNode 的头像/边框上 */}
+                  <div className="space-y-2">
+                    <span className="block text-[10px] font-mono font-bold text-app-text-faint uppercase tracking-wider">{t('agents.accent_color')}</span>
+                    <div className="flex items-center gap-2">
+                      <Tooltip label={t('agents.accent_color_default')}>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateActiveAgentColor(undefined)}
+                          aria-pressed={!activeAgent.color}
+                          className={`relative w-6 h-6 rounded-full overflow-hidden border bg-app-surface-raised transition-all ${
+                            !activeAgent.color
+                              ? 'border-app-accent ring-2 ring-app-accent/30'
+                              : 'border-app-border hover:border-app-accent/60'
+                          }`}
+                        >
+                          {/* 斜杠表示「无颜色」 */}
+                          <span className="absolute left-1/2 top-1/2 w-[140%] h-px bg-app-border -translate-x-1/2 -translate-y-1/2 rotate-45" aria-hidden />
+                        </button>
+                      </Tooltip>
+                      {colorPresets.map((preset) => (
+                        <Tooltip key={preset.bg} label={t('agents.accent_color_swatch', { color: preset.bg })}>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateActiveAgentColor(preset.bg)}
+                            aria-pressed={activeAgent.color === preset.bg}
+                            style={{ backgroundColor: preset.bg }}
+                            className={`w-6 h-6 rounded-full border transition-all ${
+                              activeAgent.color === preset.bg
+                                ? 'border-app-accent ring-2 ring-app-accent/30 scale-110'
+                                : 'border-app-border hover:scale-110'
+                            }`}
+                          />
+                        </Tooltip>
+                      ))}
+                    </div>
                   </div>
                 </div>
 

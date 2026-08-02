@@ -631,6 +631,50 @@ export function useAiActions({
   };
 
   /**
+   * 人格接力（0.5.0 C9）：以一张卡的正文为上下文，让选定的人格出一张新 AI 卡
+   * 并从源卡连一条线。真知镜挑完刺让熨烫师改写——链式思考的最短路径。
+   * 与 Agent 卡的「运行分析」同一套提示词与出牌方式，差别只在入口：
+   * 这里从**内容卡**出发挑人格，那边从**人格卡**出发找内容。
+   */
+  const relayNodeToAgent = async (nodeId: string, agentConfigId: string) => {
+    if (isAnyAiBusy || streamingAiNodeId) return;
+    const agentConfig = agentConfigs.find((a) => a.id === agentConfigId);
+    const source = dynamicNodes.find((n) => n.id === nodeId);
+    if (!agentConfig || !source) return;
+
+    const el = nodesRef.current[nodeId];
+    const contextText = el ? getCanvasNodeContextText(el).trim() : '';
+    if (!contextText) {
+      void appAlert({ message: t('nodes.agent_no_context') });
+      return;
+    }
+
+    try {
+      await createAiCardAndStream({
+        node: {
+          x: source.x + 350,
+          y: source.y,
+          threadRootContextNodeId: nodeId,
+          threadAgentConfigId: agentConfigId,
+        },
+        edgeFrom: nodeId,
+        callAi: (onStreamChunk) =>
+          callUniversalAI({
+            config: aiConfig,
+            systemInstruction: buildAgentSystemInstruction(agentConfig),
+            prompt: t('ai.prompts.agentContext', { content: contextText }),
+            temperature: agentConfig.temperature ?? 0.7,
+            topP: agentConfig.creativity ?? 0.4,
+            onStreamChunk,
+          }),
+      });
+    } catch (e) {
+      logger.error('ai', 'relayNodeToAgent failed', { error: formatAiError(e), agentConfigId });
+      void appAlert({ message: formatAiFailureAlertMessage(e, t) });
+    }
+  };
+
+  /**
    * 就地重跑一张 AI 卡片。
    *
    * 只有**带着来历**的卡片能重跑：知道当初是哪个人设、基于哪张便签生成的
@@ -710,6 +754,7 @@ export function useAiActions({
     setAiPrompt,
     handlePublish,
     triggerAgentAnalysis,
+    relayNodeToAgent,
     handleAiSubmit,
     submitAiThreadFollowUp,
     intentClarification,

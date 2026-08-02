@@ -68,6 +68,7 @@ export const settings = {
   "backup_snapshot_restore": "还原这一份",
   "storage_desktop_only": "本地文件存储仅在桌面版可用。",
   "storage_fallback_hint": "安装目录不可写，媒体数据已改存到系统的应用数据目录。多半是把程序装到了 Program Files。",
+  "storage_notes_mirror_hint": "画布笔记也在这个目录里：notes/ 下每张画布一个 .canvas 文件（Obsidian 可直接打开），随编辑自动更新。把整个数据目录放进网盘同步文件夹，另一台电脑启动时会自动合并改动。",
   "assets_filter_all": "全部",
   "assets_filter_generated": "生成图",
   "assets_filter_uploaded": "上传",
@@ -232,5 +233,7 @@ export const settings = {
   "docs_provider_deepseek": "DeepSeek",
   "docs_provider_custom": "自定义 OpenAI 兼容接口",
   "docs_provider_local_llama": "本地 GGUF（仅桌面版）",
-  "provider_custom": "自定义端点"
+  "provider_custom": "自定义端点",
+  "keystore_warning_fallback": "系统安全存储暂时不可用，API 密钥这次以明文保存在本机。功能不受影响；安全存储恢复后，下次保存会自动转回加密存放。",
+  "keystore_warning_corrupt": "加密的密钥文件读不出来了（可能损坏，或系统账户发生过变更）。为了不丢配置，这次的修改会先以明文保存在本机；原文件保留在应用配置目录（ai-config.dat）以便排查，删除它并重启应用即可重新加密保存。"
 };

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { isTextEditingTarget } from '../utils/noteClipboard';
+import { isTopKeyboardLayer } from '../services/keyboardLayers';
 
 export interface CanvasKeyboardHandlers {
   onUndo: () => void;
@@ -10,7 +11,7 @@ export interface CanvasKeyboardHandlers {
   onSelectAll: () => void;
   /** Ctrl+D：就地复制选区。 */
   onDuplicateSelection: () => void;
-  /** Esc：清空选区（正在拉线时由 `useCanvasLinkDrag` 先接走）。 */
+  /** Esc：清空选区（画布是键盘层的底层，上面有弹层/拉线时不动作，见 keyboardLayers）。 */
   onClearSelection: () => void;
   /** 方向键微调选区，单位是画布坐标。 */
   onNudgeSelection: (dx: number, dy: number) => void;
@@ -75,6 +76,9 @@ export function useCanvasKeyboard(params: UseCanvasKeyboardParams): void {
           return;
         }
         if (e.key === 'Escape') {
+          // 画布恒为键盘栈的底层：任何弹层（菜单/拉线/演示/搜索/对话框）在场时
+          // 这一下 Esc 归它们，清选区要等栈空了再按
+          if (!isTopKeyboardLayer('canvas')) return;
           h.onClearSelection();
           return;
         }
@@ -115,6 +119,8 @@ export function useCanvasKeyboard(params: UseCanvasKeyboardParams): void {
         return;
       }
       if (key === 'f') {
+        // Ctrl+Shift+F 是全局搜索（App 自己挂监听），这里只接不带 Shift 的画布内搜索
+        if (e.shiftKey) return;
         e.preventDefault();
         h.onOpenSearch();
         return;

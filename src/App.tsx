@@ -13,10 +13,19 @@ import { registerCanvasUnloadFlush } from './utils/registerCanvasUnloadFlush';
 import { getCanvasNodeContextText } from './utils/canvasNodeContextText';
 import { getCanvasCenterPosition, screenToCanvasPosition } from './utils/canvas';
 import { buildResearchFrame } from './services/researchToCanvas';
+import { buildResearchStepCards } from './services/researchStepToCanvas';
 import { CanvasEdgeLines } from './components/canvas/CanvasEdgeLines';
 import { CanvasNodeItem, type CanvasNodeSharedProps } from './components/canvas/CanvasNodeItem';
 import { SnapGuideLines } from './components/canvas/SnapGuideLines';
 import { CanvasMinimap } from './components/canvas/CanvasMinimap';
+import { OrganizePreviewBar, OrganizePreviewGhosts } from './components/canvas/OrganizePreview';
+import { useCanvasOrganize } from './hooks/useCanvasOrganize';
+import { GlobalSearchPanel } from './components/GlobalSearchPanel';
+import { TagFilterBar } from './components/canvas/TagFilterBar';
+import { usePresentation } from './hooks/usePresentation';
+import { PresentationHud } from './components/canvas/PresentationHud';
+import { buildPresentationOrder } from './utils/presentationOrder';
+import { nodesInsideFrame } from './services/canvasFrame';
 import { buildSnapTargets, setSnapTargets } from './services/canvasSnapGuides';
 import { alignNodes, distributeNodes, type AlignMode, type DistributeAxis, type AlignableNode } from './utils/canvasAlign';
 import { deleteCanvasTemplate, insertCanvasTemplate, saveCanvasTemplate } from './services/canvasTemplates';
@@ -32,10 +41,6 @@ import { Reference } from './components/Reference';
 import { ResearchLab } from './components/ResearchLab';
 import { AgentsStudio } from './components/AgentsStudio';
 import { callUniversalAI } from './services/ai';
-import { autoCheckForUpdateOnce } from './services/appUpdate';
-import { runDailySnapshot } from './services/autoBackup';
-import { getAppVersion } from './utils/appVersion';
-import { logger } from './utils/logger';
 import { MIMO_TOKEN_PLAN_BASE_URL } from './constants/mimo';
 import { DOUBAO_ARK_BASE_URL } from './constants/doubao';
 import { NodeRenderer } from './components/nodes/NodeRenderer';
@@ -49,7 +54,6 @@ import { useCanvasInteraction } from './hooks/useCanvasInteraction';
 import { useCanvasHistory } from './hooks/useCanvasHistory';
 import { useCanvasKeyboard } from './hooks/useCanvasKeyboard';
 import { redoCanvasHistory, undoCanvasHistory } from './services/canvasHistory';
-import { markEdgesDirty } from './services/edgeGeometry';
 import {
   addEdgesRecorded,
   addNodesAndEdgesRecorded,
@@ -61,22 +65,12 @@ import { useCanvasContextMenu } from './hooks/useCanvasContextMenu';
 import { useCanvasClipboard } from './hooks/useCanvasClipboard';
 import { useCanvasMarquee } from './hooks/useCanvasMarquee';
 import { useCanvasLinkDrag } from './hooks/useCanvasLinkDrag';
-import {
-  computeCenterTransform,
-  computeFitTransform,
-  unionNodeBoundsInCanvasSpace,
-} from './utils/zoomToFit';
+import { useCanvasViewOps } from './hooks/useCanvasViewOps';
+import { useAppStartup } from './hooks/useAppStartup';
 import { CanvasSearchPanel } from './components/canvas/CanvasSearchPanel';
 import { stepSearchIndex } from './utils/canvasSearch';
 import { useCanvasSearch } from './hooks/useCanvasSearch';
 import { DEFAULT_FRAME_HEIGHT, DEFAULT_FRAME_WIDTH, groupIdsForDrag } from './services/canvasFrame';
-import { visibleNodeIds } from './utils/viewportCulling';
-import {
-  CanvasImageExportError,
-  renderCanvasImage,
-  saveCanvasImage,
-} from './services/canvasImageExport';
-import { toSafeFileName } from './services/canvasPortability';
 import { resolveAgentLocalizedName } from './utils/aiI18n';
 import { useNodeActions } from './hooks/useNodeActions';
 import { pickFiles } from './utils/filePicker';
@@ -87,13 +81,13 @@ import { useImageGenActions } from './hooks/useImageGenActions';
 import { useWebNodeActions } from './hooks/useWebNodeActions';
 import { useCanvasRecompute } from './hooks/useCanvasRecompute';
 import { isFetchableUrl } from './services/webPage';
-import { migrateBase64MediaNodes } from './services/migrateBase64Media';
 import {
   emptyAiConfigV2,
   isAiConfigEmpty,
   normalizeAiConfig,
   resolveActiveChatConfig,
 } from './services/aiConfig';
+import { loadAiConfig, saveAiConfig } from './services/aiConfigStore';
 import type { AIConfigV2 } from './types/aiConfig';
 import { useAppDialog } from './components/AppDialogProvider';
 import { isTextEditingTarget } from './utils/noteClipboard';
@@ -206,6 +200,12 @@ export default function App() {
     [openContextMenu],
   );
 
+  /** 演示模式的点击桥：hook 在下方才初始化，背景点击处理器经这个 ref 读它。 */
+  const presentationClickRef = useRef<{ active: boolean; next: () => void }>({
+    active: false,
+    next: () => {},
+  });
+
   /**
    * 画布背景按下：先把正在编辑的节点存盘，再按键位分派。
    * 左键 → 框选；中键 → 平移；右键交给 onContextMenu，不在这里处理。
@@ -223,6 +223,11 @@ export default function App() {
         return;
       }
       if (e.button !== 0) return;
+      // 演示中点空白 = 下一张（presentation 在下方才初始化，经 ref 桥接）
+      if (presentationClickRef.current.active) {
+        presentationClickRef.current.next();
+        return;
+      }
       // 正在拉线时落在空白处：不丢弃这根线，改为当场问「要建张什么卡」再自动连上。
       // 此时也不该同时开始框选。
       if (connectingFrom) {
@@ -235,33 +240,31 @@ export default function App() {
   );
 
   /**
-   * 视口裁剪。
-   *
-   * 卡片超过阈值时只渲染看得见的那些（与可见节点相连的也留着，否则连线会整根消失）。
-   * 导出与「缩放至适应内容」要量全部内容的包围盒，靠 `withAllNodesRendered` 临时关掉它。
-   *
-   * 视口尺寸从 DOM 现取、以 transform 为依赖：平移缩放都会重算。窗口缩放而不平移的
-   * 极端情况下会短暂失准，下一次平移即自愈——不值得为它再挂一个 resize 监听。
+   * 视口裁剪 / 缩放适应 / 聚焦单卡 / 整图导出：全是 refs+transform 的 DOM 活，
+   * 整块住在 useCanvasViewOps（0.5.0 拆薄），行为与原先在 App 里时一致。
    */
-  const [renderAllNodes, setRenderAllNodes] = useState(false);
-
-  /** 窗口缩放会改视口尺寸，裁剪集合与连线几何都要跟着重算。 */
-  const [viewportVersion, setViewportVersion] = useState(0);
-  useEffect(() => {
-    const main = mainRef.current;
-    if (!main || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => {
-      setViewportVersion((v) => v + 1);
-      markEdgesDirty();
-    });
-    ro.observe(main);
-    return () => ro.disconnect();
-  }, [activeTab]);
-
-  /** 节点/连线增删改（含撤销重做）后连线要重画。 */
-  useEffect(() => {
-    markEdgesDirty();
-  }, [dynamicNodes, edges]);
+  const {
+    renderedNodes,
+    renderedEdges,
+    handleZoomToFit,
+    focusNode,
+    exportCanvasImage,
+  } = useCanvasViewOps({
+    mainRef,
+    contentContainerRef,
+    nodesRef,
+    transformRef,
+    setCanvasTransform,
+    canvasTransform,
+    activeTab,
+    dynamicNodes,
+    edges,
+    canvases,
+    activeCanvasId,
+    setSelectedNodes,
+    appAlert,
+    t,
+  });
 
   /** 拖动吸附的参照线：当前画布全部卡片的左/中/右与上/中/下（高度未知的只有顶线）。 */
   useEffect(() => {
@@ -279,95 +282,33 @@ export default function App() {
     return () => setSnapTargets(null);
   }, [dynamicNodes]);
 
-  const culledNodeIds = React.useMemo(() => {
-    if (renderAllNodes) return null;
-    const rect = mainRef.current?.getBoundingClientRect();
-    if (!rect) return null;
-    return visibleNodeIds(
-      dynamicNodes,
-      edges,
-      { width: rect.width, height: rect.height },
-      canvasTransform,
-    );
-    // viewportVersion 只为让窗口缩放触发重算，不参与计算本身
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [renderAllNodes, dynamicNodes, edges, canvasTransform, viewportVersion]);
-
-  const renderedNodes = React.useMemo(
-    () => (culledNodeIds ? dynamicNodes.filter((n) => culledNodeIds.has(n.id)) : dynamicNodes),
-    [culledNodeIds, dynamicNodes],
-  );
-
-  /**
-   * 边也随裁剪走：两端都不在可见集合里的边整条不渲染。
-   * 可见集合已把"与可见节点相连的节点"包含进来（见 visibleNodeIds），
-   * 所以任何有一端可见的边，两端都在集合里——这里的过滤不会误伤半可见的边。
-   */
-  const renderedEdges = React.useMemo(
-    () =>
-      culledNodeIds
-        ? edges.filter((e) => culledNodeIds.has(e.from) && culledNodeIds.has(e.to))
-        : edges,
-    [culledNodeIds, edges],
-  );
-
-  /**
-   * 临时全量渲染，跑完再恢复。
-   *
-   * 导出图片与缩放至适应内容都靠 DOM 量包围盒，裁剪开着的话它们只能看到当前屏幕这一块。
-   * 等两帧是为了让 React 提交完这次渲染——只等一帧时 DOM 还没落地。
-   */
-  const withAllNodesRendered = useCallback(
-    async <T,>(fn: () => T | Promise<T>): Promise<T> => {
-      if (!culledNodeIds) return fn();
-      setRenderAllNodes(true);
-      await new Promise((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve(null))),
-      );
-      try {
-        return await fn();
-      } finally {
-        setRenderAllNodes(false);
-      }
-    },
-    [culledNodeIds],
-  );
-
-  /** 缩放至适应全部内容：把所有节点的包围盒装进视口。 */
-  const handleZoomToFit = useCallback(() => {
-    // 裁剪开着时先把全部节点渲染出来，否则量到的只是当前屏幕这一块
-    void withAllNodesRendered(() => {
-      const main = mainRef.current;
-      if (!main) return;
-      const containerRect = main.getBoundingClientRect();
-      const bounds = unionNodeBoundsInCanvasSpace(
-        Object.values(nodesRef.current),
-        containerRect,
-        transformRef.current ?? { x: 0, y: 0, scale: 1 },
-      );
-      if (!bounds) return;
-      setCanvasTransform(
-        computeFitTransform(bounds, { width: containerRect.width, height: containerRect.height }),
-      );
-    });
-  }, [transformRef, setCanvasTransform, withAllNodesRendered]);
-
   /**
    * 配置以 v2（多服务商）存放，读出来时统一过一遍 normalizeAiConfig：
    * 它认得 v1 扁平结构并就地迁移，坏数据一律降级为空配置而不是把应用卡死。
+   *
+   * 0.5.0 起持久化收口到 services/aiConfigStore（桌面端 = 系统密钥库，
+   * localStorage 只是浏览器调试与降级路径），启动加载因此从同步变异步：
+   * 加载完成前以空配置渲染——表现与「未配置引导卡」一致，加载完成后填入。
    */
-  const [aiConfigV2, setAiConfigV2] = useState<AIConfigV2>(() => {
-    const saved = localStorage.getItem('ai_config');
-    if (!saved) return emptyAiConfigV2();
-    try {
-      const raw = JSON.parse(saved);
-      // v1 的 Base URL 兜底修正要在迁移之前做，迁移完就没有扁平字段了
-      const prepared = raw?.version === 2 ? raw : migrateStoredAiConfig(raw) ?? raw;
-      return normalizeAiConfig(prepared);
-    } catch {
-      return emptyAiConfigV2();
-    }
-  });
+  const [aiConfigV2, setAiConfigV2] = useState<AIConfigV2>(emptyAiConfigV2);
+  /** 首次加载完成前不写回，否则会拿初始空配置把密钥库里的真配置盖掉。 */
+  const aiConfigLoadedRef = useRef(false);
+
+  useEffect(() => {
+    void loadAiConfig().then(({ raw }) => {
+      if (raw !== null) {
+        try {
+          const parsed = JSON.parse(raw);
+          // v1 的 Base URL 兜底修正要在迁移之前做，迁移完就没有扁平字段了
+          const prepared = parsed?.version === 2 ? parsed : migrateStoredAiConfig(parsed) ?? parsed;
+          setAiConfigV2(normalizeAiConfig(prepared));
+        } catch {
+          // 坏数据降级为空配置而不是把应用卡死
+        }
+      }
+      aiConfigLoadedRef.current = true;
+    });
+  }, []);
 
   /**
    * 对话链路（services/ai、ResearchLab、AgentsStudio、useAiActions）继续吃扁平形状。
@@ -379,18 +320,13 @@ export default function App() {
   const isAiUnconfigured = isAiConfigEmpty(aiConfigV2);
 
   useEffect(() => {
-    localStorage.setItem('ai_config', JSON.stringify(aiConfigV2));
+    if (!aiConfigLoadedRef.current) return;
+    // 降级（密钥库坏/不可用）由 aiConfigStore 内部记账，设置页的警示条订阅它
+    void saveAiConfig(aiConfigV2);
   }, [aiConfigV2]);
 
-  // 启动静默自检：有新版就在侧边栏设置按钮上挂个点，查不到就安静躺下，不打断
-  useEffect(() => {
-    autoCheckForUpdateOnce();
-  }, []);
-
-  // 每天第一次启动留一份自动快照。失败只记日志——备份是后台的好意，不该拦在启动路径上
-  useEffect(() => {
-    void getAppVersion().then((version) => runDailySnapshot(version, Date.now()));
-  }, []);
+  // 启动杂务（更新自检 / 每日快照 / 镜像对账 / base64 媒体迁移）整块住在 useAppStartup
+  useAppStartup({ t, appAlert });
 
   useEffect(() => {
     localStorage.setItem('active_canvas_id', activeCanvasId);
@@ -407,13 +343,6 @@ export default function App() {
   }, [articles, activeReferenceId, setActiveReferenceId]);
 
   useSeedData();
-
-  // 旧的 base64 节点搬进文件存储。best-effort，失败原样留着靠 content 兜底显示
-  useEffect(() => {
-    void migrateBase64MediaNodes().then((count) => {
-      if (count > 0) logger.info('app', `已把 ${count} 个节点的内联数据搬到文件存储`);
-    });
-  }, []);
 
   useEffect(() => registerCanvasUnloadFlush(), []);
 
@@ -596,6 +525,7 @@ export default function App() {
     setAiPrompt,
     handlePublish,
     triggerAgentAnalysis,
+    relayNodeToAgent,
     handleAiSubmit,
     submitAiThreadFollowUp,
     intentClarification,
@@ -608,6 +538,11 @@ export default function App() {
     aiConfig, agentConfigs, activeCanvasId, nodesRef, transformRef,
     dynamicNodes, edges, selectedNodes, setSelectedNodes, setActiveReferenceId, setActiveTab,
   });
+
+  // AI 整理画布（C8）：分组预览 → 应用/取消
+  const { isOrganizing, runOrganize, applyPendingOrganize, cancelPendingOrganize } =
+    useCanvasOrganize({ aiConfig, activeCanvasId, dynamicNodes, nodesRef });
+
 
   /**
    * 撤销 / 重做。
@@ -637,27 +572,7 @@ export default function App() {
     [agentConfigs],
   );
 
-  /** 把某张卡片移到视口正中并选中它。缩放保持不变（见 computeCenterTransform）。 */
-  const focusNode = useCallback(
-    (nodeId: string) => {
-      const main = mainRef.current;
-      if (!main) return;
-      const rect = main.getBoundingClientRect();
-      const transform = transformRef.current ?? { x: 0, y: 0, scale: 1 };
-      const el = nodesRef.current[nodeId];
-      const bounds = el
-        ? unionNodeBoundsInCanvasSpace([el], rect, transform)
-        : null;
-      if (!bounds) return;
-      setCanvasTransform(
-        computeCenterTransform(bounds, { width: rect.width, height: rect.height }, transform.scale),
-      );
-      setSelectedNodes(new Set([nodeId]));
-    },
-    [transformRef, setCanvasTransform],
-  );
-
-  // 画布内搜索（Ctrl+F）整块住在 useCanvasSearch
+  // 画布内搜索（Ctrl+F）整块住在 useCanvasSearch（focusNode 来自 useCanvasViewOps）
   const {
     isSearchOpen,
     setIsSearchOpen,
@@ -675,6 +590,61 @@ export default function App() {
     agentNameById,
     onFocusMatch: focusNode,
   });
+
+  // 演示模式（B7）：逐卡聚焦播放器
+  const presentation = usePresentation({ onFocusNode: focusNode });
+  const { start: startPresentationRun } = presentation;
+  presentationClickRef.current = { active: presentation.active, next: presentation.next };
+
+  /**
+   * 演示入口。startId 缺省 = 整张画布从根讲起；nodeIds 给了只讲该子集；
+   * startId 是区域框时讲框住的那批卡（框本身是背景，不进播放序）。
+   */
+  const startPresentation = useCallback(
+    (startId?: string, nodeIds?: string[]) => {
+      const startNode = startId ? dynamicNodes.find((n) => n.id === startId) : undefined;
+      let pool = nodeIds ? dynamicNodes.filter((n) => nodeIds.includes(n.id)) : dynamicNodes;
+      let effectiveStart = startId;
+      if (startNode?.type === 'frame') {
+        const members = new Set(nodesInsideFrame(startNode, dynamicNodes));
+        pool = dynamicNodes.filter((n) => members.has(n.id));
+        effectiveStart = undefined;
+      }
+      const order = buildPresentationOrder(pool, edges, effectiveStart);
+      if (order.length === 0) {
+        void appAlert({ message: t('canvas.presentation.empty') });
+        return;
+      }
+      startPresentationRun(order);
+    },
+    [dynamicNodes, edges, startPresentationRun, appAlert, t],
+  );
+
+  // 全局搜索（B5）：Ctrl+Shift+F 在任何页签都能呼出
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setIsGlobalSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  /** 跨画布跳转：目标画布的节点要等 live query 回流后才能聚焦。 */
+  const pendingFocusNodeIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const id = pendingFocusNodeIdRef.current;
+    if (!id) return;
+    if (dynamicNodes.some((n) => n.id === id)) {
+      pendingFocusNodeIdRef.current = null;
+      focusNode(id);
+    }
+  }, [dynamicNodes, focusNode]);
+  /** 全局搜索点开研究会话：切页签并让实验室打开这一条历史。 */
+  const [pendingResearchSessionId, setPendingResearchSessionId] = useState<string | null>(null);
 
   /**
    * 快捷键作用于「当前选区」。
@@ -694,48 +664,13 @@ export default function App() {
     onDeleteSelection: () => void deleteNodes(selectionRef.current),
     onSelectAll: () => setSelectedNodes(new Set(dynamicNodes.map((n) => n.id))),
     onDuplicateSelection: () => void duplicateNodes(selectionRef.current),
-    onClearSelection: () => {
-      // 正在拉线时 Esc 归 useCanvasLinkDrag 管——先放下那根线，再按一次才清选区
-      if (connectingFrom) return;
-      clearSelection();
-    },
+    // 拉线/弹层在场时的让位由键盘层机制（services/keyboardLayers）统一处理
+    onClearSelection: () => clearSelection(),
     onNudgeSelection: (dx, dy) => void nudgeNodes(selectionRef.current, dx, dy),
     onResetView: () => setCanvasTransform({ x: 0, y: 0, scale: 1 }),
     onZoomToFit: handleZoomToFit,
     onOpenSearch: () => setIsSearchOpen(true),
   });
-
-  /**
-   * 把整张画布导出成 PNG。
-   *
-   * 落在 App 而不是画布历史面板里，是因为它要摸 DOM：导的是**全部内容**而非当前视口，
-   * 得先量出所有卡片的包围盒（见 `services/canvasImageExport`）。
-   */
-  const exportCanvasImage = useCallback(async () => {
-    const main = mainRef.current;
-    const content = contentContainerRef.current;
-    if (!main || !content) return;
-
-    const canvasName = canvases.find((c) => c.id === activeCanvasId)?.name ?? activeCanvasId;
-    try {
-      // 同上：导的是整张画布，裁剪期间必须先把全部节点渲染出来
-      const dataUrl = await withAllNodesRendered(() =>
-        renderCanvasImage({
-          contentContainer: content,
-          viewport: main,
-          transform: transformRef.current ?? { x: 0, y: 0, scale: 1 },
-          nodeElements: Object.values(nodesRef.current),
-          format: 'png',
-          // 底色跟着当前主题走，导出的图才和屏幕上看到的是同一张
-          backgroundColor: getComputedStyle(main).backgroundColor || '#ffffff',
-        }),
-      );
-      await saveCanvasImage(`${toSafeFileName(canvasName)}.png`, dataUrl);
-    } catch (e) {
-      const code = e instanceof CanvasImageExportError ? e.code : 'render_failed';
-      await appAlert({ message: t(`canvas.export_image_${code}`) });
-    }
-  }, [activeCanvasId, canvases, transformRef, appAlert, t, withAllNodesRendered]);
 
   /**
    * 沿边重算：改了上游之后，把顺着连线的下游 AI 卡与生图节点按依赖顺序重跑一遍。
@@ -786,6 +721,21 @@ export default function App() {
       setActiveTab('personal');
     },
     [activeCanvasId, transformRef, t],
+  );
+
+  /** 中途落卡（C10）：单个已完成的研究步骤落到当前画布中心附近，不切换页签。 */
+  const spawnResearchStepToCanvas = useCallback(
+    async (step: {
+      title: string;
+      analysis: string;
+      sources: { title: string; link: string; snippet: string }[];
+    }) => {
+      const at = getCanvasCenterPosition(transformRef.current ?? { x: 0, y: 0, scale: 1 });
+      const { nodes, edges: newEdges } = buildResearchStepCards({ canvasId: activeCanvasId, at, step });
+      // 整批一步撤销
+      await addNodesAndEdgesRecorded(activeCanvasId, nodes, newEdges);
+    },
+    [activeCanvasId, transformRef],
   );
 
   /** 另存为：图片/视频用原件路径，生图节点用当前选中的那一张结果。 */
@@ -878,6 +828,24 @@ export default function App() {
     [appPrompt, t, dynamicNodes, edges, templates.length],
   );
 
+  /** 重命名模板：弹输入框，默认值给旧名，空名/没改就当没发生。 */
+  const renameTemplateById = useCallback(
+    async (templateId: string) => {
+      const row = await db.templates.get(templateId);
+      if (!row) return;
+      const name = await appPrompt({
+        title: t('canvas.menu.rename_template_title'),
+        placeholder: t('canvas.menu.rename_template_placeholder'),
+        defaultValue: row.name,
+      });
+      if (name === null) return;
+      const trimmed = name.trim();
+      if (trimmed === '' || trimmed === row.name) return;
+      await db.templates.update(templateId, { name: trimmed });
+    },
+    [appPrompt, t],
+  );
+
   const contextMenuActions = React.useMemo<CanvasContextMenuActions>(
     () => ({
       createNode: (nodeType, at) => void createNodeAt(nodeType, at),
@@ -906,7 +874,11 @@ export default function App() {
       alignNodes: (nodeIds, mode) => void alignOrDistributeNodes(nodeIds, { align: mode }),
       distributeNodes: (nodeIds, axis) => void alignOrDistributeNodes(nodeIds, { distribute: axis }),
       saveAsTemplate: (nodeIds) => void saveSelectionAsTemplate(nodeIds),
+      organizeNodes: (nodeIds) => void runOrganize(nodeIds),
+      relayToAgent: (nodeId, agentConfigId) => void relayNodeToAgent(nodeId, agentConfigId),
+      startPresentation: (startId, nodeIds) => startPresentation(startId, nodeIds),
       insertTemplate: (templateId, at) => void insertCanvasTemplate(templateId, activeCanvasId, at),
+      renameTemplate: (templateId) => void renameTemplateById(templateId),
       deleteTemplate: (templateId) => void deleteCanvasTemplate(templateId),
       outputAsImageNode: (nodeId) => void outputAsImageNode(nodeId),
       recomputeFrom: (nodeId, includeStart) => void runRecompute(nodeId, includeStart),
@@ -931,7 +903,8 @@ export default function App() {
       duplicateNode, handleLink, toggleNodeSelection, removeNodeId, deleteEdge,
       linkNodesToHub, handlePublish, clearSelection, deleteNodes, outputAsImageNode,
       saveNodeMediaAsFromCanvas, createNodeAtLinkedFrom, linkNodes, runRecompute, setNodeTags,
-      alignOrDistributeNodes, saveSelectionAsTemplate, activeCanvasId,
+      alignOrDistributeNodes, saveSelectionAsTemplate, renameTemplateById, activeCanvasId, runOrganize,
+      relayNodeToAgent, startPresentation,
     ],
   );
 
@@ -1231,6 +1204,7 @@ export default function App() {
             />
 
             <SnapGuideLines />
+            <OrganizePreviewGhosts />
             <div className="absolute inset-0 z-30 w-[1px] h-[1px] pointer-events-none">
               {/* All Nodes from Database（每张卡一个 memo 边界，见 CanvasNodeItem） */}
               {renderedNodes.map((node) => {
@@ -1269,6 +1243,9 @@ export default function App() {
                     fetchingWebNodeIds={fetchingWebNodeIds}
                     canvases={canvases}
                     targetNodeCountByCanvasId={targetNodeCountByCanvasId}
+                    presentationCurrentId={
+                      presentation.active ? (presentation.order[presentation.index] ?? null) : null
+                    }
                     shared={nodeShared}
                   />
                 );
@@ -1282,6 +1259,27 @@ export default function App() {
           canvasTransform={canvasTransform}
           mainRef={mainRef}
           setCanvasTransform={setCanvasTransform}
+        />
+
+        <OrganizePreviewBar
+          onApply={() => void applyPendingOrganize()}
+          onCancel={cancelPendingOrganize}
+        />
+
+        {!isSearchOpen && !presentation.active && (
+          <TagFilterBar canvasId={activeCanvasId} nodes={dynamicNodes} />
+        )}
+
+        <PresentationHud
+          active={presentation.active}
+          order={presentation.order}
+          index={presentation.index}
+          nodes={dynamicNodes}
+          onPrev={presentation.prev}
+          onNext={presentation.next}
+          onJumpTo={presentation.jumpTo}
+          onApplyOrder={presentation.reorder}
+          onExit={presentation.exit}
         />
 
         {/* AI Prompt Bar & Toolbar */}
@@ -1325,7 +1323,7 @@ export default function App() {
             nodesById={nodesById}
             selectedNodes={selectedNodes}
             actions={contextMenuActions}
-            isSynthesizeDisabled={isAnyAiBusy}
+            isSynthesizeDisabled={isAnyAiBusy || isOrganizing}
           />
         )}
         </main>
@@ -1347,6 +1345,9 @@ export default function App() {
             aiConfig={aiConfig}
             callAI={callUniversalAI}
             onSpawnToCanvas={(session) => void spawnResearchToCanvas(session)}
+            onSpawnStepToCanvas={(step) => void spawnResearchStepToCanvas(step)}
+            initialSessionId={pendingResearchSessionId}
+            onInitialSessionConsumed={() => setPendingResearchSessionId(null)}
           />
         )}
         {/* Agents in Agents Studio need consistent write access */}
@@ -1357,6 +1358,33 @@ export default function App() {
           await Promise.all(newConfigs.map((config) => db.agents.put(config)));
         }} aiConfig={aiConfig} callAI={callUniversalAI} />}
         <AISettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={aiConfigV2} setConfig={setAiConfigV2} />
+        {isGlobalSearchOpen && (
+          <GlobalSearchPanel
+            canvases={canvases}
+            agentNameById={agentNameById}
+            onClose={() => setIsGlobalSearchOpen(false)}
+            onOpenCanvasNode={(canvasId, nodeId) => {
+              setIsGlobalSearchOpen(false);
+              setActiveTab('personal');
+              if (canvasId === activeCanvasId) {
+                focusNode(nodeId);
+              } else {
+                pendingFocusNodeIdRef.current = nodeId;
+                setActiveCanvasId(canvasId);
+              }
+            }}
+            onOpenArticle={(articleId) => {
+              setIsGlobalSearchOpen(false);
+              setActiveReferenceId(articleId);
+              setActiveTab('reference');
+            }}
+            onOpenResearch={(sessionId) => {
+              setIsGlobalSearchOpen(false);
+              setPendingResearchSessionId(sessionId);
+              setActiveTab('lab');
+            }}
+          />
+        )}
       </div>
     </div>
   );

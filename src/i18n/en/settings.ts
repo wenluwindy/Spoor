@@ -68,6 +68,7 @@ export const settings = {
   "backup_snapshot_restore": "Restore this one",
   "storage_desktop_only": "Local file storage is only available in the desktop app.",
   "storage_fallback_hint": "The install folder is not writable, so media is stored in the system app-data folder instead. This usually means the app was installed into Program Files.",
+  "storage_notes_mirror_hint": "Your canvas notes live here too: notes/ holds one .canvas file per canvas (openable in Obsidian), updated automatically as you edit. Put the whole data folder into a cloud-sync folder and another machine will merge changes on startup.",
   "assets_filter_all": "All",
   "assets_filter_generated": "Generated",
   "assets_filter_uploaded": "Uploaded",
@@ -232,5 +233,7 @@ export const settings = {
   "docs_provider_deepseek": "DeepSeek",
   "docs_provider_custom": "Custom OpenAI-compatible API",
   "docs_provider_local_llama": "Local GGUF (desktop only)",
-  "provider_custom": "Custom endpoint"
+  "provider_custom": "Custom endpoint",
+  "keystore_warning_fallback": "The system secure store is temporarily unavailable, so your API keys were saved in plain text on this machine for now. Everything keeps working; once the secure store recovers, the next save moves them back to encrypted storage.",
+  "keystore_warning_corrupt": "The encrypted key file could not be read (it may be damaged, or the system account has changed). To avoid losing your configuration, changes are kept in plain text on this machine for now; the original file stays in the app config folder (ai-config.dat) for inspection — delete it and restart the app to re-encrypt on save."
 };

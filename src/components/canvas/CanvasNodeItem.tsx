@@ -3,6 +3,7 @@ import type { AgentConfig, Canvas, CanvasNode } from '../../db';
 import type { AIConfigV2 } from '../../types/aiConfig';
 import { DraggableNode } from './DraggableNode';
 import { NodeRenderer } from '../nodes/NodeRenderer';
+import { nodeMatchesTagFilter, useTagFilter } from '../../services/tagFilter';
 
 /**
  * 画布单节点的 memo 边界。
@@ -64,6 +65,8 @@ export interface CanvasNodeItemProps {
   fetchingWebNodeIds?: Set<string>;
   canvases: Canvas[];
   targetNodeCountByCanvasId: Map<string, number>;
+  /** 演示模式当前聚焦的卡；null = 没在演示。非当前卡进 ghost 态。 */
+  presentationCurrentId: string | null;
   shared: CanvasNodeSharedProps;
 }
 
@@ -88,11 +91,26 @@ function CanvasNodeItemInner({
   fetchingWebNodeIds,
   canvases,
   targetNodeCountByCanvasId,
+  presentationCurrentId,
   shared,
 }: CanvasNodeItemProps) {
   const isSticky = node.type === 'note' || node.type === 'text';
+  /**
+   * ghost 态：标签筛选未命中，或演示中不是当前卡。淡出但**不禁点**——
+   * ghost 卡仍可点选/打标签把它捞回来。useTagFilter 是外部 store 订阅，
+   * 会穿透下面的 memo 边界触发重渲。
+   */
+  const activeTags = useTagFilter();
+  const isGhost =
+    (activeTags.size > 0 && !nodeMatchesTagFilter(node, activeTags)) ||
+    (presentationCurrentId !== null && node.id !== presentationCurrentId);
   return (
     <DraggableNode
+      className={
+        isGhost
+          ? 'opacity-30 saturate-50 transition-[opacity,filter] duration-200'
+          : 'transition-[opacity,filter] duration-200'
+      }
       id={node.id}
       nodesRef={shared.nodesRef}
       isConnecting={isConnecting}
@@ -225,6 +243,9 @@ function areEqual(prev: CanvasNodeItemProps, next: CanvasNodeItemProps): boolean
 
   // "当前编辑/分析/流式的是谁"：只有涉及本节点的变化才需要重渲
   if (!idFlagUnchanged(id, prev.editingNodeId, next.editingNodeId)) return false;
+  // 演示态：开/关影响全体（ghost 整体切换），演示中只有新旧当前卡需要重渲
+  if ((prev.presentationCurrentId === null) !== (next.presentationCurrentId === null)) return false;
+  if (!idFlagUnchanged(id, prev.presentationCurrentId, next.presentationCurrentId)) return false;
   if (!idFlagUnchanged(id, prev.analyzingAgentNodeId, next.analyzingAgentNodeId)) return false;
   if (!idFlagUnchanged(id, prev.followUpParentId, next.followUpParentId)) return false;
   if (!idFlagUnchanged(id, prev.streamingAiNodeId, next.streamingAiNodeId)) return false;

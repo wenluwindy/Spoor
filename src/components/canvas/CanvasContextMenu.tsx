@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlignHorizontalJustifyStart, AlignVerticalJustifyStart, Bot, Copy, Download, ImageDown, Layers, LayoutTemplate, Link2, Pencil, PenLine, RefreshCw, RotateCcw, Square, SquareCheckBig, Tag, Trash2 } from 'lucide-react';
+import { AlignHorizontalJustifyStart, AlignVerticalJustifyStart, Bot, Copy, Download, ImageDown, Layers, LayoutTemplate, Link2, Pencil, PenLine, Play, RefreshCw, RotateCcw, Sparkles, Square, SquareCheckBig, Tag, Trash2 } from 'lucide-react';
 import type { AgentConfig, Canvas, CanvasNode, CanvasTemplate } from '../../db';
 import { isTauriRuntime } from '../../utils/isTauriRuntime';
 import { CANVAS_CREATE_ITEMS, CANVAS_INSERT_ITEMS } from '../../constants/canvasMenuItems';
@@ -72,8 +72,16 @@ export interface CanvasContextMenuActions {
   distributeNodes: (nodeIds: string[], axis: 'horizontal' | 'vertical') => void;
   /** 把选中的卡片（连同内部连线）存成模板。 */
   saveAsTemplate: (nodeIds: string[]) => void;
+  /** AI 整理：让模型把选中的卡聚类成区域框（先预览后应用）。 */
+  organizeNodes: (nodeIds: string[]) => void;
+  /** 演示：从这里开始讲；nodeIds 给了则只讲该子集。 */
+  startPresentation: (startId?: string, nodeIds?: string[]) => void;
+  /** 人格接力：以这张卡为上下文让选定人格出一张新卡。 */
+  relayToAgent: (nodeId: string, agentConfigId: string) => void;
   /** 在点击位置插入模板。 */
   insertTemplate: (templateId: string, at: CanvasPoint) => void;
+  /** 重命名模板：弹输入框改名后落库。 */
+  renameTemplate: (templateId: string) => void;
   deleteTemplate: (templateId: string) => void;
 }
 
@@ -221,6 +229,15 @@ export function CanvasContextMenu({
               onSelect: () => actions.synthesizeSelected(),
             },
             {
+              id: 'organize',
+              label: t('canvas.menu.organize_selected', { count: nodeIds.length }),
+              icon: Sparkles,
+              accent: true,
+              // 两张卡没有"分组"可言；AI 忙时与合成长文同样禁用
+              disabled: nodeIds.length < 3 || isSynthesizeDisabled,
+              onSelect: () => actions.organizeNodes(nodeIds),
+            },
+            {
               id: 'set-tags-multi',
               label: t('canvas.menu.set_tags'),
               icon: Tag,
@@ -231,6 +248,13 @@ export function CanvasContextMenu({
               label: t('canvas.menu.save_as_template'),
               icon: LayoutTemplate,
               onSelect: () => actions.saveAsTemplate(nodeIds),
+            },
+            {
+              id: 'present-selection',
+              label: t('canvas.presentation.start_here'),
+              icon: Play,
+              // 右键落点那张卡当起点，只讲选中的这批
+              onSelect: () => actions.startPresentation(anchorId, nodeIds),
             },
             {
               id: 'clear-selection',
@@ -328,6 +352,23 @@ export function CanvasContextMenu({
           onSelect: () => actions.saveNodeMediaAs(nodeId),
         });
       }
+      // 人格接力：有正文可读的卡才有"接着说"的对象
+      if (
+        agentConfigs.length > 0 &&
+        ['note', 'text', 'theme', 'ai', 'web', 'document'].includes(nodeType)
+      ) {
+        primary.push({
+          id: 'relay-to-agent',
+          label: t('canvas.menu.relay_to_agent'),
+          icon: Bot,
+          disabled: isRecomputeDisabled,
+          submenu: agentConfigs.map((agent) => ({
+            id: `relay-${agent.id}`,
+            label: resolveAgentLocalizedName(agent),
+            onSelect: () => actions.relayToAgent(nodeId, agent.id),
+          })),
+        });
+      }
       primary.push(
         {
           id: 'set-tags',
@@ -340,6 +381,13 @@ export function CanvasContextMenu({
           label: t('canvas.menu.save_as_template'),
           icon: LayoutTemplate,
           onSelect: () => actions.saveAsTemplate([nodeId]),
+        },
+        {
+          id: 'present-from-here',
+          // 区域框 = 只讲框住的这块（App 侧展开成员）；普通卡 = 从这张讲起
+          label: t('canvas.presentation.start_here'),
+          icon: Play,
+          onSelect: () => actions.startPresentation(nodeId),
         },
         {
           id: 'toggle-select',
@@ -447,6 +495,16 @@ export function CanvasContextMenu({
             })),
           },
           {
+            id: 'rename-template',
+            label: t('canvas.menu.rename_template'),
+            icon: Pencil,
+            submenu: templates.map((template) => ({
+              id: `template-ren-${template.id}`,
+              label: template.name,
+              onSelect: () => actions.renameTemplate(template.id),
+            })),
+          },
+          {
             id: 'delete-template',
             label: t('canvas.menu.delete_template'),
             icon: Trash2,
@@ -491,6 +549,12 @@ export function CanvasContextMenu({
           onSelect: () => {
             if (pasteable) actions.pasteNodes(pasteable, at);
           },
+        },
+        {
+          id: 'start-presentation',
+          label: t('canvas.presentation.start'),
+          icon: Play,
+          onSelect: () => actions.startPresentation(),
         },
         {
           id: 'reset-view',

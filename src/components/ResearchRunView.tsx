@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Terminal,
@@ -7,6 +8,8 @@ import {
   AlertTriangle,
   Search as SearchIcon,
   Square,
+  LayoutGrid,
+  Check,
 } from 'lucide-react';
 import type { ResearchSessionWebpageSnapshot } from '../db';
 import type { ResearchRunState, ResearchRunStep, ResearchRunStepStatus } from '../hooks/useResearchRun';
@@ -15,7 +18,9 @@ import type { ResearchRunState, ResearchRunStep, ResearchRunStepStatus } from '.
  * Research Lab 执行视图：逐步卡片 + 进度/成本指示 + 停止按钮 + 结束横幅。
  *
  * 只做渲染：一切状态来自 `useResearchRun` 的 reducer state，动作全部回调给
- * ResearchLab（停止 / 重试 / 返回大纲 / 打开来源详情）。
+ * ResearchLab（停止 / 重试 / 返回大纲 / 打开来源详情 / 单步落卡）。
+ * 唯一的本地状态是「哪些步骤已经落过卡」——这是纯 UI 记号，不落库，
+ * 新一轮运行开始时清空。
  */
 export interface ResearchRunViewProps {
   run: ResearchRunState;
@@ -23,7 +28,15 @@ export interface ResearchRunViewProps {
   onRetry: () => void;
   onBackToPlan: () => void;
   onShowSource: (wp: ResearchSessionWebpageSnapshot) => void;
+  /**
+   * 把某个已完成步骤落到当前画布（roadmap C10）。
+   * 缺席时（App 没接线）不渲染任何落卡按钮。
+   */
+  onSpawnStep?: (stepIndex: number) => void | Promise<void>;
 }
+
+/** 落卡成功后的轻提示停留时长。 */
+const SPAWN_HINT_MS = 2600;
 
 const STEP_STATUS_LABEL_KEY: Record<ResearchRunStepStatus, string> = {
   pending: 'lab.step_status_pending',
@@ -55,11 +68,18 @@ function RunStepCard({
   idx,
   active,
   onShowSource,
+  onSpawn,
+  spawned,
+  showSpawnHint,
 }: {
   step: ResearchRunStep;
   idx: number;
   active: boolean;
   onShowSource: (wp: ResearchSessionWebpageSnapshot) => void;
+  /** 缺席 = App 没接 `spawnStepToCanvas`，不渲染落卡按钮。 */
+  onSpawn?: (stepIndex: number) => void;
+  spawned: boolean;
+  showSpawnHint: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -116,12 +136,88 @@ function RunStepCard({
           {step.analysis}
         </p>
       ) : null}
+      {onSpawn && step.status === 'done' ? (
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            data-testid={`lab-run-step-${idx}-spawn`}
+            disabled={spawned}
+            onClick={() => onSpawn(idx)}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-sans text-xs font-bold transition-colors ${
+              spawned
+                ? 'border-app-border bg-app-surface-subtle text-app-text-faint cursor-default'
+                : 'border-app-accent/40 bg-app-accent/5 text-app-accent hover:bg-app-accent/10'
+            }`}
+          >
+            {spawned ? (
+              <Check className="w-3.5 h-3.5" aria-hidden />
+            ) : (
+              <LayoutGrid className="w-3.5 h-3.5" aria-hidden />
+            )}
+            {spawned ? t('lab.spawn_step_done') : t('lab.spawn_step_to_canvas')}
+          </button>
+          {showSpawnHint ? (
+            <span
+              data-testid={`lab-run-step-${idx}-spawn-hint`}
+              className="font-sans text-[11px] text-app-text-muted animate-in fade-in duration-300"
+              role="status"
+            >
+              {t('lab.spawn_step_hint')}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-export function ResearchRunView({ run, onStop, onRetry, onBackToPlan, onShowSource }: ResearchRunViewProps) {
+export function ResearchRunView({
+  run,
+  onStop,
+  onRetry,
+  onBackToPlan,
+  onShowSource,
+  onSpawnStep,
+}: ResearchRunViewProps) {
   const { t } = useTranslation();
+
+  /** 已落过卡的步骤下标（本地 UI 记号，不落库）。 */
+  const [spawnedSteps, setSpawnedSteps] = useState<ReadonlySet<number>>(new Set());
+  /** 刚落完卡、还在显示轻提示的步骤下标。 */
+  const [spawnHintStep, setSpawnHintStep] = useState<number | null>(null);
+
+  // 新一轮运行（重试 / 重跑）开始时清掉上一轮的落卡记号。
+  const prevStageRef = useRef(run.stage);
+  useEffect(() => {
+    if (run.stage === 'steps' && prevStageRef.current !== 'steps') {
+      setSpawnedSteps(new Set());
+      setSpawnHintStep(null);
+    }
+    prevStageRef.current = run.stage;
+  }, [run.stage]);
+
+  useEffect(() => {
+    if (spawnHintStep === null) return;
+    const timer = setTimeout(() => setSpawnHintStep(null), SPAWN_HINT_MS);
+    return () => clearTimeout(timer);
+  }, [spawnHintStep]);
+
+  const spawnStep = onSpawnStep
+    ? (stepIndex: number) => {
+        if (spawnedSteps.has(stepIndex)) return;
+        void (async () => {
+          try {
+            await onSpawnStep(stepIndex);
+          } catch {
+            // 落卡失败（写库异常等）：不标记已落，用户可以再点一次
+            return;
+          }
+          setSpawnedSteps((prev) => new Set(prev).add(stepIndex));
+          setSpawnHintStep(stepIndex);
+        })();
+      }
+    : undefined;
+
   return (
     <div className="flex-1 p-8 overflow-y-auto w-full max-w-3xl mx-auto">
       <div className="w-full bg-app-surface-raised border border-app-border shadow-md rounded-xl p-6 font-sans text-sm">
@@ -167,6 +263,9 @@ export function ResearchRunView({ run, onStop, onRetry, onBackToPlan, onShowSour
               idx={idx}
               active={run.running && run.stage === 'steps' && run.currentStep === idx}
               onShowSource={onShowSource}
+              onSpawn={spawnStep}
+              spawned={spawnedSteps.has(idx)}
+              showSpawnHint={spawnHintStep === idx}
             />
           ))}
         </div>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type RefObject } from 'react';
 import { screenToCanvasPosition, type CanvasViewTransform } from '../utils/canvas';
 import { isTextEditingTarget } from '../utils/noteClipboard';
+import { isTopKeyboardLayer } from '../services/keyboardLayers';
 
 /**
  * 右键落在什么上。`nodes` 为多选态（S5 起使用），`anchorId` 是实际被右键的那个节点。
@@ -70,7 +71,8 @@ export function useCanvasContextMenu(
   useEffect(() => {
     if (!menu) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeContextMenu();
+      // 'menu' 层由菜单面板（ContextMenuSurface）挂载时占用；更高的层在场时不动作
+      if (e.key === 'Escape' && isTopKeyboardLayer('menu')) closeContextMenu();
     };
     window.addEventListener('wheel', closeContextMenu, { capture: true, passive: true });
     window.addEventListener('resize', closeContextMenu);

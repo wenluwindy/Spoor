@@ -1,8 +1,10 @@
 mod cc_switch;
 mod dataroot;
 mod imagegen;
+mod keystore;
 mod local_llama;
 mod media;
+mod notes;
 mod snapshot;
 mod updater;
 mod userfile;
@@ -417,7 +419,13 @@ pub fn run() {
       snapshot::snapshot_write,
       snapshot::snapshot_list,
       snapshot::snapshot_read,
-      webpage::fetch_webpage
+      notes::notes_write,
+      notes::notes_read_all,
+      notes::notes_list_foreign,
+      notes::notes_delete,
+      webpage::fetch_webpage,
+      keystore::keystore_save,
+      keystore::keystore_load
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

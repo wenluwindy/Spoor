@@ -19,6 +19,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.{ts,tsx}'],
+    // e2e 是 Playwright 的地盘（npm run test:e2e），vitest 不碰
+    exclude: ['e2e/**', 'node_modules/**'],
     css: false,
   },
 });

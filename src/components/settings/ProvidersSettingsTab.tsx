@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Download, Plus } from 'lucide-react';
 import type { AIConfigV2, ProviderKind } from '../../types/aiConfig';
 import { addProvider, createProviderFromPreset, removeProvider } from '../../services/aiConfigEdit';
+import {
+  getAiConfigDegradedReason,
+  subscribeAiConfigDegraded,
+} from '../../services/aiConfigStore';
 import { readCcSwitchConfig } from '../../services/ccSwitchConfig';
 import { mergeCcSwitchProviders, parseCcSwitchConfig } from '../../services/ccSwitchImport';
 import { useAppDialog } from '../AppDialogProvider';
@@ -21,6 +25,12 @@ export function ProvidersSettingsTab({ config, onChange }: ProvidersSettingsTabP
   const { confirm } = useAppDialog();
   const [busy, setBusy] = useState(false);
   const [importNote, setImportNote] = useState<{ ok: boolean; text: string } | null>(null);
+  // 密钥库降级（文件损坏 / 系统安全存储不可用）时在页顶温和提示，正常时什么都不渲染
+  const keystoreDegraded = useSyncExternalStore(
+    subscribeAiConfigDegraded,
+    getAiConfigDegradedReason,
+    getAiConfigDegradedReason,
+  );
 
   const requestDelete = async (providerId: string, name: string) => {
     if (busy) return;
@@ -76,6 +86,19 @@ export function ProvidersSettingsTab({ config, onChange }: ProvidersSettingsTabP
 
   return (
     <div className="space-y-3">
+      {keystoreDegraded && (
+        <p
+          role="note"
+          className="rounded-lg border border-amber-600/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-app-text-muted"
+        >
+          {t(
+            keystoreDegraded === 'corrupt'
+              ? 'settings.keystore_warning_corrupt'
+              : 'settings.keystore_warning_fallback',
+          )}
+        </p>
+      )}
+
       {config.providers.length === 0 && (
         <p className="text-[11px] text-app-text-faint leading-relaxed">{t('settings.providers_empty')}</p>
       )}

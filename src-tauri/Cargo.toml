@@ -1,6 +1,6 @@
 [package]
 name = "spoor"
-version = "0.4.0"
+version = "0.5.0"
 description = "踪迹 · Spoor — local-first spatial note taking"
 authors = ["AI Studio"]
 edition = "2021"
@@ -26,6 +26,14 @@ mime_guess = "2.0.5"
 tauri-plugin-dialog = "2.7.2"
 base64 = "0.23.0"
 rusqlite = { version = "0.37", features = ["bundled"] }
+
+# keystore.rs：AI 配置加密落盘。Windows 走 DPAPI（0.61 与 tauri 依赖树里的同版），
+# macOS 走 Security framework 的钥匙串；其余平台明文降级（见 keystore.rs 文件头）。
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
 
 [lib]
 name = "spoor_lib"
