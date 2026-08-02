@@ -158,5 +158,5 @@ spoor/
 - [本地 GGUF 模型](docs/guide/LOCAL_LLM.md)
 - [数据恢复](docs/guide/DATA_RECOVERY.md)
 - [产品说明](docs/product/APP.md) · [Agent 设计](docs/product/AGENT.md) · [提示词](docs/product/AI-PROMPTS.md)
-- [v0.4.0 规划](docs/dev/ROADMAP_v0.4.0.md) · [v0.3.0 规划与竞品对标](docs/dev/ROADMAP_v0.3.0.md) · [升级开发文档](docs/dev/UPGRADE_PLAN.md)
+- [v0.5.0 规划](docs/dev/ROADMAP_v0.5.0.md) · [v0.4.0 规划](docs/dev/ROADMAP_v0.4.0.md) · [v0.3.0 规划与竞品对标](docs/dev/ROADMAP_v0.3.0.md) · [升级开发文档](docs/dev/UPGRADE_PLAN.md)
 - 发布说明：[v0.4.0](docs/release/RELEASE_v0.4.0.md) · [v0.3.1](docs/release/RELEASE_v0.3.1.md) · [v0.3.0](docs/release/RELEASE_v0.3.0.md) · [v0.2.0](docs/release/RELEASE_v0.2.0.md) · [v0.1.0](docs/release/RELEASE_v0.1.0.md)
