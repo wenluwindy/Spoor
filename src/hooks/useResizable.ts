@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
+import { markEdgesDirty } from '../services/edgeGeometry';
 
-export function useResizable(initialWidth: number, initialHeight: number, scaleRef: React.MutableRefObject<number>, onResizeEnd?: (size: { width: number, height: number }) => void) {
+export function useResizable(initialWidth: number, initialHeight: number, scaleRef: { readonly current: number }, onResizeEnd?: (size: { width: number, height: number }) => void) {
   const [size, setSize] = useState({ width: initialWidth, height: initialHeight });
   const sizeRef = useRef(size);
   /** 拉伸进行中：这会儿本地值才是最新的，不接管外部尺寸。 */
@@ -34,6 +35,8 @@ export function useResizable(initialWidth: number, initialHeight: number, scaleR
         width: Math.max(100, initialSize.width + (moveEvent.clientX - startX) / scaleRef.current),
         height: Math.max(50, initialSize.height + (moveEvent.clientY - startY) / scaleRef.current),
       });
+      // 卡片边缘在动，连线端点要跟上
+      markEdgesDirty();
     };
 
     const onPointerUp = () => {

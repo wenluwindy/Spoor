@@ -1,5 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { snapToGrid } from '../services/canvasGrid';
+import { markEdgesDirty } from '../services/edgeGeometry';
+import {
+  clearSnapGuides,
+  getSnapTargets,
+  publishSnapGuides,
+  snapToTargets,
+  SNAP_GUIDE_THRESHOLD_PX,
+} from '../services/canvasSnapGuides';
 import {
   beginGroupDrag,
   endGroupDrag,
@@ -25,21 +33,25 @@ export interface UseDraggableOptions {
 export function useDraggable(
   initialX: number,
   initialY: number,
-  scale: number = 1,
+  /**
+   * 缩放：数字，或一个只读 ref（memo 化的节点在缩放时不再重渲，
+   * 数字 prop 会过期，ref 每次换算时现读现取）。
+   */
+  scale: number | { readonly current: number } = 1,
   onDragEnd?: (pos: { x: number; y: number }) => void,
   options: UseDraggableOptions = {},
 ) {
   const { id, snap = 0, groupIds } = options;
   const [pos, setPos] = useState({ x: initialX, y: initialY });
   const [zIndex, setZIndex] = useState(maxZIndex);
-  const scaleRef = useRef(scale);
+  const scaleSourceRef = useRef(scale);
   const snapRef = useRef(snap);
   const posRef = useRef(pos);
   const groupIdsRef = useRef(groupIds);
   const onDragEndRef = useRef(onDragEnd);
   /** 拖拽进行中（自己被按住，或作为 follower 跟着整组走）。 */
   const draggingRef = useRef(false);
-  scaleRef.current = scale;
+  scaleSourceRef.current = scale;
   snapRef.current = snap;
   groupIdsRef.current = groupIds;
   onDragEndRef.current = onDragEnd;
@@ -120,16 +132,52 @@ export function useDraggable(
     const startY = e.clientY;
     const initialPos = { ...pos };
 
+    // 卡片尺寸在拖拽开始时量一次（offsetWidth/Height 是布局单位，不受画布缩放影响）：
+    // 对象吸附要拿左/中/右三条线去比。拿不到元素（裸 hook 测试）时退化为单点吸附。
+    const rootEl = e.currentTarget as HTMLElement | undefined;
+    const movingWidth = rootEl?.offsetWidth ?? 0;
+    const movingHeight = rootEl?.offsetHeight ?? 0;
+
     const ids = groupIdsRef.current;
     const isGroupLeader = Boolean(id) && Boolean(ids) && ids!.length > 1 && ids!.includes(id!);
     if (isGroupLeader) beginGroupDrag(id!, ids!);
+    // 参照物排除自己与同组成员：整组在动，组员的线只会把组吸向自己
+    const snapExclude = new Set<string>(isGroupLeader ? ids! : id ? [id] : []);
 
     const onPointerMove = (moveEvent: PointerEvent) => {
-      const rawX = initialPos.x + (moveEvent.clientX - startX) / scaleRef.current;
-      const rawY = initialPos.y + (moveEvent.clientY - startY) / scaleRef.current;
-      const nextX = snapToGrid(rawX, snapRef.current);
-      const nextY = snapToGrid(rawY, snapRef.current);
+      const s = scaleSourceRef.current;
+      const currentScale = typeof s === 'number' ? s : s.current;
+      const rawX = initialPos.x + (moveEvent.clientX - startX) / currentScale;
+      const rawY = initialPos.y + (moveEvent.clientY - startY) / currentScale;
+
+      /*
+        吸附优先级：对象对齐线 > 网格，按轴独立判定——x 轴吸到了别的卡片、
+        y 轴还可以贴格点。每根轴同帧只有一个吸附源，两套一起拉会抖。
+      */
+      const targets = getSnapTargets();
+      let nextX: number;
+      let nextY: number;
+      let guideX: number | null = null;
+      let guideY: number | null = null;
+      if (targets) {
+        const snapped = snapToTargets(
+          targets,
+          { x: rawX, y: rawY, width: movingWidth, height: movingHeight },
+          snapExclude,
+          SNAP_GUIDE_THRESHOLD_PX / currentScale,
+        );
+        guideX = snapped.guideX;
+        guideY = snapped.guideY;
+        nextX = guideX !== null ? snapped.x : snapToGrid(rawX, snapRef.current);
+        nextY = guideY !== null ? snapped.y : snapToGrid(rawY, snapRef.current);
+      } else {
+        nextX = snapToGrid(rawX, snapRef.current);
+        nextY = snapToGrid(rawY, snapRef.current);
+      }
+      publishSnapGuides(guideX, guideY);
+
       setPos({ x: nextX, y: nextY });
+      markEdgesDirty();
       // 广播吸附**之后**的位移，follower 因此整组一起贴格点，相对位置不变
       if (isGroupLeader) {
         publishGroupDelta(id!, nextX - initialPos.x, nextY - initialPos.y);
@@ -140,6 +188,7 @@ export function useDraggable(
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
       draggingRef.current = false;
+      clearSnapGuides();
       if (isGroupLeader) endGroupDrag(id!);
       if (onDragEnd) {
         // use a small timeout to let state settle

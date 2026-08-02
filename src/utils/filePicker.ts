@@ -1,4 +1,5 @@
 import { isTauriRuntime } from './isTauriRuntime';
+import { logger } from './logger';
 
 /**
  * 唤起系统文件选择框。
@@ -89,7 +90,7 @@ export async function pickFiles(accept: string, multiple = true): Promise<Picked
     return { kind: 'paths', paths: Array.isArray(selected) ? selected : [selected] };
   } catch (e) {
     // 插件没装好/权限没配时不该让「插入图片」整个失效，退回 input 仍能用
-    console.error('[Spoor] native file dialog failed, falling back to <input>', e);
+    logger.error('filePicker', 'native file dialog failed, falling back to <input>', e);
     return pickViaInput(accept, multiple);
   }
 }

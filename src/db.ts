@@ -4,6 +4,20 @@ export interface CanvasNode {
   id: string;
   canvasId?: string;
   type: string;
+  /**
+   * 建行/改行时间戳。由 `db.ts` 的 Dexie hook 自动盖章，业务代码不手填——
+   * 这也是未来任何形式多设备合并的最低前提（没有时间戳连"最后写入胜出"都做不了）。
+   * 旧行由 v5 迁移补齐，故运行时可视为必有；类型上保持可选以兼容导入的外部数据。
+   */
+  createdAt?: number;
+  updatedAt?: number;
+  /** 节点标签，用于筛选与搜索（v5 起，multiEntry 索引）。 */
+  tags?: string[];
+  /**
+   * 色板改出的外观（背景/文字/字体/边框色）。只存被改过的键；
+   * 空对象等于没改。曾经只存在组件 state 里，刷新即丢——那是 0.3.x 的缺陷。
+   */
+  styleOverrides?: { bg?: string; text?: string; font?: string; border?: string };
   content?: string;
   description?: string;
   /** Theme card footer label (editable); default differs by layout when unset/empty */
@@ -144,6 +158,37 @@ export interface Edge {
   canvasId?: string;
   from: string;
   to: string;
+  /** 见 `CanvasNode.createdAt` 的说明；边没有可编辑内容，不设 updatedAt。 */
+  createdAt?: number;
+}
+
+/**
+ * AI 文本卡的一次生成结果（v5 起）。
+ *
+ * 与生图节点的 `imageGenResults` 对齐心智：重新生成/沿边重算**不再覆盖旧回答**，
+ * 而是每次生成落一条 turn，卡片当前显示哪条由 `CanvasNode.content` 决定
+ * （content 始终等于「被固定的那条」的全文，这样旧版本导出/搜索/AI 上下文全部无感）。
+ */
+export interface AiTurn {
+  id: string;
+  /** 所属 AI 卡节点 id。节点被删时由删除方顺手清掉本表对应行。 */
+  nodeId: string;
+  canvasId: string;
+  /** 该版回答全文。 */
+  content: string;
+  /** 触发该版生成的追问文本（没有追问的首轮生成为空）。 */
+  userTurn?: string;
+  agentConfigId?: string;
+  createdAt: number;
+}
+
+/** 画布模板（v5 起）：一组节点 + 连线的可复用快照，坐标已归一化到左上角原点。 */
+export interface CanvasTemplate {
+  id: string;
+  name: string;
+  createdAt: number;
+  nodes: CanvasNode[];
+  edges: Edge[];
 }
 
 /** 深度研究实验室：一次已完成研究的本地快照（独立于 articles）。 */
@@ -195,9 +240,12 @@ export class MyDatabase extends Dexie {
   canvases!: Table<Canvas>;
   researchSessions!: Table<ResearchSession>;
   agentSandboxThreads!: Table<AgentSandboxThread>;
+  aiTurns!: Table<AiTurn>;
+  templates!: Table<CanvasTemplate>;
 
-  constructor() {
-    super('CortexLocalDB');
+  /** name 参数仅供迁移测试用另一个库名走一遍完整升级链，产品代码不传。 */
+  constructor(name = 'CortexLocalDB') {
+    super(name);
     this.version(1).stores({
       nodes: '++id, type, agentConfigId',
       articles: '++id, type, date',
@@ -217,6 +265,55 @@ export class MyDatabase extends Dexie {
 
     this.version(4).stores({
       agentSandboxThreads: 'agentId',
+    });
+
+    /**
+     * v5：0.4.0 需要的 schema 一次到位（索引变更才需要迁移，能合的都合在这一版）。
+     * - nodes/articles 加 `*tags` multiEntry 索引（标签筛选），nodes 加 `updatedAt`（最近编辑）；
+     * - 新表 aiTurns（AI 卡生成历史）与 templates（画布模板）；
+     * - upgrade 把历史行的 `canvasId` 一次性补成 'default'、盖上时间戳——
+     *   此后查询可以放心走 `where('canvasId')` 索引，不必在每个热路径上兜底。
+     */
+    this.version(5)
+      .stores({
+        nodes: '++id, type, agentConfigId, canvasId, updatedAt, *tags',
+        articles: '++id, type, date, *tags',
+        aiTurns: 'id, nodeId, canvasId, createdAt',
+        templates: 'id, createdAt',
+      })
+      .upgrade(async (tx) => {
+        const now = Date.now();
+        await tx.table('nodes').toCollection().modify((n: CanvasNode) => {
+          if (!n.canvasId) n.canvasId = 'default';
+          if (!n.createdAt) n.createdAt = now;
+          if (!n.updatedAt) n.updatedAt = n.createdAt;
+        });
+        await tx.table('edges').toCollection().modify((e: Edge) => {
+          if (!e.canvasId) e.canvasId = 'default';
+          if (!e.createdAt) e.createdAt = now;
+        });
+      });
+
+    /**
+     * 时间戳与 canvasId 由 hook 统一盖章，而不是散在每个调用点：
+     * 漏一个调用点就会出现 `where('canvasId')` 查不到的"幽灵行"，hook 让这类 bug 不可能发生。
+     * 导入/撤销还原自带时间戳的行时保留原值（`??=`）。
+     */
+    this.nodes.hook('creating', (_pk, obj: CanvasNode) => {
+      const now = Date.now();
+      if (!obj.canvasId) obj.canvasId = 'default';
+      obj.createdAt ??= now;
+      obj.updatedAt ??= now;
+    });
+    this.nodes.hook('updating', (mods: Partial<CanvasNode>) => {
+      // 空修改（比如迁移 modify 扫过但没改的行）不算一次编辑，不盖章。
+      if (Object.keys(mods).length === 0) return undefined;
+      if ('updatedAt' in mods) return undefined;
+      return { updatedAt: Date.now() };
+    });
+    this.edges.hook('creating', (_pk, obj: Edge) => {
+      if (!obj.canvasId) obj.canvasId = 'default';
+      obj.createdAt ??= Date.now();
     });
   }
 }

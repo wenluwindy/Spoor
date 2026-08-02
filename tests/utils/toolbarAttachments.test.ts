@@ -9,8 +9,8 @@ import type { ToolbarAttachment } from '../../src/constants/toolbarAttachments';
 import { TOOLBAR_ATTACHMENT_ACCEPT } from '../../src/constants/toolbarAttachments';
 import { isAppError } from '../../src/services/appError';
 
-const readFileContent = vi.hoisted(() => vi.fn());
-vi.mock('../../src/utils/file', () => ({ readFileContent }));
+const readFileToContentData = vi.hoisted(() => vi.fn());
+vi.mock('../../src/services/fileImport', () => ({ readFileToContentData }));
 
 const img = (id: string, name: string): ToolbarAttachment => ({
   id,
@@ -111,33 +111,33 @@ describe('fileToToolbarAttachment', () => {
   const file = (name: string) => new File(['x'], name);
 
   it('图片保留 data URL', async () => {
-    readFileContent.mockResolvedValue({ type: 'image', content: 'data:image/png;base64,Z' });
+    readFileToContentData.mockResolvedValue({ type: 'image', content: 'data:image/png;base64,Z' });
     const a = await fileToToolbarAttachment(file('封面.png'));
     expect(a).toMatchObject({ name: '封面.png', kind: 'image', dataUrl: 'data:image/png;base64,Z' });
     expect(a.id).toBeTruthy();
   });
 
   it('docx 转成的 HTML 会被拆成纯文本', async () => {
-    readFileContent.mockResolvedValue({ type: 'document', content: '<p>正文</p><p>第二段</p>' });
+    readFileToContentData.mockResolvedValue({ type: 'document', content: '<p>正文</p><p>第二段</p>' });
     const a = await fileToToolbarAttachment(file('稿子.docx'));
     expect(a).toMatchObject({ kind: 'text', text: '正文\n第二段' });
   });
 
   it('txt/md 原样作为正文', async () => {
-    readFileContent.mockResolvedValue({ type: 'text', content: '# 标题\n正文' });
+    readFileToContentData.mockResolvedValue({ type: 'text', content: '# 标题\n正文' });
     const a = await fileToToolbarAttachment(file('大纲.md'));
     expect(a).toMatchObject({ kind: 'text', text: '# 标题\n正文' });
   });
 
   it('视频报「不支持」而不是被静默丢弃', async () => {
-    readFileContent.mockResolvedValue({ type: 'video', content: 'data:video/mp4;base64,Z' });
+    readFileToContentData.mockResolvedValue({ type: 'video', content: 'data:video/mp4;base64,Z' });
     const err = await fileToToolbarAttachment(file('片段.mp4')).catch((e) => e);
     expect(isAppError(err)).toBe(true);
     expect(err.code).toBe('file.unsupported');
   });
 
   it('每份附件拿到不同的 id', async () => {
-    readFileContent.mockResolvedValue({ type: 'text', content: 'a' });
+    readFileToContentData.mockResolvedValue({ type: 'text', content: 'a' });
     const a = await fileToToolbarAttachment(file('1.md'));
     const b = await fileToToolbarAttachment(file('2.md'));
     expect(a.id).not.toBe(b.id);

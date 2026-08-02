@@ -391,9 +391,9 @@ describe('MyDatabase', () => {
       expect(db.name).toBe('CortexLocalDB');
     });
 
-    it('包含所有 7 张表', () => {
+    it('包含所有 9 张表', () => {
       expect(db.tables.map((t) => t.name).sort()).toEqual(
-        ['agentSandboxThreads', 'agents', 'articles', 'canvases', 'edges', 'nodes', 'researchSessions'],
+        ['agentSandboxThreads', 'agents', 'aiTurns', 'articles', 'canvases', 'edges', 'nodes', 'researchSessions', 'templates'],
       );
     });
   });

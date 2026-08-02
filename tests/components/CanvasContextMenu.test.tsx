@@ -28,6 +28,10 @@ vi.mock('react-i18next', () => ({
         'canvas.menu.delete_node': '删除节点',
         'canvas.menu.delete_edge': '删除连线',
         'canvas.menu.save_as': '另存为…',
+        'canvas.menu.set_tags': '标签…',
+        'canvas.menu.align': '对齐',
+        'canvas.menu.distribute': '等间距分布',
+        'canvas.menu.save_as_template': '存为模板…',
           'canvas.menu.clear_selection': '全部取消选中',
           'canvas.menu.link_all_to_this': '全部连到此节点（{{count}} 条）',
           'canvas.menu.synthesize_selected': '合成长文（{{count}} 张）',
@@ -54,6 +58,12 @@ function makeActions(): CanvasContextMenuActions {
     addAgentNode: vi.fn(),
     addCanvasLink: vi.fn(),
     recomputeFrom: vi.fn(),
+    setNodeTags: vi.fn(),
+    alignNodes: vi.fn(),
+    distributeNodes: vi.fn(),
+    saveAsTemplate: vi.fn(),
+    insertTemplate: vi.fn(),
+    deleteTemplate: vi.fn(),
     pasteNodes: vi.fn(),
     resetView: vi.fn(),
     editNode: vi.fn(),
@@ -115,6 +125,7 @@ function renderMenu({
       canvases={canvases}
       activeCanvasId={activeCanvasId}
       edges={[]}
+      templates={[]}
       nodesById={nodesMap(nodes)}
       selectedNodes={selected}
       actions={actions}
@@ -247,6 +258,8 @@ describe('CanvasContextMenu', () => {
         '编辑内容',
         '创建副本',
         '开始连线',
+        '标签…',
+        '存为模板…',
         '选中',
         '删除节点',
       ]);
@@ -301,8 +314,12 @@ describe('CanvasContextMenu', () => {
     it('只给批量操作，不混入单节点项', () => {
       renderMenu({ target, selected: new Set(target.nodeIds) });
       expect(labels()).toEqual([
+        '对齐',
+        '等间距分布',
         '全部连到此节点（2 条）',
         '合成长文（3 张）',
+        '标签…',
+        '存为模板…',
         '全部取消选中',
         '批量删除（3 张）',
       ]);

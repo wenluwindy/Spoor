@@ -30,6 +30,8 @@ export function nodeSearchFields(node: CanvasNode, agentName?: string): string[]
     node.imageGenPrompt ?? '',
     node.userTurn ?? '',
     agentName ?? '',
+    // 标签也算"人写的字"：搜 "重要" 就该找到打了 #重要 的卡
+    (node.tags ?? []).join(' '),
   ].filter((s) => s.trim() !== '');
 }
 
@@ -52,6 +54,16 @@ export function buildSnippet(text: string, query: string, radius: number = SNIPP
 export interface SearchCanvasNodesOptions {
   /** Agent 卡自己没有正文，名字要从人设表里查。 */
   agentNameById?: (agentConfigId: string | undefined) => string | undefined;
+}
+
+/**
+ * 单个节点是否命中。`needle` 必须已经 trim + toLowerCase——
+ * 这个函数会被逐行流式扫描（跨画布搜索走 Dexie 的 each，不把全库读成数组），
+ * 每行都重新归一化一遍查询词纯属浪费。
+ */
+export function nodeMatchesSearch(node: CanvasNode, needle: string, agentName?: string): boolean {
+  if (!needle) return false;
+  return nodeSearchFields(node, agentName).some((f) => f.toLowerCase().includes(needle));
 }
 
 /**

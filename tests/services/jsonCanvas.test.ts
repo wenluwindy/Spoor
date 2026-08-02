@@ -3,6 +3,7 @@ import type { CanvasNode, Edge } from '../../src/db';
 import {
   exportCanvasToJsonCanvas,
   importJsonCanvas,
+  nodeToJsonCanvas,
   parseJsonCanvas,
   serializeJsonCanvas,
   type JsonCanvasDocument,
@@ -186,7 +187,7 @@ describe('jsonCanvas', () => {
       expect(nodes[0].fileName).toBe('b.png');
     });
 
-    it('link 节点降级成文本卡并计数', () => {
+    it('link 节点落成网页卡片，不再降级（0.3.1 起有 web 节点）', () => {
       const doc: JsonCanvasDocument = {
         nodes: [
           { id: '1', type: 'link', x: 0, y: 0, width: 1, height: 1, url: 'https://example.com' },
@@ -194,18 +195,61 @@ describe('jsonCanvas', () => {
         edges: [],
       };
       const { nodes, degraded } = importJsonCanvas(doc, 'c9', sequentialIds());
-      expect(nodes[0]).toMatchObject({ type: 'text', content: 'https://example.com' });
-      expect(degraded.links).toBe(1);
+      expect(nodes[0]).toMatchObject({ type: 'web', url: 'https://example.com' });
+      expect(degraded.links).toBe(0);
     });
 
-    it('group 节点降级成主题卡并计数', () => {
+    it('group 节点落成区域框，不再降级（0.3.1 起有 frame）', () => {
       const doc: JsonCanvasDocument = {
         nodes: [{ id: '1', type: 'group', x: 0, y: 0, width: 600, height: 400, label: '第一章' }],
         edges: [],
       };
       const { nodes, degraded } = importJsonCanvas(doc, 'c9', sequentialIds());
-      expect(nodes[0]).toMatchObject({ type: 'theme', content: '第一章' });
-      expect(degraded.groups).toBe(1);
+      expect(nodes[0]).toMatchObject({ type: 'frame', content: '第一章' });
+      expect(degraded.groups).toBe(0);
+    });
+
+    it('tags 与色板外观随导出走一圈不丢；bg 映射到规范的 color', () => {
+      const source: CanvasNode = {
+        id: 'n1',
+        canvasId: 'c1',
+        type: 'text',
+        content: '有标签的卡',
+        x: 0,
+        y: 0,
+        tags: ['重要', '待办'],
+        styleOverrides: { bg: '#fef3c7', text: '#92400e' },
+      };
+      const exported = nodeToJsonCanvas(source);
+      expect(exported.color).toBe('#fef3c7');
+      expect(exported.spoor?.tags).toEqual(['重要', '待办']);
+
+      const { nodes } = importJsonCanvas({ nodes: [exported], edges: [] }, 'c9', sequentialIds());
+      expect(nodes[0].tags).toEqual(['重要', '待办']);
+      expect(nodes[0].styleOverrides).toEqual({ bg: '#fef3c7', text: '#92400e' });
+    });
+
+    it('外部工具只写了 color 时，导入把 hex 当背景色', () => {
+      const { nodes } = importJsonCanvas(
+        {
+          nodes: [{ id: '1', type: 'text', x: 0, y: 0, width: 1, height: 1, text: 'hi', color: '#1e293b' }],
+          edges: [],
+        },
+        'c9',
+        sequentialIds(),
+      );
+      expect(nodes[0].styleOverrides).toEqual({ bg: '#1e293b' });
+
+      // "1"-"6" 预设色号对应不到具体色值，不硬猜
+      const { nodes: preset } = importJsonCanvas(
+        {
+          nodes: [{ id: '1', type: 'text', x: 0, y: 0, width: 1, height: 1, text: 'hi', color: '4' }],
+          edges: [],
+        },
+        'c9',
+        sequentialIds(),
+      );
+      expect(preset[0].styleOverrides).toBeUndefined();
     });
 
     it('字段坏掉的行跳过并计数，不影响其余的行', () => {

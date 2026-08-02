@@ -1,11 +1,17 @@
-﻿import React from 'react';
+﻿import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FileText } from 'lucide-react';
 import type { NodeContentProps } from './types';
 import { CANVAS_NODE_CONTEXT_TEXT_ATTR } from '../../utils/canvasNodeContextText';
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 
 export function DocumentNode({ node }: NodeContentProps) {
   const { t } = useTranslation();
+  // 导入时已洗过一遍，这里再洗是防清洗器上线前落库的旧数据
+  const safeHtml = useMemo(
+    () => (node.content ? sanitizeHtml(node.content) : ''),
+    [node.content],
+  );
   return (
     <div
       className="w-full h-full bg-app-surface-raised p-5 shadow-lg border-2 border-app-border flex flex-col"
@@ -25,7 +31,7 @@ export function DocumentNode({ node }: NodeContentProps) {
       <div
         className="flex-1 overflow-y-auto min-h-0 pr-1 custom-scrollbar text-sm font-serif leading-relaxed text-app-text-soft doc-content"
         {...{ [CANVAS_NODE_CONTEXT_TEXT_ATTR]: '' }}
-        dangerouslySetInnerHTML={{ __html: node.content || `<em>${t('nodes.empty_document_body')}</em>` }}
+        dangerouslySetInnerHTML={{ __html: safeHtml || `<em>${t('nodes.empty_document_body')}</em>` }}
       />
     </div>
   );

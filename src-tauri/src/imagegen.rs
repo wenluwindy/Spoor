@@ -10,6 +10,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::Duration;
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
@@ -122,6 +123,27 @@ fn check_cancelled(flag: &AtomicBool) -> Result<(), ImageGenError> {
     Ok(())
 }
 
+/// 让 HTTP 进行中的 await 也响应取消，而不是只在步骤之间检查。
+///
+/// 取消机制是 AtomicBool（`image_generate_cancel` 置位），没有 waker 可挂，
+/// 无法直接 select 一个「被取消」事件；为这一处引 tokio-util 的 CancellationToken
+/// 又不划算。折中：每 500ms 轮询一次标志，与业务 future 一起 select——
+/// 命中取消时业务 future 被 drop，reqwest 随之中止连接；半秒内响应
+/// 「点了停止」的体感足够。
+async fn with_cancel<T>(
+    flag: &AtomicBool,
+    fut: impl std::future::Future<Output = Result<T, ImageGenError>>,
+) -> Result<T, ImageGenError> {
+    tokio::pin!(fut);
+    let mut poll = tokio::time::interval(Duration::from_millis(500));
+    loop {
+        tokio::select! {
+            result = &mut fut => return result,
+            _ = poll.tick() => check_cancelled(flag)?,
+        }
+    }
+}
+
 // ───────────────────────────── 工具 ─────────────────────────────
 
 fn trim_base(base: &str) -> String {
@@ -175,7 +197,7 @@ fn load_reference(spec: &str) -> Option<(String, String)> {
         let (mime, payload) = rest.split_once(";base64,")?;
         return Some((payload.to_string(), mime.to_string()));
     }
-    let path = media::resolve_media_path(media::data_root(), spec)?;
+    let path = media::resolve_media_path(&media::data_root(), spec)?;
     let bytes = std::fs::read(&path).ok()?;
     let mime = mime_guess::from_path(&path).first_or_octet_stream().to_string();
     Some((b64().encode(bytes), mime))
@@ -186,7 +208,11 @@ fn load_references(specs: &[String], limit: usize) -> Vec<(String, String)> {
 }
 
 fn client() -> Result<reqwest::Client, ImageGenError> {
+    // 生图动辄几十秒、4K 图偶尔上分钟，总超时放宽到 300s（与 RightAPI 的轮询
+    // 上限同一量级）；连接超时压到 15s——连不上就别陪跑五分钟
     reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(300))
         .build()
         .map_err(|e| ImageGenError::with_detail("network", e.to_string()))
 }
@@ -677,6 +703,13 @@ pub async fn image_generate(req: ImageGenRequest) -> Result<Vec<String>, ImageGe
     if req.prompt.trim().is_empty() {
         return Err(ImageGenError::new("no_prompt"));
     }
+    // 带密钥的请求必须走 https（本机 http 放行）；无密钥的自定义端点不受限——
+    // 没有可泄露的东西，局域网里的自建服务是合法场景
+    if !req.api_key.trim().is_empty() {
+        if let Err(detail) = crate::ensure_key_bearing_url(&req.base_url) {
+            return Err(ImageGenError::with_detail("insecure_url", detail));
+        }
+    }
 
     let flag = register_task(&req.task_id);
     let result = run(&req, &flag).await;
@@ -686,16 +719,17 @@ pub async fn image_generate(req: ImageGenRequest) -> Result<Vec<String>, ImageGe
 
 async fn run(req: &ImageGenRequest, flag: &AtomicBool) -> Result<Vec<String>, ImageGenError> {
     check_cancelled(flag)?;
-    let payloads = dispatch(req, flag).await?;
+    // 整个请求（含 RightAPI 的轮询）都包进 with_cancel：以前只在步骤之间检查，
+    // 一次卡在 send() 上的 HTTP 会让「取消」按钮按了也白按
+    let payloads = with_cancel(flag, dispatch(req, flag)).await?;
     if payloads.is_empty() {
         return Err(ImageGenError::new("no_image"));
     }
 
     let mut out = Vec::with_capacity(payloads.len());
     for payload in payloads {
-        // 每张之间检查一次：多图时用户点取消不该还得等完
-        check_cancelled(flag)?;
-        out.push(persist(payload).await?);
+        // 逐张下载同理：多图时用户点取消不该还得等完
+        out.push(with_cancel(flag, persist(payload)).await?);
     }
     Ok(out)
 }

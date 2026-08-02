@@ -22,7 +22,7 @@ const FORBIDDEN_LITERALS: { needle: string; where: string }[] = [
   { needle: "'Saving...'", where: 'Reference 笔记保存状态' },
   { needle: "'Assistant'", where: 'AgentsStudio 新建人设角色' },
   { needle: "'Main Workspace'", where: 'useSeedData 默认画布名' },
-  { needle: '(空文档)', where: 'DocumentNode / utils/file 空文档占位' },
+  { needle: '(空文档)', where: 'DocumentNode / fileImport 空文档占位' },
   { needle: 'VITE_BUILTIN', where: '内置 API Key 机制' },
 ];
 

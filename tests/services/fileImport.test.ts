@@ -3,6 +3,7 @@ import {
   classifyFile,
   importPathToNodeData,
   importFileToNodeData,
+  readFileToContentData,
 } from '../../src/services/fileImport';
 import { isAppError } from '../../src/services/appError';
 
@@ -179,5 +180,103 @@ describe('importFileToNodeData', () => {
     expect(isAppError(err)).toBe(true);
     expect(err.code).toBe('media.desktop_only');
     expect(mediaImportBytes).not.toHaveBeenCalled();
+  });
+});
+
+describe('readFileToContentData（内存路径：输入栏附件 / 浏览器兜底）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function fileOf(name: string, type: string, content: string | ArrayBuffer = 'xx') {
+    const f = new File([content], name, { type });
+    // jsdom 的 File 没有 arrayBuffer
+    Object.defineProperty(f, 'arrayBuffer', {
+      value: async () => (content instanceof ArrayBuffer ? content : new ArrayBuffer(2)),
+    });
+    return f;
+  }
+
+  it('图片读成 data URL，不落文件存储', async () => {
+    const data = await readFileToContentData(fileOf('photo.png', 'image/png', 'binary-data'), EMPTY_DOC);
+    expect(data.type).toBe('image');
+    expect(data.content).toContain('data:image/png');
+    expect(data.fileType).toBe('image/png');
+  });
+
+  it('视频读成 data URL', async () => {
+    const data = await readFileToContentData(fileOf('clip.mp4', 'video/mp4', 'binary-data'), EMPTY_DOC);
+    expect(data.type).toBe('video');
+    expect(data.content).toContain('data:video/mp4');
+    expect(data.fileType).toBe('video/mp4');
+  });
+
+  it('docx 按扩展名识别（MIME 常被嗅探成 octet-stream），经 mammoth 转 HTML', async () => {
+    convertToHtml.mockResolvedValue({ value: '<h1>Test Doc</h1><p>Hello World</p>' });
+    const data = await readFileToContentData(
+      fileOf('report.docx', 'application/octet-stream', new ArrayBuffer(100)),
+      EMPTY_DOC,
+    );
+    expect(data.type).toBe('document');
+    expect(data.content).toBe('<h1>Test Doc</h1><p>Hello World</p>');
+    expect(data.description).toBe('report.docx');
+    expect(data.fileType).toBe('docx');
+  });
+
+  it('没有扩展名时按 docx 的 MIME 识别', async () => {
+    convertToHtml.mockResolvedValue({ value: '<p>正文</p>' });
+    const data = await readFileToContentData(
+      fileOf('剪贴板文档', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', new ArrayBuffer(100)),
+      EMPTY_DOC,
+    );
+    expect(data.type).toBe('document');
+    expect(data.fileType).toBe('docx');
+  });
+
+  it('docx 转出的 HTML 过 sanitizeHtml 清洗（与入库路径同一行为）', async () => {
+    convertToHtml.mockResolvedValue({ value: '<p>正文</p><script>alert(1)</script>' });
+    const data = await readFileToContentData(
+      fileOf('恶意.docx', 'application/octet-stream', new ArrayBuffer(8)),
+      EMPTY_DOC,
+    );
+    expect(data.content).toContain('<p>正文</p>');
+    expect(data.content).not.toContain('script');
+  });
+
+  it('docx 解出来是空的用调用方给的兜底文案', async () => {
+    convertToHtml.mockResolvedValue({ value: '' });
+    const data = await readFileToContentData(
+      fileOf('d.docx', 'application/octet-stream', new ArrayBuffer(8)),
+      EMPTY_DOC,
+    );
+    expect(data.content).toBe(EMPTY_DOC);
+  });
+
+  it('txt 原样读文本', async () => {
+    const data = await readFileToContentData(fileOf('notes.txt', 'text/plain', 'plain text content'), EMPTY_DOC);
+    expect(data.type).toBe('text');
+    expect(data.content).toBe('plain text content');
+    expect(data.description).toBe('notes.txt');
+    expect(data.fileType).toBe('text/plain');
+  });
+
+  it('md 原样读文本', async () => {
+    const data = await readFileToContentData(fileOf('readme.md', 'text/markdown', '# Hello'), EMPTY_DOC);
+    expect(data.type).toBe('text');
+    expect(data.content).toBe('# Hello');
+    expect(data.description).toBe('readme.md');
+    expect(data.fileType).toBe('text/markdown');
+  });
+
+  it('认不出的类型报「不支持」：内存路径留不住原件', async () => {
+    const err = await readFileToContentData(fileOf('data.csv', 'text/csv', 'a,b,c'), EMPTY_DOC).catch((e) => e);
+    expect(isAppError(err)).toBe(true);
+    expect(err.code).toBe('file.unsupported');
+  });
+
+  it('pdf 同样报「不支持」：PdfNode 只认文件存储里的相对路径', async () => {
+    const err = await readFileToContentData(fileOf('book.pdf', 'application/pdf'), EMPTY_DOC).catch((e) => e);
+    expect(isAppError(err)).toBe(true);
+    expect(err.code).toBe('file.unsupported');
   });
 });

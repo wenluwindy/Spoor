@@ -3,6 +3,7 @@ import { AppError } from './appError';
 import { isTauriRuntime } from '../utils/isTauriRuntime';
 import { mediaImport, mediaImportBytes, type MediaCategory } from './mediaStore';
 import { mediaUrl } from '../utils/mediaUrl';
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 
 /**
  * 文件导入：原件一律归档到文件存储，数据库只留相对路径 + 需要检索的正文。
@@ -84,7 +85,8 @@ async function readBodyFromStore(rel: string, kind: string, emptyFallback: strin
   if (kind === 'document') {
     const arrayBuffer = await res.arrayBuffer();
     const result = await mammoth.convertToHtml({ arrayBuffer });
-    return result.value || emptyFallback;
+    // 转换后立刻清洗，入库的就是干净 HTML；渲染侧还会再洗一遍防旧数据
+    return sanitizeHtml(result.value) || emptyFallback;
   }
   return res.text();
 }
@@ -129,6 +131,79 @@ export async function importPathToNodeData(
   const { kind, fileType } = classifyFile(fileName);
   const result = await mediaImport(srcPath, categoryFor(kind));
   return buildNodeData(result.rel, result.fileName || fileName, kind, fileType, emptyDocumentBody);
+}
+
+/**
+ * 把文件整个读进内存的结果（不落文件存储）。
+ *
+ * **只给输入栏附件与浏览器调试兜底用**：画布节点走 [`importFileToNodeData`]，
+ * 原件落文件存储、数据库只留相对路径。这里的 data URL 若进数据库会把
+ * IndexedDB 撑爆——所以桌面端一律别走这条。
+ */
+export interface FileContentData {
+  type: string;
+  content: string;
+  description?: string;
+  fileType: string;
+}
+
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+}
+
+/**
+ * 内存路径读取：图片/视频转 data URL，docx 经 mammoth 转 HTML（同样过
+ * [`sanitizeHtml`] 清洗），txt/md 读原文。类型判定与入库路径共用
+ * [`classifyFile`]，两边不再各养一套。
+ *
+ * PDF 与认不出的类型在这里**明确报不支持**：内存路径留不住原件，
+ * PdfNode 与通用 file 节点都只认文件存储里的相对路径，硬收下也没法用。
+ */
+export async function readFileToContentData(
+  file: File,
+  emptyDocumentBody: string,
+): Promise<FileContentData> {
+  const { kind, fileType } = classifyFile(file.name, file.type);
+
+  if (kind === 'image' || kind === 'video') {
+    return { type: kind, content: await readFileAsDataURL(file), fileType };
+  }
+
+  if (kind === 'document' && fileType === 'docx') {
+    const arrayBuffer = await file.arrayBuffer();
+    const result = await mammoth.convertToHtml({ arrayBuffer });
+    return {
+      type: 'document',
+      content: sanitizeHtml(result.value) || emptyDocumentBody,
+      description: file.name,
+      fileType: 'docx',
+    };
+  }
+
+  if (kind === 'text') {
+    return {
+      type: 'text',
+      content: await readFileAsText(file),
+      description: file.name,
+      fileType,
+    };
+  }
+
+  throw new AppError('file.unsupported', file.type || file.name);
 }
 
 /**

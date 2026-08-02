@@ -11,6 +11,7 @@
 
 import { isTauriRuntime } from '../utils/isTauriRuntime';
 import { backupFileName, buildBackup, parseBackup, serializeBackup, type SpoorBackup } from './backup';
+import { logger } from '../utils/logger';
 
 export const LAST_SNAPSHOT_AT_KEY = 'last_snapshot_at';
 
@@ -62,7 +63,7 @@ export async function runDailySnapshot(appVersion: string, now: number): Promise
     localStorage.setItem(LAST_SNAPSHOT_AT_KEY, String(now));
     return name;
   } catch (e) {
-    console.warn('[Spoor] 自动快照失败', e);
+    logger.warn('backup', '自动快照失败', e);
     return null;
   }
 }

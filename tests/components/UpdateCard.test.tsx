@@ -121,6 +121,32 @@ describe('UpdateCard', () => {
     });
   });
 
+  it('macOS 安装返回 manual 时提示拖入应用程序，而不是「即将关闭」', async () => {
+    invoke
+      .mockResolvedValueOnce(AVAILABLE)
+      .mockResolvedValueOnce('C:/tmp/spoor-update/x.dmg')
+      .mockResolvedValueOnce('manual');
+    render(<UpdateCard />);
+
+    await userEvent.click(screen.getByRole('button', { name: /settings\.update_check/ }));
+    await userEvent.click(screen.getByRole('button', { name: /update_download/ }));
+    await userEvent.click(screen.getByRole('button', { name: /update_install/ }));
+
+    expect(screen.getByText('settings.update_install_manual_hint')).toBeInTheDocument();
+    expect(screen.queryByText('settings.update_install_hint')).not.toBeInTheDocument();
+  });
+
+  it('Rust 报 no_installer_for_platform 时给人话而不是裸错误码', async () => {
+    invoke.mockRejectedValue('no_installer_for_platform');
+    render(<UpdateCard />);
+
+    await userEvent.click(screen.getByRole('button', { name: /settings\.update_check/ }));
+
+    expect(screen.getByText('settings.update_failed')).toBeInTheDocument();
+    expect(screen.getByText('settings.update_no_installer')).toBeInTheDocument();
+    expect(screen.queryByText('no_installer_for_platform')).not.toBeInTheDocument();
+  });
+
   it('手动检查失败时如实报错并带出原因', async () => {
     invoke.mockRejectedValue(new Error('HTTP 403'));
     render(<UpdateCard />);

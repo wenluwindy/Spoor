@@ -1,3 +1,4 @@
+import { AppError } from '../services/appError';
 import { isTauriRuntime } from './isTauriRuntime';
 
 /**
@@ -19,7 +20,16 @@ export interface TextFileFilter {
 
 async function callTauri<T>(command: string, args: Record<string, unknown>): Promise<T> {
   const { invoke } = await import('@tauri-apps/api/core');
-  return invoke<T>(command, args);
+  try {
+    return await invoke<T>(command, args);
+  } catch (e) {
+    // 写入白名单拒绝（目标不是用户刚在对话框里授权的路径）翻成带码的 AppError，
+    // UI 层的 resolveErrorMessage 能给出人话；其余原样抛出
+    if (String(e).includes('path_not_authorized')) {
+      throw new AppError('file.path_not_authorized', command);
+    }
+    throw e;
+  }
 }
 
 function downloadInBrowser(fileName: string, contents: string): void {
@@ -49,8 +59,12 @@ export async function saveTextFile(
     return true;
   }
 
-  const { save } = await import('@tauri-apps/plugin-dialog');
-  const dest = await save({ defaultPath: defaultFileName, filters });
+  // 对话框在 Rust 侧弹（而不是 plugin-dialog）：用户选的路径要当场记入写入白名单，
+  // `user_file_write_*` 只放行白名单里的路径（见 src-tauri/src/userfile.rs）
+  const dest = await callTauri<string | null>('user_file_pick_save_path', {
+    defaultFileName,
+    filters,
+  });
   if (!dest) return false;
   await callTauri('user_file_write_text', { destPath: dest, contents });
   return true;
@@ -73,8 +87,8 @@ export async function saveTextFileTo(destPath: string, contents: string): Promis
  */
 export async function pickDirectory(): Promise<string | null> {
   if (!isTauriRuntime()) return null;
-  const { open } = await import('@tauri-apps/plugin-dialog');
-  const picked = await open({ directory: true, multiple: false });
+  // 同 saveTextFile：目录选择也在 Rust 侧弹，整棵子树入写入白名单
+  const picked = await callTauri<string | null>('user_file_pick_directory', {});
   return typeof picked === 'string' ? picked : null;
 }
 

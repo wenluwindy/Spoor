@@ -11,8 +11,11 @@ import { isTauriRuntime } from './isTauriRuntime';
  */
 export async function saveMediaAs(rel: string): Promise<boolean> {
   if (!rel || !isTauriRuntime()) return false;
-  const { save } = await import('@tauri-apps/plugin-dialog');
-  const dest = await save({ defaultPath: rel.split('/').pop() });
+  // 保存对话框在 Rust 侧弹：路径当场入写入白名单，`media_export` 只放行白名单路径
+  const { invoke } = await import('@tauri-apps/api/core');
+  const dest = await invoke<string | null>('user_file_pick_save_path', {
+    defaultFileName: rel.split('/').pop(),
+  });
   if (!dest) return false;
   await mediaExport(rel, dest);
   return true;

@@ -17,17 +17,21 @@ export interface DraggableNodeProps {
   children: React.ReactNode;
   initialX?: number;
   initialY?: number;
-  onDelete?: () => void;
+  onDelete?: (id: string) => void;
   className?: string;
-  scale?: number;
+  /**
+   * 只读缩放源（通常直读 canvasTransform 的 ref）。用 ref 而不是数字 prop：
+   * memo 化之后缩放不再触发节点重渲，数字 prop 会在拖拽换算时读到过期值。
+   */
+  scaleRef?: { readonly current: number };
   isSelected?: boolean;
   /** 当前选区的全部节点 id：本节点在其中且选区 >1 时，拖它等于拖整组。 */
   selectedIds?: string[];
   isEditing?: boolean;
-  onToggleSelect?: () => void;
+  onToggleSelect?: (id: string) => void;
   allowPalette?: boolean;
   onDragEnd?: (id: string, pos: {x: number, y: number}) => void;
-  onResizeEnd?: (size: { width: number, height: number }) => void;
+  onResizeEnd?: (id: string, size: { width: number, height: number }) => void;
   initialWidth?: number;
   initialHeight?: number;
   rotation?: number;
@@ -38,26 +42,39 @@ export interface DraggableNodeProps {
   /** Right-click on the card opens the canvas context menu for this node. */
   onContextMenu?: (e: React.MouseEvent<HTMLDivElement>, id: string) => void;
   /**
+   * 持久化的外观（v5 起存在 `CanvasNode.styleOverrides`）。0.3.x 只存组件 state，
+   * 刷新/重挂载就丢——用户以为分好类的颜色一夜回到出厂设置。
+   */
+  styleOverrides?: { bg?: string; text?: string; font?: string; border?: string };
+  /** 色板改动回调；不传则色板只读展示（目前恒传）。 */
+  onStyleChange?: (id: string, patch: { bg?: string; text?: string; font?: string; border?: string }) => void;
+  /** 节点标签，卡片左下角显示成小徽章（右键 → 标签… 设置）。 */
+  tags?: string[];
+  /**
    * 压死 z 轴层级（区域框用）。默认层级会随点击不断抬高，而区域框必须一直待在
    * 所有卡片后面——它是背景，不是卡片。
    */
   zIndexOverride?: number;
 }
 
-export const DraggableNode: React.FC<DraggableNodeProps> = ({ 
-  id, nodesRef, isConnecting, onLink, children, 
+const STATIC_SCALE_REF = { current: 1 };
+
+export const DraggableNode: React.FC<DraggableNodeProps> = ({
+  id, nodesRef, isConnecting, onLink, children,
   initialX = 100, initialY = 100, initialWidth = 320, initialHeight = 0,
-  onDelete, className = '', scale = 1, 
+  onDelete, className = '', scaleRef = STATIC_SCALE_REF,
   isSelected, selectedIds, isEditing, onToggleSelect, allowPalette, onDragEnd, onResizeEnd,
   rotation = 0,
   glassSurface = false,
   onStickyActivate,
   onContextMenu,
   zIndexOverride,
+  styleOverrides: styleOverridesProp,
+  onStyleChange,
+  tags,
 }) => {
   const { t } = useTranslation();
-  const scaleRef = useRef(scale);
-  useEffect(() => { scaleRef.current = scale; }, [scale]);
+  const styleOverrides = styleOverridesProp ?? {};
 
   /** 编辑正文时隐藏外链、布局/删除、缩放手柄等外围控件（避免 group-hover 仍显示） */
   const hideChrome = Boolean(isEditing);
@@ -66,7 +83,7 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
   const node = useDraggable(
     initialX,
     initialY,
-    scale,
+    scaleRef,
     (pos) => {
       if (onDragEnd) onDragEnd(id, pos);
     },
@@ -74,11 +91,10 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
   );
 
   const { size, onPointerDown: onResizePointerDown } = useResizable(initialWidth, initialHeight, scaleRef, (newSize) => {
-    if (onResizeEnd) onResizeEnd(newSize);
+    if (onResizeEnd) onResizeEnd(id, newSize);
   });
 
   const [showPalette, setShowPalette] = useState(false);
-  const [styleOverrides, setStyleOverrides] = useState({ bg: '', text: '', font: '', border: '' });
 
   const paletteColorChoices = glassSurface ? colorPresets.slice(3) : colorPresets;
   return (
@@ -147,7 +163,7 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
         <Tooltip label={t('canvas.select_note')}>
           <button
             data-export-hide=""
-            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onToggleSelect(); }}
+            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onToggleSelect(id); }}
             className={`absolute -top-3 -left-3 w-6 h-6 bg-app-surface-raised border ${isSelected ? 'border-app-accent text-app-accent opacity-100' : 'border-app-border text-transparent hover:border-app-accent opacity-0 group-hover:opacity-40'} rounded-full flex items-center justify-center transition-all z-10 shadow-sm ${hideChrome ? '!opacity-0 pointer-events-none' : ''}`}
           >
             <Check className="w-3 h-3" />
@@ -205,7 +221,7 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
         {onDelete && (
           <Tooltip label={t('canvas.delete_note')}>
             <button
-              onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onDelete(); }}
+              onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onDelete(id); }}
               className="w-6 h-6 bg-app-surface-raised border border-app-border rounded-full flex items-center justify-center text-app-text-faint hover:text-app-accent hover:border-app-accent transition-all shadow-sm"
             >
               <Trash2 className="w-3 h-3" />
@@ -214,7 +230,21 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
         )}
       </div>
       {children}
-      
+
+      {/* 标签徽章：内容的一部分（导出时保留），但不吃指针事件 */}
+      {tags && tags.length > 0 && (
+        <div className="absolute -bottom-2.5 left-2 z-10 flex max-w-[90%] flex-wrap gap-1 pointer-events-none">
+          {tags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-full border border-app-accent/30 bg-app-surface-raised/90 px-1.5 py-0.5 text-[9px] font-sans leading-none text-app-accent shadow-sm backdrop-blur-sm"
+            >
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Resize Handle */}
       <div 
         data-export-hide=""
@@ -240,7 +270,7 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
             {paletteColorChoices.map((color, i) => (
               <Tooltip key={glassSurface ? i + 3 : i} label={t('canvas.change_color')}>
                 <button
-                  onClick={() => setStyleOverrides(prev => ({ ...prev, bg: color.bg, text: color.text, border: color.border }))}
+                  onClick={() => onStyleChange?.(id, { bg: color.bg, text: color.text, border: color.border })}
                   className="w-5 h-5 rounded-full border border-black/10 transition-transform hover:scale-110 shadow-sm"
                   style={{ backgroundColor: color.bg }}
                 />
@@ -252,7 +282,7 @@ export const DraggableNode: React.FC<DraggableNodeProps> = ({
             {fontPresets.map((font, i) => (
               <button
                 key={i}
-                onClick={() => setStyleOverrides(prev => ({ ...prev, font: font.value }))}
+                onClick={() => onStyleChange?.(id, { font: font.value })}
                 className="px-2 py-0.5 rounded hover:bg-app-surface-subtle text-app-text-muted hover:text-app-text transition-colors"
                 title={`${t('canvas.change_font')}: ${font.name}`}
                 style={{ fontFamily: font.value }}

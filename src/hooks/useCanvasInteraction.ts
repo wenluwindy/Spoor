@@ -1,12 +1,19 @@
-import { useState, useRef, useEffect, type RefObject } from 'react';
+import { useState, useRef, useEffect, useCallback, type RefObject } from 'react';
 import { buildEdgePath, edgeMidpoint } from '../utils/edgePath';
 import { isTextEditingTarget } from '../utils/noteClipboard';
+import { edgesNeedUpdate, markEdgesDirty } from '../services/edgeGeometry';
 
 export interface CanvasTransform {
   x: number;
   y: number;
   scale: number;
 }
+
+/** 平移/缩放期间隔多久把 transform 提交进 React state（视口裁剪与缩放百分比靠它刷新）。 */
+const TRANSFORM_COMMIT_MS = 120;
+
+const toTransformCss = (t: CanvasTransform) =>
+  `translate(${t.x}px, ${t.y}px) scale(${t.scale})`;
 
 export function useCanvasInteraction(
   mainRef: RefObject<HTMLDivElement | null>,
@@ -17,22 +24,69 @@ export function useCanvasInteraction(
   connectingFrom: string | null,
   setConnectingFrom: (v: string | null) => void,
 ) {
-  const [canvasTransform, setCanvasTransform] = useState<CanvasTransform>({ x: 0, y: 0, scale: 1 });
+  /**
+   * transform 走双轨：`transformRef` + 容器 style 是**即时**的真值（每个 pointermove 都更新，
+   * 不经过 React），`canvasTransform` state 是**节流**的副本（裁剪、缩放百分比等衍生 UI 用）。
+   * 0.3.x 每次 pointermove 都 setState，一次平移等于几百次 App 全树重渲。
+   */
+  const [canvasTransform, setCanvasTransformState] = useState<CanvasTransform>({ x: 0, y: 0, scale: 1 });
   const transformRef = useRef<CanvasTransform>({ x: 0, y: 0, scale: 1 });
+  const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mousePosRef = useRef({ x: 0, y: 0 });
   /** 空格是否按着。ref 供事件回调即时读，state 只为了换手型光标。 */
   const spaceHeldRef = useRef(false);
   const [isSpacePanning, setIsSpacePanning] = useState(false);
+  /** 连线拖拽的临时线要跟着鼠标走，mousemove 里靠它判断当下是否在连线。 */
+  const connectingRef = useRef(connectingFrom);
+  connectingRef.current = connectingFrom;
 
-  // Sync ref with state
+  const applyTransform = useCallback(
+    (next: CanvasTransform, commit: 'now' | 'defer') => {
+      transformRef.current = next;
+      const el = contentContainerRef.current;
+      if (el) el.style.transform = toTransformCss(next);
+      markEdgesDirty();
+      if (commit === 'now') {
+        if (commitTimerRef.current) {
+          clearTimeout(commitTimerRef.current);
+          commitTimerRef.current = null;
+        }
+        setCanvasTransformState(next);
+      } else if (!commitTimerRef.current) {
+        commitTimerRef.current = setTimeout(() => {
+          commitTimerRef.current = null;
+          setCanvasTransformState(transformRef.current);
+        }, TRANSFORM_COMMIT_MS);
+      }
+    },
+    [contentContainerRef],
+  );
+
+  /** 对外的 setter：程序化跳转（复位、适应内容、搜索定位）立即生效并提交。 */
+  const setCanvasTransform = useCallback(
+    (next: CanvasTransform | ((prev: CanvasTransform) => CanvasTransform)) => {
+      const resolved = typeof next === 'function' ? next(transformRef.current) : next;
+      applyTransform(resolved, 'now');
+    },
+    [applyTransform],
+  );
+
+  /**
+   * 容器的 transform 由这里独占（App 不再把它写进 style prop）：
+   * React 任何原因的重渲都不会把节流窗口里的新位置打回旧值。
+   * 画布页卸载再挂载得到的是新 DOM 节点，所以每次渲染后都补写一遍。
+   */
   useEffect(() => {
-    transformRef.current = canvasTransform;
-  }, [canvasTransform]);
+    const el = contentContainerRef.current;
+    if (el) el.style.transform = toTransformCss(transformRef.current);
+  });
 
   // Track mouse position
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       mousePosRef.current = { x: e.clientX, y: e.clientY };
+      // 连线途中临时线追着鼠标画，得让 rAF 循环醒着
+      if (connectingRef.current) markEdgesDirty();
     };
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
@@ -83,44 +137,53 @@ export function useCanvasInteraction(
       if (insideScrollable) return;
 
       e.preventDefault();
-      setCanvasTransform(prev => {
-        const zoomBase = 1.05;
-        const factor = e.deltaY < 0 ? zoomBase : 1 / zoomBase;
-        const newScale = Math.min(Math.max(0.1, prev.scale * factor), 5);
+      const prev = transformRef.current;
+      const zoomBase = 1.05;
+      const factor = e.deltaY < 0 ? zoomBase : 1 / zoomBase;
+      const newScale = Math.min(Math.max(0.1, prev.scale * factor), 5);
 
-        const mainRect = main.getBoundingClientRect();
-        const clientX = e.clientX - mainRect.left;
-        const clientY = e.clientY - mainRect.top;
+      const mainRect = main.getBoundingClientRect();
+      const clientX = e.clientX - mainRect.left;
+      const clientY = e.clientY - mainRect.top;
 
-        // 以指针为锚点缩放：指针下的那一点保持不动
-        const mouseXInCanvas = (clientX - prev.x) / prev.scale;
-        const mouseYInCanvas = (clientY - prev.y) / prev.scale;
+      // 以指针为锚点缩放：指针下的那一点保持不动
+      const mouseXInCanvas = (clientX - prev.x) / prev.scale;
+      const mouseYInCanvas = (clientY - prev.y) / prev.scale;
 
-        return {
+      applyTransform(
+        {
           x: clientX - mouseXInCanvas * newScale,
           y: clientY - mouseYInCanvas * newScale,
           scale: newScale,
-        };
-      });
+        },
+        'defer',
+      );
     };
     window.addEventListener('wheel', onWheel, { passive: false });
     return () => window.removeEventListener('wheel', onWheel);
-  }, [mainRef]);
+  }, [mainRef, applyTransform]);
 
-  /** 从某个按下点开始拖动平移。中键与空格+左键共用。 */
+  /**
+   * 从某个按下点开始拖动平移。中键与空格+左键共用。
+   * 移动期间只写 DOM（节流提交 state 给裁剪用），抬起时整份提交。
+   */
   const beginPan = (startX: number, startY: number) => {
     const startTransform = transformRef.current;
 
     const onPointerMove = (moveEv: PointerEvent) => {
-      setCanvasTransform({
-        ...startTransform,
-        x: startTransform.x + (moveEv.clientX - startX),
-        y: startTransform.y + (moveEv.clientY - startY),
-      });
+      applyTransform(
+        {
+          ...startTransform,
+          x: startTransform.x + (moveEv.clientX - startX),
+          y: startTransform.y + (moveEv.clientY - startY),
+        },
+        'defer',
+      );
     };
     const onPointerUp = () => {
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
+      applyTransform(transformRef.current, 'now');
     };
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
@@ -187,10 +250,28 @@ export function useCanvasInteraction(
     };
   }, [mainRef]);
 
+  // 图片/视频加载完成会让卡片长高，连线端点得跟着挪。load 不冒泡，走捕获阶段接住。
+  useEffect(() => {
+    const onAnyLoad = () => markEdgesDirty();
+    window.addEventListener('load', onAnyLoad, { capture: true });
+    return () => window.removeEventListener('load', onAnyLoad, true);
+  }, []);
+
+  // 开始/放弃连线都要让临时虚线立刻出现或消失
+  useEffect(() => {
+    markEdgesDirty();
+  }, [connectingFrom]);
+
   // Edge line animation loop
   useEffect(() => {
     let animationFrameId: number;
     const updateLines = () => {
+      // 静止的画布不重算：脏标记（见 services/edgeGeometry）没亮就只留一个空 rAF 心跳。
+      // 0.3.x 这里每帧对每条边做两次 getBoundingClientRect，画布不动也在强制同步布局。
+      if (!edgesNeedUpdate()) {
+        animationFrameId = requestAnimationFrame(updateLines);
+        return;
+      }
       const svg = svgRef.current;
       const container = contentContainerRef.current;
       const edgeLabelsContainer = edgeLabelsRef.current;

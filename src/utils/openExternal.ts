@@ -1,10 +1,11 @@
 import { isTauriRuntime } from './isTauriRuntime';
+import { logger } from './logger';
 
 /** Open URL in system browser (Tauri) or new tab (browser dev). */
 export async function openExternalUrl(url: string): Promise<void> {
   const trimmed = url.trim();
   if (!/^https?:\/\//i.test(trimmed)) {
-    console.warn('[Spoor] openExternalUrl skipped non-http(s) URL');
+    logger.warn('openExternal', 'openExternalUrl skipped non-http(s) URL');
     return;
   }
 

@@ -15,8 +15,12 @@
 import type { CanvasNode, Edge } from '../db';
 import type { CanvasViewTransform } from './canvas';
 
-/** 低于这个节点数一律全量渲染。 */
-export const CULLING_THRESHOLD = 150;
+/**
+ * 低于这个节点数一律全量渲染。
+ * 0.4.0 从 150 降到 60：memo 化之后渲染树本身便宜了，但每张卡的 DOM 仍不小，
+ * 60 张之外的部分裁掉对中等画布已经有感知收益。
+ */
+export const CULLING_THRESHOLD = 60;
 
 /** 视口四周额外保留多少（按视口尺寸的比例）：平移时提前把卡片准备好，不至于"边滚边冒"。 */
 export const CULLING_MARGIN_RATIO = 0.75;

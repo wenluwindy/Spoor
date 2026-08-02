@@ -32,6 +32,7 @@ import {
 import { useAppDialog } from './AppDialogProvider';
 import { Tooltip } from './ui/Tooltip';
 import { AgentIcon } from './AgentIcon';
+import { logger } from '../utils/logger';
 
 type SandboxChatMessage = { role: 'user' | 'model'; text: string };
 
@@ -196,7 +197,7 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
       enhanced = enhanced.replace(/^(New Enhanced Prompt:|新增强提示词[:：])\s*/i, '').trim();
       handleUpdateActiveAgent('prompt', enhanced);
     } catch (error) {
-      console.error('[Scribe AI] enhance prompt failed', formatAiError(error));
+      logger.error('agents', 'enhance prompt failed', formatAiError(error));
       void appAlert({
         message: `${t('agents.enhance_failed')}\n\n${resolveErrorMessage(error, t)}\n\n${t('errors.console_hint')}`,
       });
@@ -220,7 +221,7 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
     try {
       await persistSandboxThread(scopedAgentId, afterUser);
     } catch (err) {
-      console.error('[Scribe AI] sandbox persist (user msg) failed', err);
+      logger.error('agents', 'sandbox persist (user msg) failed', err);
     }
 
     const streamingModel: SandboxChatMessage = { role: 'model', text: '' };
@@ -252,10 +253,10 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
       try {
         await persistSandboxThread(scopedAgentId, afterModel);
       } catch (err) {
-        console.error('[Scribe AI] sandbox persist (assistant) failed', err);
+        logger.error('agents', 'sandbox persist (assistant) failed', err);
       }
     } catch (error) {
-      console.error('[Scribe AI] sandbox chat failed', formatAiError(error));
+      logger.error('agents', 'sandbox chat failed', formatAiError(error));
       const errLine: SandboxChatMessage = {
         role: 'model',
         text: t('agents.sandbox_error', { msg: resolveErrorMessage(error, t) }),
@@ -267,7 +268,7 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
       try {
         await persistSandboxThread(scopedAgentId, afterErr);
       } catch (err) {
-        console.error('[Scribe AI] sandbox persist (error bubble) failed', err);
+        logger.error('agents', 'sandbox persist (error bubble) failed', err);
       }
     } finally {
       if (sandboxUiAgentRef.current === scopedAgentId) {
@@ -284,7 +285,7 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
     try {
       await db.agentSandboxThreads.delete(activeAgentId);
     } catch (err) {
-      console.error('[Scribe AI] sandbox clear failed', err);
+      logger.error('agents', 'sandbox clear failed', err);
     }
   };
 
@@ -296,7 +297,7 @@ export function AgentsStudio({ agentConfigs, setAgentConfigs, aiConfig, callAI }
     try {
       await db.agentSandboxThreads.delete(id);
     } catch (err) {
-      console.error('[Scribe AI] sandbox thread delete failed', err);
+      logger.error('agents', 'sandbox thread delete failed', err);
     }
     if (activeAgentId === id) {
       setActiveAgentId(newConfigs[0]?.id || null);

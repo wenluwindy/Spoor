@@ -5,11 +5,6 @@ import { clearCanvasHistory } from './canvasHistory';
  * 画布本身的增删。节点/连线的增删见 `hooks/useNodeActions`。
  */
 
-/** 旧数据里没有 `canvasId` 的节点与连线一律归属 `'default'`（见 App 的 useLiveQuery 过滤）。 */
-function belongsToCanvas(owner: string | undefined, canvasId: string): boolean {
-  return owner === canvasId || (!owner && canvasId === 'default');
-}
-
 /**
  * 删除画布，连同它的节点、连线，以及长文里指向它的引用。
  *
@@ -17,11 +12,12 @@ function belongsToCanvas(owner: string | undefined, canvasId: string): boolean {
  * 这里只负责把该画布的痕迹清干净。
  */
 export async function deleteCanvasWithContents(canvasId: string): Promise<void> {
-  const nodes = await db.nodes.filter((n) => belongsToCanvas(n.canvasId, canvasId)).toArray();
-  const edges = await db.edges.filter((e) => belongsToCanvas(e.canvasId, canvasId)).toArray();
-
-  if (nodes.length > 0) await db.nodes.bulkDelete(nodes.map((n) => n.id));
-  if (edges.length > 0) await db.edges.bulkDelete(edges.map((e) => e.id));
+  // canvasId 由 v5 迁移与 db hook 保证必有，直接走索引删
+  await db.nodes.where('canvasId').equals(canvasId).delete();
+  await db.edges.where('canvasId').equals(canvasId).delete();
+  // AI 卡的生成历史跟画布走。单删节点时刻意不清（撤销恢复卡片后历史还在），
+  // 删整张画布是唯一确定"再也回不来"的时刻。
+  await db.aiTurns.where('canvasId').equals(canvasId).delete();
 
   // 长文的「关联画布」留着会显示成一串裸 id，顺手摘掉
   const linked = await db.articles.filter((a) => (a.linkedCanvasIds ?? []).includes(canvasId)).toArray();

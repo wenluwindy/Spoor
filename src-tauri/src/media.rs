@@ -10,7 +10,7 @@
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::RwLock;
 
 use serde::Serialize;
 use tauri::http::{header, Response, StatusCode};
@@ -26,7 +26,9 @@ pub const CATEGORY_GENERATED: &str = "generated";
 pub const CATEGORY_UPLOADED: &str = "uploaded";
 pub const CATEGORY_DOCUMENTS: &str = "documents";
 
-static DATA_ROOT: OnceLock<PathBuf> = OnceLock::new();
+/// `RwLock` 而不是 `OnceLock`：数据目录迁移（见 [`crate::dataroot`]）要在运行期
+/// 切换数据根，`spoor-media` 协议与所有 `media_*` 命令必须立刻跟过去。
+static DATA_ROOT: RwLock<Option<PathBuf>> = RwLock::new(None);
 
 // ───────────────────────────── 数据根 ─────────────────────────────
 
@@ -40,11 +42,24 @@ fn probe_writable(dir: &Path) -> bool {
     fs::write(&marker, b"spoor\n").is_ok()
 }
 
-/// 解析数据根：优先 exe 同级的 `SpoorData/`，写不进去就回退到系统的应用数据目录。
+/// 解析数据根，规则从上往下第一条命中即止：
 ///
-/// 回退是必要的：默认 NSIS 装到 `%LOCALAPPDATA%` 可写，但用户可以改成
-/// perMachine 装进 `Program Files`，那里普通权限写不了。
+/// 1. `app_config_dir()/data-root.json` 里记录的位置**且校验有效**（目录在、
+///    带标记文件、可写）——用户迁移过数据目录（见 [`crate::dataroot`]）；
+/// 2. exe 同级的 `SpoorData/`（可写时）；
+/// 3. 系统应用数据目录下的 `SpoorData/`。
+///
+/// 2→3 的回退是必要的：默认 NSIS 装到 `%LOCALAPPDATA%` 可写，但用户可以改成
+/// perMachine 装进 `Program Files`，那里普通权限写不了。1 失效时同样落回 2/3
+/// 而不是替用户重建配置里的目录——外接盘没插上时重建等于「数据凭空消失」。
 fn resolve_data_root(app: &AppHandle) -> PathBuf {
+    if let Some(configured) = crate::dataroot::config_path(app)
+        .as_deref()
+        .and_then(crate::dataroot::configured_root)
+    {
+        return configured;
+    }
+
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
             let candidate = parent.join(DATA_DIR_NAME);
@@ -67,17 +82,35 @@ fn resolve_data_root(app: &AppHandle) -> PathBuf {
     fallback
 }
 
-/// 进程内只解析一次。启动时调用一次即可，之后各处直接读缓存。
-pub fn init_data_root(app: &AppHandle) -> &'static Path {
-    DATA_ROOT.get_or_init(|| resolve_data_root(app))
+/// 已初始化则直接读缓存，否则解析一次并落缓存。启动 `setup()` 里调用一次，
+/// `spoor-media` 协议每次请求也走这里——迁移后拿到的自然是新根。
+pub fn init_data_root(app: &AppHandle) -> PathBuf {
+    if let Some(root) = DATA_ROOT.read().ok().and_then(|guard| guard.clone()) {
+        return root;
+    }
+    let resolved = resolve_data_root(app);
+    let mut guard = DATA_ROOT
+        .write()
+        .expect("data root lock poisoned during init");
+    // 双检：等写锁期间别的线程可能已经初始化过了
+    guard.get_or_insert(resolved).clone()
 }
 
 /// 已解析的数据根。`init_data_root` 之前调用会 panic——那是启动顺序写错了。
-pub fn data_root() -> &'static Path {
+pub fn data_root() -> PathBuf {
     DATA_ROOT
-        .get()
-        .map(|p| p.as_path())
+        .read()
+        .ok()
+        .and_then(|guard| guard.clone())
         .expect("data root not initialised; call init_data_root() in setup()")
+}
+
+/// 运行期切换数据根。只给 [`crate::dataroot::data_root_migrate`] 用：
+/// 它已经把数据复制过去并写好了配置，这里只负责让本进程立刻生效。
+pub fn set_data_root(root: PathBuf) {
+    if let Ok(mut guard) = DATA_ROOT.write() {
+        *guard = Some(root);
+    }
 }
 
 // ───────────────────────────── 路径安全 ─────────────────────────────
@@ -329,8 +362,10 @@ pub struct MediaStoreInfo {
     pub root: String,
     pub bytes: u64,
     pub count: u64,
-    /// 是否回退到了应用数据目录（安装目录不可写）。
+    /// 是否回退到了应用数据目录（安装目录不可写）。用户自选位置时恒为 false。
     pub fallback: bool,
+    /// 是否在用用户迁移后的自选位置（`data-root.json` 生效中）。
+    pub custom: bool,
 }
 
 #[derive(Serialize)]
@@ -397,21 +432,28 @@ fn mtime_millis(meta: &fs::Metadata) -> u64 {
 }
 
 #[tauri::command]
-pub fn media_store_info() -> MediaStoreInfo {
+pub fn media_store_info(app: AppHandle) -> MediaStoreInfo {
     let root = data_root();
-    let files = walk_media(root);
+    let files = walk_media(&root);
     let bytes = files.iter().map(|(_, m)| m.len()).sum();
     let in_exe_dir = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(|p| p.join(DATA_DIR_NAME)))
         .map(|expected| expected == root)
         .unwrap_or(false);
+    // 配置里的自选位置正在生效？生效时不能再报 fallback——
+    // 「安装目录不可写」的提示对着用户自己挑的目录说就是胡话
+    let custom = crate::dataroot::config_path(&app)
+        .as_deref()
+        .and_then(crate::dataroot::configured_root)
+        .is_some_and(|configured| configured == root);
 
     MediaStoreInfo {
         root: root.to_string_lossy().to_string(),
         bytes,
         count: files.len() as u64,
-        fallback: !in_exe_dir,
+        fallback: !custom && !in_exe_dir,
+        custom,
     }
 }
 
@@ -423,10 +465,10 @@ pub fn media_list(category: Option<String>) -> Vec<MediaEntry> {
         .and_then(sanitize_category)
         .map(|c| format!("media/{c}/"));
 
-    let mut out: Vec<MediaEntry> = walk_media(root)
+    let mut out: Vec<MediaEntry> = walk_media(&root)
         .into_iter()
         .filter_map(|(path, meta)| {
-            let rel = to_rel_string(root, &path)?;
+            let rel = to_rel_string(&root, &path)?;
             if let Some(prefix) = &prefix {
                 if !rel.starts_with(prefix) {
                     return None;
@@ -509,16 +551,19 @@ pub fn media_import_bytes(
 
 #[tauri::command]
 pub fn media_export(rel: String, dest_path: String) -> Result<(), String> {
+    // 目标在数据根之外，必须是用户刚在保存/目录对话框里授权过的路径
+    // （见 crate::userfile 的写入白名单）。先验目标再解源：未授权时数据根都不必碰。
+    let dest = crate::userfile::ensure_write_allowed(&dest_path)?;
     let root = data_root();
-    let src = resolve_media_path(root, &rel).ok_or("not_found")?;
+    let src = resolve_media_path(&root, &rel).ok_or("not_found")?;
     // 导出 Markdown 包时目标是 `<用户选的目录>/assets/x.png`，assets 还不存在。
-    // 用户已经指定了落点，替他把中间目录建出来是意料之中的行为。
-    if let Some(parent) = std::path::Path::new(&dest_path).parent() {
+    // 用户已经指定了落点（授权的是整个目录），替他把中间目录建出来是意料之中的行为。
+    if let Some(parent) = dest.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent).map_err(|e| format!("disk_write_failed: {e}"))?;
         }
     }
-    fs::copy(&src, &dest_path).map_err(|e| format!("disk_write_failed: {e}"))?;
+    fs::copy(&src, &dest).map_err(|e| format!("disk_write_failed: {e}"))?;
     Ok(())
 }
 
@@ -528,7 +573,7 @@ pub fn media_delete(rels: Vec<String>) -> Result<u64, String> {
     let root = data_root();
     let mut removed = 0u64;
     for rel in rels {
-        if let Some(path) = resolve_media_path(root, &rel) {
+        if let Some(path) = resolve_media_path(&root, &rel) {
             if fs::remove_file(&path).is_ok() {
                 removed += 1;
             }
@@ -540,9 +585,9 @@ pub fn media_delete(rels: Vec<String>) -> Result<u64, String> {
 #[tauri::command]
 pub fn media_reveal(rel: String) -> Result<(), String> {
     let root = data_root();
-    let path = resolve_media_path(root, &rel).ok_or("not_found")?;
+    let path = resolve_media_path(&root, &rel).ok_or("not_found")?;
     // 没有跨平台的「选中该文件」，退而求其次打开所在目录
-    let target = path.parent().unwrap_or(root);
+    let target = path.parent().unwrap_or(&root);
     open::that(target).map_err(|e| e.to_string())
 }
 
@@ -563,8 +608,8 @@ pub fn media_gc(referenced: Vec<String>) -> Result<MediaGcResult, String> {
     let mut removed = 0u64;
     let mut bytes = 0u64;
 
-    for (path, meta) in walk_media(root) {
-        let Some(rel) = to_rel_string(root, &path) else {
+    for (path, meta) in walk_media(&root) {
+        let Some(rel) = to_rel_string(&root, &path) else {
             continue;
         };
         if keep.contains(&rel) {
@@ -688,6 +733,20 @@ mod tests {
         let root = temp_root("missing");
         assert!(resolve_media_path(&root, "media/generated/nope.png").is_none());
         fs::remove_dir_all(&root).ok();
+    }
+
+    // ── media_export ──
+
+    #[test]
+    fn media_export_rejects_unauthorized_destination() {
+        // 目标没经过对话框授权时必须被白名单拦下，且这步在解数据根之前——
+        // 测试进程里 data_root() 未初始化，走到那儿会直接 panic，等于顺带验了顺序
+        let dest = std::env::temp_dir().join(format!("spoor-export-deny-{}.png", uuid::Uuid::new_v4()));
+        assert_eq!(
+            media_export("media/generated/a.png".into(), dest.to_string_lossy().into_owned()),
+            Err("path_not_authorized".into())
+        );
+        assert!(!dest.exists());
     }
 
     // ── parse_range ──

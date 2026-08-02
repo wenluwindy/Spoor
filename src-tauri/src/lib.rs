@@ -1,4 +1,5 @@
 mod cc_switch;
+mod dataroot;
 mod imagegen;
 mod local_llama;
 mod media;
@@ -7,17 +8,80 @@ mod updater;
 mod userfile;
 mod webpage;
 
+use std::time::Duration;
+
 use futures_util::StreamExt;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 
 use local_llama::LocalLlamaChatPayload;
 
+/// 网络超时的统一口径。
+///
+/// - 连接 15s：连不上就是连不上，多等只是拖长报错。
+/// - 对话 120s：长回答的推理确实慢，但超过两分钟基本是服务端挂了。
+///   注意流式对话**不能**用总超时（见 [`openai_compatible_chat_stream`]）。
+/// - 搜索 30s：搜索接口要么秒回要么完蛋，没有中间态。
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const CHAT_TIMEOUT: Duration = Duration::from_secs(120);
+const SEARCH_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// 单次响应体上限。与 [`webpage`] 的 MAX_BYTES 同一个思路：别让一个失控的
+/// 服务端把整块内存吃掉。32MB 对聊天/搜索的 JSON 已经绰绰有余。
+const MAX_RESPONSE_BYTES: usize = 32 * 1024 * 1024;
+
+/// 带 API Key 外发的 URL 必须走 https；http 仅放行本机（本地 LLM 网关常用）。
+///
+/// 这些 url 来自用户配置，写法与 [`open_external_url`] 一致——不引 url 解析库，
+/// 前缀判断足够。否则一条误填/被注入的 http 地址就能让密钥以明文离开本机。
+pub(crate) fn ensure_key_bearing_url(url: &str) -> Result<(), String> {
+    let lowered = url.trim().to_ascii_lowercase();
+    if lowered.starts_with("https://") {
+        return Ok(());
+    }
+    if let Some(rest) = lowered.strip_prefix("http://") {
+        let host_port = rest.split(['/', '?', '#']).next().unwrap_or("");
+        // IPv6 字面量带方括号（`[::1]:8080`），得先剥括号再谈端口
+        let host = match host_port.strip_prefix('[') {
+            Some(v6) => v6.split(']').next().unwrap_or(""),
+            None => host_port.split(':').next().unwrap_or(""),
+        };
+        if matches!(host, "localhost" | "127.0.0.1" | "::1") {
+            return Ok(());
+        }
+    }
+    Err("insecure_url: API 请求只允许 https://（http:// 仅限 localhost / 127.0.0.1）".into())
+}
+
+/// 把响应体读进内存，超过 [`MAX_RESPONSE_BYTES`] 直接报错。
+///
+/// 与 [`webpage`] 的「截断继续用」不同，这里要的是完整 JSON——截半个 JSON
+/// 解析必然失败，不如尽早把「响应过大」如实说出来。Content-Length 可以说谎，
+/// 所以头部检查之外还要逐块累计。
+async fn read_text_capped(response: reqwest::Response) -> Result<String, String> {
+    if response.content_length().is_some_and(|len| len > MAX_RESPONSE_BYTES as u64) {
+        return Err("response_too_large".into());
+    }
+    let mut stream = response.bytes_stream();
+    let mut buf: Vec<u8> = Vec::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| e.to_string())?;
+        if buf.len() + chunk.len() > MAX_RESPONSE_BYTES {
+            return Err("response_too_large".into());
+        }
+        buf.extend_from_slice(&chunk);
+    }
+    Ok(String::from_utf8_lossy(&buf).into_owned())
+}
+
 /// OpenAI-compatible POST to `url` (e.g. Xiaomi MiMo Token Plan: https://token-plan-cn.xiaomimimo.com/v1/chat/completions).
 /// Bypasses browser CORS when running in the Tauri webview.
 #[tauri::command]
 async fn openai_compatible_chat(api_key: String, url: String, body: Value) -> Result<String, String> {
+  ensure_key_bearing_url(&url)?;
   let client = reqwest::Client::builder()
+    .connect_timeout(CONNECT_TIMEOUT)
+    .timeout(CHAT_TIMEOUT)
     .build()
     .map_err(|e| e.to_string())?;
 
@@ -34,7 +98,7 @@ async fn openai_compatible_chat(api_key: String, url: String, body: Value) -> Re
     })?;
 
   let status = response.status();
-  let text = response.text().await.map_err(|e| e.to_string())?;
+  let text = read_text_capped(response).await?;
 
   if !status.is_success() {
     let preview: String = text.chars().take(800).collect();
@@ -54,6 +118,22 @@ async fn openai_compatible_chat(api_key: String, url: String, body: Value) -> Re
   }
 }
 
+/// 从一行 SSE 里抠出增量文本。非 `data:` 行、`[DONE]`、解析失败、空增量都返回 `None`。
+fn sse_delta(line: &str) -> Option<String> {
+  let data = line.trim().strip_prefix("data:")?.trim_start();
+  if data == "[DONE]" {
+    return None;
+  }
+  let v: Value = serde_json::from_str(data).ok()?;
+  v["choices"]
+    .get(0)?
+    .get("delta")?
+    .get("content")?
+    .as_str()
+    .filter(|s| !s.is_empty())
+    .map(str::to_string)
+}
+
 /// Same as [`openai_compatible_chat`] but `stream: true` + SSE; emits JSON `{ id, text }` on `lab-ai-stream` as tokens arrive.
 #[tauri::command]
 async fn openai_compatible_chat_stream(
@@ -63,7 +143,13 @@ async fn openai_compatible_chat_stream(
   mut body: Value,
   stream_id: String,
 ) -> Result<String, String> {
+  ensure_key_bearing_url(&url)?;
+  // 流式不能用 `.timeout()`：reqwest 的总超时对整个响应体计时，长回答只要
+  // 生成超过两分钟就会被硬掐断。`read_timeout`（reqwest 0.12.4+）是两次读取
+  // 之间的空闲超时——正常生成时 token 源源不断，只有真卡死才会触发。
   let client = reqwest::Client::builder()
+    .connect_timeout(CONNECT_TIMEOUT)
+    .read_timeout(CHAT_TIMEOUT)
     .build()
     .map_err(|e| e.to_string())?;
 
@@ -88,7 +174,7 @@ async fn openai_compatible_chat_stream(
 
   let status = response.status();
   if !status.is_success() {
-    let text = response.text().await.unwrap_or_default();
+    let text = read_text_capped(response).await.unwrap_or_default();
     let preview: String = text.chars().take(800).collect();
     eprintln!(
       "[Spoor] openai_compatible_chat_stream HTTP {status} url={url} body_preview={preview}"
@@ -104,38 +190,15 @@ async fn openai_compatible_chat_stream(
     let chunk = chunk_result.map_err(|e| e.to_string())?;
     pending.push_str(&String::from_utf8_lossy(&chunk));
 
-    loop {
-      let nl = match pending.find('\n') {
-        Some(i) => i,
-        None => break,
-      };
-      let line = pending[..nl].trim_end_matches('\r').to_string();
-      pending = pending[nl + 1..].to_string();
-
-      let trimmed = line.trim();
-      let data = match trimmed.strip_prefix("data:") {
-        Some(rest) => rest.trim_start(),
-        None => continue,
-      };
-      if data == "[DONE]" {
-        continue;
+    while let Some(nl) = pending.find('\n') {
+      if let Some(delta) = sse_delta(&pending[..nl]) {
+        full.push_str(&delta);
+        let payload = serde_json::json!({ "id": &stream_id, "text": &full });
+        let _ = app.emit("lab-ai-stream", payload);
       }
-      let v: Value = match serde_json::from_str(data) {
-        Ok(v) => v,
-        Err(_) => continue,
-      };
-      let delta = v["choices"]
-        .get(0)
-        .and_then(|c| c.get("delta"))
-        .and_then(|d| d.get("content"))
-        .and_then(|c| c.as_str());
-      if let Some(d) = delta {
-        if !d.is_empty() {
-          full.push_str(d);
-          let payload = serde_json::json!({ "id": &stream_id, "text": &full });
-          let _ = app.emit("lab-ai-stream", payload);
-        }
-      }
+      // drain 原地挪走已消费的行；此前的 `pending[nl + 1..].to_string()` 每行都
+      // 把余下内容整个重新分配一遍，长回答下是 O(n²)
+      pending.drain(..=nl);
     }
   }
 
@@ -153,7 +216,10 @@ async fn openai_compatible_chat_stream(
 /// twice in two languages would be two places to get it wrong.
 #[tauri::command]
 async fn anthropic_messages(api_key: String, url: String, body: Value) -> Result<String, String> {
+  ensure_key_bearing_url(&url)?;
   let client = reqwest::Client::builder()
+    .connect_timeout(CONNECT_TIMEOUT)
+    .timeout(CHAT_TIMEOUT)
     .build()
     .map_err(|e| e.to_string())?;
 
@@ -171,7 +237,7 @@ async fn anthropic_messages(api_key: String, url: String, body: Value) -> Result
     })?;
 
   let status = response.status();
-  let text = response.text().await.map_err(|e| e.to_string())?;
+  let text = read_text_capped(response).await?;
 
   if !status.is_success() {
     let preview: String = text.chars().take(800).collect();
@@ -187,6 +253,8 @@ async fn anthropic_messages(api_key: String, url: String, body: Value) -> Result
 #[tauri::command]
 async fn metaso_search(api_key: String, query: String) -> Result<String, String> {
     let client = reqwest::Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(SEARCH_TIMEOUT)
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -209,7 +277,7 @@ async fn metaso_search(api_key: String, query: String) -> Result<String, String>
         })?;
 
     let status = response.status();
-    let text = response.text().await.map_err(|e| e.to_string())?;
+    let text = read_text_capped(response).await?;
 
     if !status.is_success() {
         let preview: String = text.chars().take(800).collect();
@@ -228,6 +296,8 @@ async fn metaso_search(api_key: String, query: String) -> Result<String, String>
 #[tauri::command]
 async fn tavily_search(api_key: String, query: String) -> Result<String, String> {
     let client = reqwest::Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(SEARCH_TIMEOUT)
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -250,7 +320,7 @@ async fn tavily_search(api_key: String, query: String) -> Result<String, String>
         })?;
 
     let status = response.status();
-    let text = response.text().await.map_err(|e| e.to_string())?;
+    let text = read_text_capped(response).await?;
 
     if !status.is_success() {
         let preview: String = text.chars().take(800).collect();
@@ -294,7 +364,8 @@ pub fn run() {
     // 画布里的图片/视频/文档都走这个协议直接流式读盘：
     // 数据根是运行时解析的，`assetProtocol` 的静态 scope 对不上。
     .register_asynchronous_uri_scheme_protocol("spoor-media", |ctx, request, responder| {
-      let root = media::init_data_root(ctx.app_handle()).to_path_buf();
+      // 每次请求都重新取数据根：数据目录迁移（dataroot.rs）后要立刻从新位置读
+      let root = media::init_data_root(ctx.app_handle());
       let path = request.uri().path().to_string();
       let range = request
         .headers()
@@ -334,8 +405,12 @@ pub fn run() {
       media::media_reveal,
       media::media_open_root,
       media::media_gc,
+      dataroot::data_root_get,
+      dataroot::data_root_migrate,
       imagegen::image_generate,
       imagegen::image_generate_cancel,
+      userfile::user_file_pick_save_path,
+      userfile::user_file_pick_directory,
       userfile::user_file_write_text,
       userfile::user_file_write_base64,
       userfile::user_file_read_text,

@@ -3,9 +3,13 @@ import type { CanvasTransform } from './useCanvasInteraction';
 import { db, type CanvasNode } from '../db';
 import i18n from '../i18n';
 import { getCanvasCenterPosition } from '../utils/canvas';
-import { readFileContent } from '../utils/file';
-import { importFileToNodeData, importPathToNodeData } from '../services/fileImport';
+import {
+  importFileToNodeData,
+  importPathToNodeData,
+  readFileToContentData,
+} from '../services/fileImport';
 import { isTauriRuntime } from '../utils/isTauriRuntime';
+import { logger } from '../utils/logger';
 import {
   materializeCanvasClipboard,
   type CanvasClipboardPayloadV2,
@@ -300,7 +304,7 @@ export function useNodeActions({
     if (isTauriRuntime()) {
       return importFileToNodeData(file, i18n.t('nodes.empty_document_body'));
     }
-    return readFileContent(file);
+    return readFileToContentData(file, i18n.t('nodes.empty_document_body'));
   };
 
   /** 落库多个文件，首个放在 `at`，其余依次错开。 */
@@ -325,7 +329,7 @@ export function useNodeActions({
         rows.push(row);
         created.push(row.id);
       } catch (err) {
-        console.error('Failed to process file:', file.name, err);
+        logger.error('nodes', 'failed to process file', file.name, err);
       }
     }
     recordAddedNodes(activeCanvasId, rows);
@@ -357,7 +361,7 @@ export function useNodeActions({
         rows.push(row);
         created.push(row.id);
       } catch (err) {
-        console.error('Failed to import file:', paths[index], err);
+        logger.error('nodes', 'failed to import file', paths[index], err);
       }
     }
     recordAddedNodes(activeCanvasId, rows);

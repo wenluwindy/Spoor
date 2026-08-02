@@ -67,6 +67,12 @@ export interface SpoorNodeExtension {
   fileName?: string;
   userTurn?: string;
   imageGenPrompt?: string;
+  /** v5 起：节点标签与色板外观，随导出走、导回不丢。 */
+  tags?: string[];
+  styleOverrides?: { bg?: string; text?: string; font?: string; border?: string };
+  /** 网页卡片的抓取缓存，导回后不用重抓也能显示。 */
+  urlTitle?: string;
+  urlExcerpt?: string;
 }
 
 export interface JsonCanvasEdge {
@@ -128,6 +134,12 @@ function buildExtension(node: CanvasNode): SpoorNodeExtension {
   if (node.fileName) ext.fileName = node.fileName;
   if (node.userTurn) ext.userTurn = node.userTurn;
   if (node.imageGenPrompt) ext.imageGenPrompt = node.imageGenPrompt;
+  if (node.tags?.length) ext.tags = node.tags;
+  if (node.styleOverrides && Object.values(node.styleOverrides).some(Boolean)) {
+    ext.styleOverrides = node.styleOverrides;
+  }
+  if (node.urlTitle) ext.urlTitle = node.urlTitle;
+  if (node.urlExcerpt) ext.urlExcerpt = node.urlExcerpt;
   return ext;
 }
 
@@ -143,8 +155,20 @@ export function nodeToJsonCanvas(node: CanvasNode, options: ExportOptions = {}):
     y: Math.round(node.y),
     width: Math.round(node.width || DEFAULT_NODE_WIDTH),
     height: Math.round(node.height || DEFAULT_NODE_HEIGHT),
+    // 背景色映射到规范原生的 color：Obsidian 里也能看到这张卡是"黄的"
+    ...(node.styleOverrides?.bg ? { color: node.styleOverrides.bg } : {}),
     spoor: buildExtension(node),
   };
+
+  // 网页卡片正好对上规范原生的 link 节点
+  if (node.type === 'web' && node.url) {
+    return { ...base, type: 'link', url: node.url };
+  }
+
+  // 区域框正好对上规范原生的 group 节点
+  if (node.type === 'frame') {
+    return { ...base, type: 'group', label: node.content ?? '' };
+  }
 
   if (node.type === 'image' || node.type === 'video' || node.type === 'document') {
     // 没有 filePath 的老节点（正文还在 content 里）退回文本卡，总比导出一个空 file 好
@@ -206,9 +230,9 @@ export function serializeJsonCanvas(doc: JsonCanvasDocument): string {
 // ── 导入 ──
 
 export interface ImportDegradations {
-  /** `link` 节点降级成了文本卡（Spoor 还没有 URL 节点）。 */
+  /** 历史遗留：0.3.1 起 `link` 直接落成网页卡片，不再降级，恒为 0。 */
   links: number;
-  /** `group` 节点降级成了主题卡（Spoor 还没有 Frame）。 */
+  /** 历史遗留：0.3.1 起 `group` 直接落成区域框，不再降级，恒为 0。 */
   groups: number;
   /** 类型不认识、或必填字段缺失，整条跳过。 */
   skipped: number;
@@ -288,6 +312,13 @@ export function importJsonCanvas(
       width: Number.isFinite(raw.width) ? Number(raw.width) : undefined,
       height: Number.isFinite(raw.height) ? Number(raw.height) : undefined,
       layout: ext?.layout,
+      tags: ext?.tags?.length ? ext.tags : undefined,
+      // 扩展字段优先；没有时把规范的 color（仅认 hex，"1"-"6" 预设无从对应）当背景色
+      styleOverrides:
+        ext?.styleOverrides ??
+        (typeof raw.color === 'string' && raw.color.startsWith('#')
+          ? { bg: raw.color }
+          : undefined),
     };
 
     let row: CanvasNode | null = null;
@@ -313,12 +344,17 @@ export function importJsonCanvas(
         imageGenPrompt: ext?.imageGenPrompt,
       };
     } else if (raw.type === 'link' && typeof raw.url === 'string') {
-      // URL 节点要到 C 线才有，先把地址原样落成一张文本卡，至少不丢
-      degraded.links += 1;
-      row = { ...common, type: 'text', content: raw.url };
+      // 0.3.1 起有网页卡片：link 原样落成 web 节点，抓取缓存从扩展字段带回
+      row = {
+        ...common,
+        type: 'web',
+        url: raw.url,
+        urlTitle: ext?.urlTitle,
+        urlExcerpt: ext?.urlExcerpt,
+      };
     } else if (raw.type === 'group') {
-      degraded.groups += 1;
-      row = { ...common, type: 'theme', content: raw.label ?? '' };
+      // 0.3.1 起有区域框：group 原样落成 frame
+      row = { ...common, type: 'frame', content: raw.label ?? '' };
     }
 
     if (!row) {

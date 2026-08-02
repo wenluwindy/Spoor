@@ -6,8 +6,22 @@
  * 数据根却是运行时解析的（安装目录不可写时会回退），对不上。
  */
 
-/** Windows 的 WebView2 把自定义协议映射成 `http://<scheme>.localhost/`。 */
-const MEDIA_ORIGIN = 'http://spoor-media.localhost';
+/**
+ * 自定义协议的源按平台拼：Windows 的 WebView2 把自定义协议映射成
+ * `http://<scheme>.localhost/`，macOS / Linux（WKWebView / WebKitGTK）保持
+ * `<scheme>://localhost/` 原样。以前硬编码 Windows 形式，macOS 包会加载不到本地媒体。
+ *
+ * 用 UA 判平台就够了：桌面 webview 的 UA 一定带 `Windows NT` / `Macintosh` 等标记，
+ * 而这个 URL 只在 Tauri webview 里被消费（浏览器调试时媒体协议本来就不可用）。
+ * 参数只为测试注入，业务代码不要传。
+ */
+export function mediaOrigin(
+  userAgent: string = typeof navigator !== 'undefined' ? navigator.userAgent : '',
+): string {
+  return /windows/i.test(userAgent)
+    ? 'http://spoor-media.localhost'
+    : 'spoor-media://localhost';
+}
 
 /**
  * 节点渲染统一走这里：优先 `filePath`（文件存储），回退 `content`（旧的 data URL）。
@@ -29,5 +43,5 @@ export function resolveNodeMediaSrc(node: {
 export function mediaUrl(relPath: string): string {
   const cleaned = relPath.replace(/^\/+/, '');
   const encoded = cleaned.split('/').map(encodeURIComponent).join('/');
-  return `${MEDIA_ORIGIN}/${encoded}`;
+  return `${mediaOrigin()}/${encoded}`;
 }

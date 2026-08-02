@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bot, Copy, Download, ImageDown, Layers, Link2, Pencil, PenLine, RefreshCw, RotateCcw, Square, SquareCheckBig, Trash2 } from 'lucide-react';
-import type { AgentConfig, Canvas, CanvasNode } from '../../db';
+import { AlignHorizontalJustifyStart, AlignVerticalJustifyStart, Bot, Copy, Download, ImageDown, Layers, LayoutTemplate, Link2, Pencil, PenLine, RefreshCw, RotateCcw, Square, SquareCheckBig, Tag, Trash2 } from 'lucide-react';
+import type { AgentConfig, Canvas, CanvasNode, CanvasTemplate } from '../../db';
 import { isTauriRuntime } from '../../utils/isTauriRuntime';
 import { CANVAS_CREATE_ITEMS, CANVAS_INSERT_ITEMS } from '../../constants/canvasMenuItems';
 import { nodeSupportsInlineEdit } from '../../constants/nodeCapabilities';
@@ -64,6 +64,17 @@ export interface CanvasContextMenuActions {
   synthesizeSelected: () => void;
   clearSelection: () => void;
   deleteNodes: (nodeIds: string[]) => void;
+  /** 打标签：单节点与多选共用，弹输入框改这些节点的 tags。 */
+  setNodeTags: (nodeIds: string[]) => void;
+  /** 对齐选中的卡片（≥2 张）。 */
+  alignNodes: (nodeIds: string[], mode: 'left' | 'center-h' | 'right' | 'top' | 'center-v' | 'bottom') => void;
+  /** 等间距分布（≥3 张）。 */
+  distributeNodes: (nodeIds: string[], axis: 'horizontal' | 'vertical') => void;
+  /** 把选中的卡片（连同内部连线）存成模板。 */
+  saveAsTemplate: (nodeIds: string[]) => void;
+  /** 在点击位置插入模板。 */
+  insertTemplate: (templateId: string, at: CanvasPoint) => void;
+  deleteTemplate: (templateId: string) => void;
 }
 
 export interface CanvasContextMenuProps {
@@ -77,6 +88,8 @@ export interface CanvasContextMenuProps {
   edges: { from: string; to: string; id: string; canvasId?: string }[];
   /** AI 或重算正忙时禁用重算入口。 */
   isRecomputeDisabled?: boolean;
+  /** 「从模板插入」子菜单的数据源。 */
+  templates: CanvasTemplate[];
   nodesById: Map<string, CanvasNode>;
   selectedNodes: Set<string>;
   actions: CanvasContextMenuActions;
@@ -92,6 +105,7 @@ export function CanvasContextMenu({
   activeCanvasId,
   edges,
   isRecomputeDisabled = false,
+  templates,
   nodesById,
   selectedNodes,
   actions,
@@ -145,7 +159,49 @@ export function CanvasContextMenu({
 
     if (menu.target.kind === 'nodes') {
       const { nodeIds, anchorId } = menu.target;
+      const alignModes = [
+        ['left', t('canvas.menu.align_left')],
+        ['center-h', t('canvas.menu.align_center_h')],
+        ['right', t('canvas.menu.align_right')],
+        ['top', t('canvas.menu.align_top')],
+        ['center-v', t('canvas.menu.align_center_v')],
+        ['bottom', t('canvas.menu.align_bottom')],
+      ] as const;
       return [
+        {
+          id: 'multi-layout',
+          entries: [
+            {
+              id: 'align',
+              label: t('canvas.menu.align'),
+              icon: AlignHorizontalJustifyStart,
+              submenu: alignModes.map(([mode, label]) => ({
+                id: `align-${mode}`,
+                label,
+                onSelect: () => actions.alignNodes(nodeIds, mode),
+              })),
+            },
+            {
+              id: 'distribute',
+              label: t('canvas.menu.distribute'),
+              icon: AlignVerticalJustifyStart,
+              // 两张卡没有"中间"可分，分布至少要三张
+              disabled: nodeIds.length < 3,
+              submenu: [
+                {
+                  id: 'distribute-h',
+                  label: t('canvas.menu.distribute_h'),
+                  onSelect: () => actions.distributeNodes(nodeIds, 'horizontal'),
+                },
+                {
+                  id: 'distribute-v',
+                  label: t('canvas.menu.distribute_v'),
+                  onSelect: () => actions.distributeNodes(nodeIds, 'vertical'),
+                },
+              ],
+            },
+          ],
+        },
         {
           id: 'multi',
           entries: [
@@ -163,6 +219,18 @@ export function CanvasContextMenu({
               accent: true,
               disabled: isSynthesizeDisabled,
               onSelect: () => actions.synthesizeSelected(),
+            },
+            {
+              id: 'set-tags-multi',
+              label: t('canvas.menu.set_tags'),
+              icon: Tag,
+              onSelect: () => actions.setNodeTags(nodeIds),
+            },
+            {
+              id: 'save-template-multi',
+              label: t('canvas.menu.save_as_template'),
+              icon: LayoutTemplate,
+              onSelect: () => actions.saveAsTemplate(nodeIds),
             },
             {
               id: 'clear-selection',
@@ -260,12 +328,26 @@ export function CanvasContextMenu({
           onSelect: () => actions.saveNodeMediaAs(nodeId),
         });
       }
-      primary.push({
-        id: 'toggle-select',
-        label: isSelected ? t('canvas.menu.unselect') : t('canvas.menu.select'),
-        icon: isSelected ? Square : SquareCheckBig,
-        onSelect: () => actions.toggleSelect(nodeId),
-      });
+      primary.push(
+        {
+          id: 'set-tags',
+          label: t('canvas.menu.set_tags'),
+          icon: Tag,
+          onSelect: () => actions.setNodeTags([nodeId]),
+        },
+        {
+          id: 'save-template',
+          label: t('canvas.menu.save_as_template'),
+          icon: LayoutTemplate,
+          onSelect: () => actions.saveAsTemplate([nodeId]),
+        },
+        {
+          id: 'toggle-select',
+          label: isSelected ? t('canvas.menu.unselect') : t('canvas.menu.select'),
+          icon: isSelected ? Square : SquareCheckBig,
+          onSelect: () => actions.toggleSelect(nodeId),
+        },
+      );
 
       return [
         { id: 'node', entries: primary },
@@ -349,6 +431,35 @@ export function CanvasContextMenu({
       });
     }
 
+    // 有模板才显示「从模板插入」——空子菜单只会让人纳闷模板从哪来（答案：选中卡片右键存）
+    if (templates.length > 0) {
+      result.push({
+        id: 'templates',
+        entries: [
+          {
+            id: 'insert-template',
+            label: t('canvas.menu.insert_template'),
+            icon: LayoutTemplate,
+            submenu: templates.map((template) => ({
+              id: `template-${template.id}`,
+              label: template.name,
+              onSelect: () => actions.insertTemplate(template.id, at),
+            })),
+          },
+          {
+            id: 'delete-template',
+            label: t('canvas.menu.delete_template'),
+            icon: Trash2,
+            submenu: templates.map((template) => ({
+              id: `template-del-${template.id}`,
+              label: template.name,
+              onSelect: () => actions.deleteTemplate(template.id),
+            })),
+          },
+        ],
+      });
+    }
+
     // 只有存在别的画布时才给这一项：链接到自己没有意义
     const linkTargets = canvases.filter((c) => c.id !== activeCanvasId);
     if (linkTargets.length > 0) {
@@ -391,7 +502,7 @@ export function CanvasContextMenu({
     });
 
     return result;
-  }, [menu, t, actions, agentConfigs, canvases, activeCanvasId, edges, isRecomputeDisabled, nodesById, selectedNodes, pasteable, isSynthesizeDisabled]);
+  }, [menu, t, actions, agentConfigs, canvases, activeCanvasId, edges, isRecomputeDisabled, templates, nodesById, selectedNodes, pasteable, isSynthesizeDisabled]);
 
   return (
     <ContextMenuSurface

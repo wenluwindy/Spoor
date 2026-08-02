@@ -1,6 +1,5 @@
 import type { CanvasNode, Edge } from '../db';
-
-const LOG_PREFIX = '[Scribe AI]';
+import { logger } from './logger';
 
 /** Max images attached to one Agent API call (plan default). */
 export const MAX_AGENT_CONTEXT_IMAGES = 4;
@@ -32,7 +31,7 @@ export function collectAgentContextImagePayload(
     const c = (n.content ?? '').trim();
     if (!isImageDataUrl(c)) continue;
     if (c.length > MAX_DATA_URL_CHARS) {
-      console.warn(`${LOG_PREFIX} skip oversized image node ${n.id} (${c.length} chars)`);
+      logger.warn('canvas', `skip oversized image node ${n.id} (${c.length} chars)`);
       continue;
     }
     seen.add(other);
@@ -57,7 +56,7 @@ export function resolveImageDataUrlsFromNodeIds(
     const c = (n.content ?? '').trim();
     if (!isImageDataUrl(c)) continue;
     if (c.length > MAX_DATA_URL_CHARS) {
-      console.warn(`${LOG_PREFIX} skip oversized image node ${id} (${c.length} chars)`);
+      logger.warn('canvas', `skip oversized image node ${id} (${c.length} chars)`);
       continue;
     }
     dataUrls.push(c);

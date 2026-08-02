@@ -5,8 +5,7 @@ import { DEEPSEEK_BASE_URL, DEEPSEEK_DEFAULT_MODEL } from '../constants/deepseek
 import { ANTHROPIC_BASE_URL } from '../constants/aiProviderPresets';
 import { looksLikeSamplingRejection, modelRejectsSampling } from '../utils/samplingParams';
 import { AppError, isAppError } from './appError';
-
-const LOG_PREFIX = '[Scribe AI]';
+import { logger } from '../utils/logger';
 
 /** For logs only — never log full API keys. */
 export function maskApiKeyForLog(key: string | undefined): string {
@@ -24,6 +23,25 @@ export function formatAiError(e: unknown): string {
   } catch {
     return String(e);
   }
+}
+
+/**
+ * 把 Rust 代理（`openai_compatible_chat*` / `anthropic_messages`）抛回的字符串
+ * 翻成带错误码的 `AppError`。
+ *
+ * Rust 侧有两个自家的守卫错误，不是服务商回的 HTTP 错误体，得单独认出来：
+ * - `insecure_url: …`——Base URL 不是 https（http 仅限本机），密钥不允许明文出门；
+ * - `response_too_large`——响应体超过 Rust 侧的读入上限。
+ * 其余仍归入 `ai.http`，原文作为详情。
+ */
+function appErrorFromProxyFailure(msg: string): AppError {
+  if (msg.startsWith('insecure_url:')) {
+    return new AppError('ai.insecure_url', msg.slice('insecure_url:'.length).trim());
+  }
+  if (msg === 'response_too_large') {
+    return new AppError('ai.response_too_large');
+  }
+  return new AppError('ai.http', msg);
 }
 
 function isTauriRuntime(): boolean {
@@ -58,7 +76,7 @@ function extractChatCompletionContent(data: unknown): string {
   };
   const content = d?.choices?.[0]?.message?.content;
   if (content == null || content === '') {
-    console.error(`${LOG_PREFIX} unexpected response (no choices[0].message.content)`, data);
+    logger.error('ai', 'unexpected response (no choices[0].message.content)', data);
     throw new AppError('ai.no_text');
   }
   if (typeof content === 'string') return content;
@@ -158,7 +176,7 @@ async function postOpenAiCompatibleChat(
   if (!key) {
     throw new AppError('ai.no_api_key');
   }
-  console.info(`${LOG_PREFIX} chat/completions request`, {
+  logger.info('ai', 'chat/completions request', {
     provider: meta.provider,
     model: meta.model,
     url,
@@ -173,9 +191,9 @@ async function postOpenAiCompatibleChat(
       return text;
     } catch (e) {
       const msg = formatAiError(e);
-      console.error(`${LOG_PREFIX} Tauri invoke openai_compatible_chat failed`, msg);
-      // Rust 侧把 HTTP 错误体原样抛回来，归入 http 类并保留原文作为详情
-      throw new AppError('ai.http', msg);
+      logger.error('ai', 'Tauri invoke openai_compatible_chat failed', msg);
+      // Rust 侧把 HTTP 错误体原样抛回来；自家守卫错误（insecure_url / response_too_large）单独认码
+      throw appErrorFromProxyFailure(msg);
     }
   }
 
@@ -190,14 +208,14 @@ async function postOpenAiCompatibleChat(
       body: JSON.stringify(body)
     });
   } catch (e) {
-    console.error(`${LOG_PREFIX} network/fetch failed`, { url, error: formatAiError(e) });
+    logger.error('ai', 'network/fetch failed', { url, error: formatAiError(e) });
     throw new AppError('ai.network', formatAiError(e));
   }
 
   const rawText = await response.text();
   if (!response.ok) {
     const msg = parseOpenAiStyleErrorBody(rawText, response.status);
-    console.error(`${LOG_PREFIX} chat/completions HTTP error`, {
+    logger.error('ai', 'chat/completions HTTP error', {
       status: response.status,
       url,
       bodyPreview: rawText.slice(0, 2000),
@@ -209,7 +227,7 @@ async function postOpenAiCompatibleChat(
   try {
     data = JSON.parse(rawText);
   } catch {
-    console.error(`${LOG_PREFIX} invalid JSON response`, rawText.slice(0, 2000));
+    logger.error('ai', 'invalid JSON response', rawText.slice(0, 2000));
     throw new AppError('ai.bad_response');
   }
   return extractChatCompletionContent(data);
@@ -297,8 +315,8 @@ async function postOpenAiCompatibleChatWithOptionalStream(
       // 与非流式那条路一致地包成 AppError：调用方要按 code + detail 判断
       // 能不能重试（例如模型拒收采样参数），裸字符串在这里就断链了。
       const msg = formatAiError(e);
-      console.error(`${LOG_PREFIX} Tauri invoke openai_compatible_chat_stream failed`, msg);
-      throw new AppError('ai.http', msg);
+      logger.error('ai', 'Tauri invoke openai_compatible_chat_stream failed', msg);
+      throw appErrorFromProxyFailure(msg);
     } finally {
       unlisten();
     }
@@ -308,7 +326,7 @@ async function postOpenAiCompatibleChatWithOptionalStream(
   if (!key) {
     throw new AppError('ai.no_api_key');
   }
-  console.info(`${LOG_PREFIX} chat/completions stream`, {
+  logger.info('ai', 'chat/completions stream', {
     provider: meta.provider,
     model: meta.model,
     url,
@@ -327,7 +345,7 @@ async function postOpenAiCompatibleChatWithOptionalStream(
       body: JSON.stringify(streamBody),
     });
   } catch (e) {
-    console.error(`${LOG_PREFIX} stream network/fetch failed`, { url, error: formatAiError(e) });
+    logger.error('ai', 'stream network/fetch failed', { url, error: formatAiError(e) });
     throw new AppError('ai.network', formatAiError(e));
   }
 
@@ -404,7 +422,7 @@ export async function callUniversalAI({
     }
 
     const startedAt = Date.now();
-    console.info(`${LOG_PREFIX} local_llama → invoke`, {
+    logger.info('ai', 'local_llama → invoke', {
       modelPath: modelPath.slice(0, 80) + (modelPath.length > 80 ? '…' : ''),
       promptChars: prompt.length,
       systemChars: (systemInstruction ?? '').length,
@@ -428,7 +446,7 @@ export async function callUniversalAI({
           enableThinking: config.localEnableThinking ?? false,
         },
       });
-      console.info(`${LOG_PREFIX} local_llama ← done`, {
+      logger.info('ai', 'local_llama ← done', {
         elapsedMs: Date.now() - startedAt,
         outChars: (out ?? '').length,
       });
@@ -438,7 +456,7 @@ export async function callUniversalAI({
     } catch (e) {
       const elapsedMs = Date.now() - startedAt;
       const msg = formatAiError(e);
-      console.error(`${LOG_PREFIX} local_llama ← FAILED (${elapsedMs}ms)`, msg, { logPath });
+      logger.error('ai', `local_llama ← FAILED (${elapsedMs}ms)`, msg, { logPath });
       throw new AppError('ai.local_failed', logPath ? `${msg}\n${logPath}` : msg);
     }
   }
@@ -447,7 +465,7 @@ export async function callUniversalAI({
     if (!apiKeyTrimmed) throw new AppError('ai.no_api_key');
     const apiKey = apiKeyTrimmed;
 
-    console.info(`${LOG_PREFIX} Gemini generateContent`, {
+    logger.info('ai', 'Gemini generateContent', {
       model: config.model,
       apiKey: maskApiKeyForLog(apiKey),
     });
@@ -469,7 +487,7 @@ export async function callUniversalAI({
       onStreamChunk?.(text);
       return text;
     } catch (e) {
-      console.error(`${LOG_PREFIX} Gemini failed`, formatAiError(e));
+      logger.error('ai', 'Gemini failed', formatAiError(e));
       throw e instanceof Error ? e : new Error(formatAiError(e));
     }
   }
@@ -536,7 +554,7 @@ export async function callUniversalAI({
       const retryable =
         !knownFixed && isAppError(e) && e.code === 'ai.http' && looksLikeSamplingRejection(e.detail);
       if (!retryable) throw e;
-      console.warn(`${LOG_PREFIX} model rejected sampling params, retrying without them`, {
+      logger.warn('ai', 'model rejected sampling params, retrying without them', {
         model,
         detail: e.detail?.slice(0, 200),
       });
@@ -549,7 +567,7 @@ export async function callUniversalAI({
   if (config.provider === 'anthropic') {
     const model = config.model || 'claude-3-5-sonnet-20240620';
     const url = anthropicMessagesUrl(config.baseUrl);
-    console.info(`${LOG_PREFIX} Anthropic messages`, {
+    logger.info('ai', 'Anthropic messages', {
       model,
       url,
       runtime: isTauriRuntime() ? 'tauri' : 'web',
@@ -576,8 +594,8 @@ export async function callUniversalAI({
         });
       } catch (e) {
         const msg = formatAiError(e);
-        console.error(`${LOG_PREFIX} Tauri invoke anthropic_messages failed`, msg);
-        throw new AppError('ai.http', msg);
+        logger.error('ai', 'Tauri invoke anthropic_messages failed', msg);
+        throw appErrorFromProxyFailure(msg);
       }
     } else {
       let response: Response;
@@ -594,14 +612,14 @@ export async function callUniversalAI({
           body: JSON.stringify(requestBody)
         });
       } catch (e) {
-        console.error(`${LOG_PREFIX} Anthropic network/fetch failed`, { url, error: formatAiError(e) });
+        logger.error('ai', 'Anthropic network/fetch failed', { url, error: formatAiError(e) });
         throw new AppError('ai.network', formatAiError(e));
       }
 
       rawText = await response.text();
       if (!response.ok) {
         const msg = parseOpenAiStyleErrorBody(rawText, response.status);
-        console.error(`${LOG_PREFIX} Anthropic HTTP error`, response.status, rawText.slice(0, 2000));
+        logger.error('ai', 'Anthropic HTTP error', response.status, rawText.slice(0, 2000));
         throw new AppError('ai.http', msg);
       }
     }
@@ -610,12 +628,12 @@ export async function callUniversalAI({
     try {
       data = JSON.parse(rawText);
     } catch {
-      console.error(`${LOG_PREFIX} invalid Anthropic JSON response`, rawText.slice(0, 2000));
+      logger.error('ai', 'invalid Anthropic JSON response', rawText.slice(0, 2000));
       throw new AppError('ai.bad_response');
     }
     const blocks = data.content as Array<{ type?: string; text?: string }>;
     if (!Array.isArray(blocks) || blocks.length === 0) {
-      console.error(`${LOG_PREFIX} unexpected Anthropic response`, data);
+      logger.error('ai', 'unexpected Anthropic response', data);
       throw new AppError('ai.bad_response');
     }
     const text = blocks
@@ -626,7 +644,7 @@ export async function callUniversalAI({
       })
       .join('');
     if (!text) {
-      console.error(`${LOG_PREFIX} Anthropic returned no text blocks`, data);
+      logger.error('ai', 'Anthropic returned no text blocks', data);
       throw new AppError('ai.no_text');
     }
     onStreamChunk?.(text);

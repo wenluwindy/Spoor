@@ -1,6 +1,6 @@
 import { AppError } from './appError';
 import type { SearchProviderKind } from '../types/aiConfig';
-const LOG_PREFIX = '[Scribe AI][Search]';
+import { logger } from '../utils/logger';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -70,7 +70,7 @@ export async function metasoSearch(
     throw new AppError('search.no_key');
   }
 
-  console.info(`${LOG_PREFIX} metasoSearch`, { query });
+  logger.info('search', 'metasoSearch', { query });
 
   // ---- Tauri path --------------------------------------------------------
   if (isTauriRuntime()) {
@@ -82,7 +82,7 @@ export async function metasoSearch(
       });
       return JSON.parse(json) as MetasoSearchResponse;
     } catch (e) {
-      console.error(`${LOG_PREFIX} Tauri metaso_search failed`, e);
+      logger.error('search', 'Tauri metaso_search failed', e);
       throw e instanceof Error ? e : new Error(String(e));
     }
   }
@@ -110,7 +110,7 @@ export async function metasoSearch(
 
     if (!response.ok) {
       const text = await response.text();
-      console.error(`${LOG_PREFIX} HTTP ${response.status}`, text.slice(0, 500));
+      logger.error('search', `HTTP ${response.status}`, text.slice(0, 500));
       throw new AppError('search.failed', `HTTP ${response.status}: ${text.slice(0, 200)}`);
     }
 
@@ -153,7 +153,7 @@ export function mapTavilyResults(raw: unknown): WebSearchResponse {
 }
 
 async function tavilySearch(query: string, apiKey: string): Promise<WebSearchResponse> {
-  console.info(`${LOG_PREFIX} tavilySearch`, { query });
+  logger.info('search', 'tavilySearch', { query });
 
   if (isTauriRuntime()) {
     const { invoke } = await import('@tauri-apps/api/core');
@@ -161,7 +161,7 @@ async function tavilySearch(query: string, apiKey: string): Promise<WebSearchRes
       const json = await invoke<string>('tavily_search', { apiKey, query });
       return mapTavilyResults(JSON.parse(json));
     } catch (e) {
-      console.error(`${LOG_PREFIX} Tauri tavily_search failed`, e);
+      logger.error('search', 'Tauri tavily_search failed', e);
       throw e instanceof Error ? e : new Error(String(e));
     }
   }
@@ -182,7 +182,7 @@ async function tavilySearch(query: string, apiKey: string): Promise<WebSearchRes
 
     if (!response.ok) {
       const text = await response.text();
-      console.error(`${LOG_PREFIX} HTTP ${response.status}`, text.slice(0, 500));
+      logger.error('search', `HTTP ${response.status}`, text.slice(0, 500));
       throw new AppError('search.failed', `HTTP ${response.status}: ${text.slice(0, 200)}`);
     }
 

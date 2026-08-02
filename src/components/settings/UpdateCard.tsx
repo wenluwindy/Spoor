@@ -19,9 +19,12 @@ const BUTTON =
  */
 export function UpdateCard() {
   const { t } = useTranslation();
-  const { phase, info, progress, error } = useAppUpdate();
+  const { phase, info, progress, installOutcome, error } = useAppUpdate();
 
   const busy = phase === 'checking' || phase === 'downloading';
+
+  // Rust 抛上来的已知错误码翻成人话，其余原样透出（多为 HTTP 状态或网络报错）
+  const errorText = error === 'no_installer_for_platform' ? t('settings.update_no_installer') : error;
 
   return (
     <div className="p-4 rounded-xl border border-app-border bg-app-surface space-y-3">
@@ -112,8 +115,8 @@ export function UpdateCard() {
             <AlertTriangle className="w-3.5 h-3.5 shrink-0" aria-hidden />
             {t('settings.update_failed')}
           </p>
-          {error && (
-            <p className="text-[10px] font-mono text-app-text-faint break-all line-clamp-3">{error}</p>
+          {errorText && (
+            <p className="text-[10px] font-mono text-app-text-faint break-all line-clamp-3">{errorText}</p>
           )}
         </div>
       )}
@@ -124,10 +127,17 @@ export function UpdateCard() {
             <ArrowDownToLine className="w-4 h-4" />
             {t('settings.update_install')}
           </button>
-          {/* 安装程序会先关掉本应用，提前说一声比装到一半才发现强 */}
-          <p className="text-[10px] text-app-text-faint leading-relaxed">
-            {t('settings.update_install_hint')}
-          </p>
+          {installOutcome === 'manual' ? (
+            /* macOS：dmg 已打开、应用不退出，「即将关闭」的说法在这里是错的 */
+            <p className="text-[10px] text-app-text-faint leading-relaxed">
+              {t('settings.update_install_manual_hint')}
+            </p>
+          ) : (
+            /* Windows：安装程序会先关掉本应用，提前说一声比装到一半才发现强 */
+            <p className="text-[10px] text-app-text-faint leading-relaxed">
+              {t('settings.update_install_hint')}
+            </p>
+          )}
         </>
       ) : phase === 'available' || phase === 'downloading' ? (
         <button

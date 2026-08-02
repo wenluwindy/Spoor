@@ -15,8 +15,10 @@ export interface MediaStoreInfo {
   root: string;
   bytes: number;
   count: number;
-  /** 安装目录不可写、已回退到应用数据目录。 */
+  /** 安装目录不可写、已回退到应用数据目录。用户自选位置生效时恒为 false。 */
   fallback: boolean;
+  /** 用户迁移过数据目录，`data-root.json` 里的自选位置正在生效。 */
+  custom: boolean;
 }
 
 export interface MediaEntry {
@@ -51,6 +53,10 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
   try {
     return await invoke<T>(command, args);
   } catch (e) {
+    // 写入白名单拒绝（media_export 的目标不是用户刚在对话框里授权的路径）单独认码
+    if (String(e).includes('path_not_authorized')) {
+      throw new AppError('file.path_not_authorized', command);
+    }
     throw new AppError('media.command_failed', `${command}: ${String(e)}`);
   }
 }

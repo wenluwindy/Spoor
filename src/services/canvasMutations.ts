@@ -62,8 +62,12 @@ export async function addNodesAndEdgesRecorded(
   edges: Edge[],
 ): Promise<string[]> {
   if (nodes.length === 0 && edges.length === 0) return [];
-  if (nodes.length > 0) await db.nodes.bulkAdd(nodes);
-  if (edges.length > 0) await db.edges.bulkAdd(edges);
+  // 事务包住两张表：节点写成了、边写炸了会留下"有卡没线"的半成品，
+  // 而补丁已经把边记进去，撤销时就会去删不存在的行。要么全成，要么全无。
+  await db.transaction('rw', db.nodes, db.edges, async () => {
+    if (nodes.length > 0) await db.nodes.bulkAdd(nodes);
+    if (edges.length > 0) await db.edges.bulkAdd(edges);
+  });
   recordCanvasHistory(canvasId, { addedNodes: nodes, addedEdges: edges });
   return nodes.map((n) => n.id);
 }
@@ -83,8 +87,11 @@ export async function deleteNodesRecorded(canvasId: string, ids: string[]): Prom
 
   const removedEdges = await db.edges.filter((e) => idSet.has(e.from) || idSet.has(e.to)).toArray();
 
-  if (removedEdges.length > 0) await db.edges.bulkDelete(removedEdges.map((e) => e.id));
-  await db.nodes.bulkDelete(existing.map((n) => n.id));
+  // 同一事务里删边再删点：中途失败时整体回滚，不会出现"点没了、悬空边还在"。
+  await db.transaction('rw', db.nodes, db.edges, async () => {
+    if (removedEdges.length > 0) await db.edges.bulkDelete(removedEdges.map((e) => e.id));
+    await db.nodes.bulkDelete(existing.map((n) => n.id));
+  });
 
   recordCanvasHistory(canvasId, { removedNodes: existing, removedEdges });
 }

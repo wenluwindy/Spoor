@@ -18,6 +18,8 @@ export type AppErrorCode =
   // --- 传输类 ---
   | 'ai.network'
   | 'ai.http'
+  | 'ai.insecure_url'
+  | 'ai.response_too_large'
   | 'ai.bad_response'
   | 'ai.no_text'
   // --- 本地 GGUF ---
@@ -30,6 +32,7 @@ export type AppErrorCode =
   | 'search.failed'
   // --- 文件 ---
   | 'file.unsupported'
+  | 'file.path_not_authorized'
   // --- 本地媒体存储 ---
   | 'media.desktop_only'
   | 'media.command_failed'

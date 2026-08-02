@@ -134,7 +134,7 @@ describe('canvasPortability', () => {
       expect(await db.nodes.count()).toBe(0);
     });
 
-    it('如实报出降级情况', async () => {
+    it('如实报出降级情况（link/group 已有原生对应，只剩未知类型会跳过）', async () => {
       openTextFile.mockResolvedValue({
         fileName: 'mixed.canvas',
         text: JSON.stringify({
@@ -148,7 +148,7 @@ describe('canvasPortability', () => {
       });
 
       const outcome = (await importCanvasFromFile())!;
-      expect(outcome.degraded).toEqual({ links: 1, groups: 1, skipped: 1 });
+      expect(outcome.degraded).toEqual({ links: 0, groups: 0, skipped: 1 });
     });
   });
 

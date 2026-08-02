@@ -100,7 +100,8 @@ describe('useCanvasInteraction', () => {
       getWheelHandler()(e);
     });
 
-    expect(result.current.canvasTransform.scale).toBeGreaterThan(1);
+    // 滚轮走「直写 DOM + 节流提交」，即时真值在 transformRef（state 是节流副本）
+    expect(result.current.transformRef.current.scale).toBeGreaterThan(1);
   });
 
   it('指针在画布之外时不缩放，滚动交还给浏览器', () => {
@@ -270,11 +271,25 @@ describe('useCanvasInteraction', () => {
       const { result } = setupHook();
 
       fireWheel(-100);
-      const zoomedIn = result.current.canvasTransform.scale;
+      const zoomedIn = result.current.transformRef.current.scale;
       expect(zoomedIn).toBeGreaterThan(1);
 
       fireWheel(100);
-      expect(result.current.canvasTransform.scale).toBeLessThan(zoomedIn);
+      expect(result.current.transformRef.current.scale).toBeLessThan(zoomedIn);
+    });
+
+    it('缩放的 state 副本在节流窗口后跟上（裁剪与缩放百分比靠它）', async () => {
+      const { result } = setupHook();
+      fireWheel(-100);
+      // 事件当下 state 还是旧值（不再每个滚轮事件都全树重渲）……
+      expect(result.current.canvasTransform.scale).toBe(1);
+      // ……节流窗口（120ms）过后必须追平真值
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 200));
+      });
+      expect(result.current.canvasTransform.scale).toBe(
+        result.current.transformRef.current.scale,
+      );
     });
 
     it('阻止默认行为（否则 WebView 会连带滚动页面）', () => {
@@ -287,7 +302,7 @@ describe('useCanvasInteraction', () => {
       const { result } = setupHook();
       const at = { clientX: 700, clientY: 300 };
 
-      const before = result.current.canvasTransform;
+      const before = result.current.transformRef.current;
       const canvasPointBefore = {
         x: (at.clientX - before.x) / before.scale,
         y: (at.clientY - before.y) / before.scale,
@@ -295,7 +310,7 @@ describe('useCanvasInteraction', () => {
 
       fireWheel(-100, at);
 
-      const after = result.current.canvasTransform;
+      const after = result.current.transformRef.current;
       const canvasPointAfter = {
         x: (at.clientX - after.x) / after.scale,
         y: (at.clientY - after.y) / after.scale,
@@ -307,10 +322,10 @@ describe('useCanvasInteraction', () => {
     it('缩放范围收在 0.1 ~ 5', () => {
       const { result } = setupHook();
       for (let i = 0; i < 200; i++) fireWheel(-100);
-      expect(result.current.canvasTransform.scale).toBeLessThanOrEqual(5);
+      expect(result.current.transformRef.current.scale).toBeLessThanOrEqual(5);
 
       for (let i = 0; i < 400; i++) fireWheel(100);
-      expect(result.current.canvasTransform.scale).toBeGreaterThanOrEqual(0.1);
+      expect(result.current.transformRef.current.scale).toBeGreaterThanOrEqual(0.1);
     });
   });
 
@@ -340,7 +355,7 @@ describe('useCanvasInteraction', () => {
       expect(addSpy).toHaveBeenCalledWith('pointerup', expect.any(Function));
     });
 
-    it('中键拖动改变 transform', () => {
+    it('中键拖动改变 transform；抬起时 state 整份提交', () => {
       const { result } = setupHook();
       act(() => {
         result.current.handlePanStart(pointerDown(1));
@@ -348,6 +363,13 @@ describe('useCanvasInteraction', () => {
       act(() => {
         window.dispatchEvent(new PointerEvent('pointermove', { clientX: 160, clientY: 130 }));
       });
+      // 拖动期间即时真值在 transformRef（直写 DOM，不经过 React）
+      expect(result.current.transformRef.current.x).toBe(60);
+      expect(result.current.transformRef.current.y).toBe(30);
+      act(() => {
+        window.dispatchEvent(new PointerEvent('pointerup', {}));
+      });
+      // 抬起立即提交，不等节流窗口
       expect(result.current.canvasTransform.x).toBe(60);
       expect(result.current.canvasTransform.y).toBe(30);
     });

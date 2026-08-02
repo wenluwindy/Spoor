@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { formatAiError } from '../services/ai';
 import { getLocaleDirective } from '../utils/aiI18n';
 import { parseLenientLlmJson } from '../utils/llmJson';
 import { openExternalUrl } from '../utils/openExternal';
+import { logger } from '../utils/logger';
 import { webSearch, buildSearchContext } from '../services/search';
 import { DEFAULT_SEARCH_PROVIDER } from '../constants/searchProviders';
 import type { SearchProviderKind } from '../types/aiConfig';
@@ -15,12 +16,10 @@ import {
   type ResearchSessionWebpageSnapshot,
 } from '../db';
 import {
-  Terminal,
   Microscope,
   ArrowRight,
   ListChecks,
   Check,
-  CheckCircle2,
   Loader2,
   FileText,
   Globe,
@@ -28,12 +27,20 @@ import {
   Sparkles,
   ExternalLink,
   LayoutGrid,
+  RotateCcw,
   Trash2,
   X,
 } from 'lucide-react';
 import type { CallAIFn } from '../types/ai';
 import { useAppDialog } from './AppDialogProvider';
 import { Tooltip } from './ui/Tooltip';
+import { ResearchRunView } from './ResearchRunView';
+import {
+  MAX_RESEARCH_PLAN_STEPS,
+  estimateResearchRunCalls,
+  parseNeedWebDecision,
+  useResearchRun,
+} from '../hooks/useResearchRun';
 
 export type ResearchPlanStep = { title: string; desc: string };
 
@@ -78,6 +85,7 @@ function normalizeResearchPlan(raw: unknown): ResearchPlanStep[] {
   if (!Array.isArray(raw)) return [];
   const out: ResearchPlanStep[] = [];
   for (const item of raw) {
+    if (out.length >= MAX_RESEARCH_PLAN_STEPS) break;
     if (!item || typeof item !== 'object') continue;
     const o = item as Record<string, unknown>;
     const title = String(o.title ?? '').trim();
@@ -93,41 +101,6 @@ export type ResearchReportBody = {
   points: { title: string; text: string }[];
   conclusion: string;
 };
-
-function normalizeResearchReport(raw: unknown): ResearchReportBody {
-  if (!raw || typeof raw !== 'object') {
-    return { intro: '', points: [], conclusion: '' };
-  }
-  const o = raw as Record<string, unknown>;
-  const intro = String(o.intro ?? '').trim();
-  const conclusion = String(o.conclusion ?? '').trim();
-  const points: { title: string; text: string }[] = [];
-  if (Array.isArray(o.points)) {
-    for (const p of o.points) {
-      if (!p || typeof p !== 'object') continue;
-      const rec = p as Record<string, unknown>;
-      points.push({
-        title: String(rec.title ?? '').trim(),
-        text: String(rec.text ?? '').trim(),
-      });
-    }
-  }
-  return { intro, points, conclusion };
-}
-
-/** 报告 JSON 解析失败时展示的说明（不是研究结果，只是告知失败原因）。 */
-function researchReportParseFallback(t: TranslateFn): ResearchReportBody {
-  return {
-    intro: t('lab.parse_error_report.intro'),
-    points: [
-      {
-        title: t('lab.parse_error_report.point_title'),
-        text: t('lab.parse_error_report.point_text'),
-      },
-    ],
-    conclusion: t('lab.parse_error_report.conclusion'),
-  };
-}
 
 export interface ResearchLabProps {
   /** 「落到画布」：把这次研究整块放进当前画布的一个区域框里，然后切过去。 */
@@ -162,48 +135,66 @@ const EMPTY_WEB_OUTCOME: WebSearchOutcome = {
   webpages: [],
 };
 
-/** Parse `{"need_web":boolean}` from classifier output; default true if ambiguous (prefer fetching sources). */
-function parseNeedWebDecision(text: string): boolean {
-  try {
-    const raw = parseLenientLlmJson(text ?? '');
-    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-      const v = (raw as Record<string, unknown>).need_web;
-      if (v === true) return true;
-      if (v === false) return false;
-    }
-  } catch {
-    /* fall through */
+// ---------------------------------------------------------------------------
+// Phase state machine
+// ---------------------------------------------------------------------------
+
+type LabPhase = 'idle' | 'planning' | 'plan_ready' | 'researching' | 'completed';
+
+type LabPhaseAction =
+  | { type: 'reset' }
+  | { type: 'plan_start' }
+  | { type: 'plan_ready' }
+  | { type: 'run_start' }
+  | { type: 'run_completed' }
+  | { type: 'open_history' }
+  | { type: 'back_to_plan' };
+
+function labPhaseReducer(_phase: LabPhase, action: LabPhaseAction): LabPhase {
+  switch (action.type) {
+    case 'reset':
+      return 'idle';
+    case 'plan_start':
+      return 'planning';
+    case 'plan_ready':
+    case 'back_to_plan':
+      return 'plan_ready';
+    case 'run_start':
+      return 'researching';
+    case 'run_completed':
+    case 'open_history':
+      return 'completed';
+    default:
+      return _phase;
   }
-  return true;
 }
 
 export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabProps) {
   const { t, i18n } = useTranslation();
   const { confirm } = useAppDialog();
-  const [phase, setPhase] = useState<'idle' | 'planning' | 'plan_ready' | 'researching' | 'completed'>('idle');
+  const [phase, dispatchPhase] = useReducer(labPhaseReducer, 'idle');
   const [query, setQuery] = useState('');
-  /** Real execute pipeline: await resolveWebSearchForExecute → await callAI(report). */
-  const [researchExecStage, setResearchExecStage] = useState<'resolving_context' | 'generating_report'>(
-    'resolving_context',
-  );
   const [researchPlan, setResearchPlan] = useState<ResearchPlanStep[]>([]);
-  const [researchReport, setResearchReport] = useState<{intro: string, points: {title: string, text: string}[], conclusion: string}>({
+  const [researchReport, setResearchReport] = useState<ResearchReportBody>({
     intro: '', points: [], conclusion: ''
   });
-  const [reportGenerationFailed, setReportGenerationFailed] = useState(false);
   const [searchStatus, setSearchStatus] = useState<'idle' | 'searching' | 'found' | 'fallback'>('idle');
   const [sourceCount, setSourceCount] = useState(0);
   const [planRevisionNote, setPlanRevisionNote] = useState('');
   const [planRevising, setPlanRevising] = useState(false);
   /** Raw model output while generating outline (streaming when provider supports it). */
   const [planStreamText, setPlanStreamText] = useState('');
-  /** Raw model output while generating report (stream preview; parsed after complete). */
-  const [reportStreamText, setReportStreamText] = useState('');
   const [searchSources, setSearchSources] = useState<ResearchSessionWebpageSnapshot[]>([]);
   const [sourceDetail, setSourceDetail] = useState<ResearchSessionWebpageSnapshot | null>(null);
   const executeResearchInFlightRef = useRef(false);
-  /** When Metaso key is set: classifier result for current session (whether to call web search). */
-  const labNeedWebRef = useRef(true);
+  /** When a search key is set: classifier result for current session; null = not classified yet. */
+  const labNeedWebRef = useRef<boolean | null>(null);
+
+  const translateForRun = useCallback(
+    (key: string, opts?: Record<string, unknown>) => String(t(key, opts as never)),
+    [t],
+  );
+  const run = useResearchRun({ aiConfig, callAI, translate: translateForRun });
 
   const pastSessions = useLiveQuery(
     () => db.researchSessions.orderBy('createdAt').reverse().limit(RESEARCH_HISTORY_LIMIT).toArray(),
@@ -221,7 +212,7 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
 
   const openHistorySession = (session: ResearchSession) => {
     setQuery(session.query);
-    setResearchPlan(session.researchPlan.map((s) => ({ title: s.title, desc: s.desc })));
+    setResearchPlan(normalizeResearchPlan(session.researchPlan));
     setResearchReport({
       intro: session.researchReport.intro,
       points: session.researchReport.points ?? [],
@@ -230,8 +221,9 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
     setSourceCount(session.sourceCount);
     setSearchStatus(session.searchStatus);
     setSearchSources(session.searchWebpages ?? []);
-    setReportGenerationFailed(false);
-    setPhase('completed');
+    labNeedWebRef.current = null;
+    run.reset();
+    dispatchPhase({ type: 'open_history' });
   };
 
   const deleteResearchSession = async (sessionId: string) => {
@@ -243,7 +235,7 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
     try {
       await db.researchSessions.delete(sessionId);
     } catch (e) {
-      console.error('[Scribe AI] ResearchLab delete session failed', formatAiError(e));
+      logger.error('research', 'ResearchLab delete session failed', formatAiError(e));
     }
   };
 
@@ -257,7 +249,7 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
       });
       return parseNeedWebDecision(String(text ?? ''));
     } catch (e) {
-      console.warn('[Scribe AI] ResearchLab need_web classification failed', formatAiError(e));
+      logger.warn('research', 'ResearchLab need_web classification failed', formatAiError(e));
       return true;
     }
   };
@@ -274,23 +266,6 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
     const needWeb = await classifyNeedWebSearch(searchQuery);
     labNeedWebRef.current = needWeb;
     if (!needWeb) {
-      setSearchStatus('idle');
-      setSourceCount(0);
-      setSearchSources([]);
-      return { ...EMPTY_WEB_OUTCOME };
-    }
-    return tryWebSearch(searchQuery);
-  };
-
-  /**
-   * Execute-phase search: reuse session classifier; skip the search call when model chose reasoning-only.
-   */
-  const resolveWebSearchForExecute = async (searchQuery: string): Promise<WebSearchOutcome> => {
-    const apiKey = aiConfig.searchApiKey?.trim();
-    if (!apiKey) {
-      return tryWebSearch(searchQuery);
-    }
-    if (!labNeedWebRef.current) {
       setSearchStatus('idle');
       setSourceCount(0);
       setSearchSources([]);
@@ -335,7 +310,7 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
       setSearchSources([]);
       return { context: '', sourceCount: 0, searchStatus: 'fallback', webpages: [] };
     } catch (e) {
-      console.warn('[Scribe AI] Metaso search failed, degrading to offline mode', formatAiError(e));
+      logger.warn('research', 'Metaso search failed, degrading to offline mode', formatAiError(e));
       setSearchStatus('fallback');
       setSearchSources([]);
       return { context: '', sourceCount: 0, searchStatus: 'fallback', webpages: [] };
@@ -343,15 +318,14 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
   };
 
   const generatePlan = async () => {
-    setPhase('planning');
-    setReportGenerationFailed(false);
+    dispatchPhase({ type: 'plan_start' });
     setSearchStatus('idle');
     setSearchSources([]);
     setSourceDetail(null);
     setPlanRevisionNote('');
-    labNeedWebRef.current = true;
+    labNeedWebRef.current = null;
     setPlanStreamText('');
-    setReportStreamText('');
+    run.reset();
 
     const { context: searchContext } = await resolveWebSearchOutcome(query);
 
@@ -369,12 +343,12 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
       const plan = normalizeResearchPlan(parseLenientLlmJson(text ?? '[]'));
       setResearchPlan(plan.length > 0 ? plan : researchPlanFallback(t));
       setPlanStreamText('');
-      setPhase('plan_ready');
+      dispatchPhase({ type: 'plan_ready' });
     } catch (e) {
-      console.error('[Scribe AI] ResearchLab generatePlan failed', formatAiError(e));
+      logger.error('research', 'ResearchLab generatePlan failed', formatAiError(e));
       setPlanStreamText('');
       setResearchPlan(researchPlanFallback(t));
-      setPhase('plan_ready');
+      dispatchPhase({ type: 'plan_ready' });
     }
   };
 
@@ -412,7 +386,7 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
       }
       setPlanStreamText('');
     } catch (e) {
-      console.error('[Scribe AI] ResearchLab revisePlan failed', formatAiError(e));
+      logger.error('research', 'ResearchLab revisePlan failed', formatAiError(e));
       setPlanStreamText('');
     } finally {
       setPlanRevising(false);
@@ -425,91 +399,128 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
     generatePlan();
   };
 
+  /**
+   * 真分步执行：编排在 useResearchRun 里；这里只负责 phase 切换、
+   * 把最终结果同步进侧栏状态，以及 completed 时落库。
+   * aborted / failed 停留在执行视图，已完成步骤的产出保留在界面上（不落库）。
+   */
   const executeResearch = async () => {
     if (executeResearchInFlightRef.current) return;
     executeResearchInFlightRef.current = true;
     try {
-      setPhase('researching');
-      setReportGenerationFailed(false);
+      dispatchPhase({ type: 'run_start' });
       setSourceDetail(null);
-      setResearchExecStage('resolving_context');
+      setSearchStatus('idle');
+      setSourceCount(0);
+      setSearchSources([]);
 
-      const {
-        context: searchContext,
-        sourceCount: persistedSourceCount,
-        searchStatus: persistedSearchStatus,
-        webpages: persistedSearchWebpages,
-      } = await resolveWebSearchForExecute(query);
+      const result = await run.start(query, researchPlan, labNeedWebRef.current);
+      labNeedWebRef.current = result.needWebResolved;
+      setSearchStatus(result.searchStatus);
+      setSourceCount(result.sourceCount);
+      setSearchSources(result.webpages);
 
-      setResearchExecStage('generating_report');
-      setReportStreamText('');
+      if (result.status !== 'completed' || !result.report) return;
 
-      const planContext =
-        researchPlan.length > 0
-          ? `\n\nThe user-approved research plan (your report must follow this structure: align the "points" array with these steps in order and honor each step's goals in the analysis):\n${JSON.stringify(researchPlan, null, 2)}`
-          : '';
-
-      const fallbackReport = researchReportParseFallback(t);
-
-      let finalReport: ResearchReportBody = fallbackReport;
-      let executionSucceeded = false;
-
+      setResearchReport(result.report);
       try {
-        const prompt = searchContext
-          ? `${t('lab.ai_research_report', { query })}${planContext}\n\nUse the following web search results as primary sources for your report. Cite sources where appropriate.\n\n${searchContext}`
-          : `${t('lab.ai_research_report', { query })}${planContext}`;
-
-        const text = await callAI({
-          config: aiConfig,
-          systemInstruction: getLocaleDirective(),
-          prompt,
-          onStreamChunk: (acc) => setReportStreamText(acc),
+        const now = Date.now();
+        await db.researchSessions.add({
+          id: crypto.randomUUID(),
+          query,
+          createdAt: now,
+          updatedAt: now,
+          researchPlan: researchPlan
+            .slice(0, MAX_RESEARCH_PLAN_STEPS)
+            .map((s) => ({ title: s.title, desc: s.desc })),
+          researchReport: {
+            intro: result.report.intro ?? '',
+            points: result.report.points.map((p) => ({
+              title: String(p?.title ?? ''),
+              text: String(p?.text ?? ''),
+            })),
+            conclusion: result.report.conclusion ?? '',
+          },
+          sourceCount: result.sourceCount,
+          searchStatus: result.searchStatus,
+          searchWebpages: result.webpages,
         });
-        setReportStreamText('');
-        const report = normalizeResearchReport(parseLenientLlmJson(text ?? '{}'));
-        setResearchReport(report);
-        finalReport = report;
-        executionSucceeded = true;
-      } catch (e) {
-        console.error('[Scribe AI] ResearchLab executeResearch failed', formatAiError(e));
-        setReportStreamText('');
-        setReportGenerationFailed(true);
-        setResearchReport(fallbackReport);
-        finalReport = fallbackReport;
-      } finally {
-        if (executionSucceeded) {
-          try {
-            const now = Date.now();
-            await db.researchSessions.add({
-              id: crypto.randomUUID(),
-              query,
-              createdAt: now,
-              updatedAt: now,
-              researchPlan: researchPlan.map((s) => ({ title: s.title, desc: s.desc })),
-              researchReport: {
-                intro: finalReport.intro ?? '',
-                points: Array.isArray(finalReport.points)
-                  ? finalReport.points.map((p: { title?: string; text?: string }) => ({
-                      title: String(p?.title ?? ''),
-                      text: String(p?.text ?? ''),
-                    }))
-                  : [],
-                conclusion: finalReport.conclusion ?? '',
-              },
-              sourceCount: persistedSourceCount,
-              searchStatus: persistedSearchStatus,
-              searchWebpages: persistedSearchWebpages,
-            });
-          } catch (persistErr) {
-            console.error('[Scribe AI] ResearchLab failed to persist session', persistErr);
-          }
-        }
-        setPhase('completed');
+      } catch (persistErr) {
+        logger.error('research', 'ResearchLab failed to persist session', persistErr);
       }
+      dispatchPhase({ type: 'run_completed' });
     } finally {
       executeResearchInFlightRef.current = false;
     }
   };
+
+  const backToPlan = () => {
+    run.reset();
+    setSourceDetail(null);
+    dispatchPhase({ type: 'back_to_plan' });
+  };
+
+  /** 历史会话续跑：query 和 plan 已在状态里，回到大纲页让用户改后重跑。 */
+  const rebaseFromSession = () => {
+    labNeedWebRef.current = null;
+    run.reset();
+    setSourceDetail(null);
+    setPlanRevisionNote('');
+    setPlanStreamText('');
+    dispatchPhase({ type: 'back_to_plan' });
+  };
+
+  const resetToIdle = () => {
+    dispatchPhase({ type: 'reset' });
+    setQuery('');
+    setSearchStatus('idle');
+    setSourceCount(0);
+    setSearchSources([]);
+    setSourceDetail(null);
+    labNeedWebRef.current = null;
+    setPlanStreamText('');
+    run.reset();
+  };
+
+  // ---- 侧栏：执行中来源实时来自各步骤（按 link 去重），其余阶段用会话级快照 ----
+  const runMergedSources = useMemo(() => {
+    const seen = new Map<string, ResearchSessionWebpageSnapshot>();
+    for (const step of run.state.steps) {
+      for (const wp of step.sources) {
+        if (wp.link && !seen.has(wp.link)) seen.set(wp.link, wp);
+      }
+    }
+    return [...seen.values()];
+  }, [run.state.steps]);
+
+  const runSearchInFlight = run.state.steps.some(
+    (s) => s.status === 'searching' || s.status === 'querying',
+  );
+  const sidebarSources = phase === 'researching' ? runMergedSources : searchSources;
+  const sidebarStatus: 'idle' | 'searching' | 'found' | 'fallback' =
+    phase === 'researching'
+      ? runSearchInFlight
+        ? 'searching'
+        : runMergedSources.length > 0
+          ? 'found'
+          : 'idle'
+      : searchStatus;
+  const sidebarCount = phase === 'researching' ? runMergedSources.length : sourceCount;
+
+  // ---- 成本预估（执行前显示在按钮附近） ----
+  const searchKeySet = Boolean(aiConfig.searchApiKey?.trim());
+  const willSearch = searchKeySet && labNeedWebRef.current !== false;
+  const runEstimate = estimateResearchRunCalls(
+    researchPlan.length,
+    willSearch,
+    searchKeySet && labNeedWebRef.current === null,
+  );
+  const costEstimateLabel = willSearch
+    ? t('lab.estimated_calls_with_search', {
+        llm: runEstimate.llmCalls,
+        search: runEstimate.searchCalls,
+      })
+    : t('lab.estimated_calls_no_search', { llm: runEstimate.llmCalls });
 
   return (
     <div className="flex-1 flex min-h-0 bg-app-surface paper-texture text-app-text overflow-hidden">
@@ -565,17 +576,7 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
                  {phase === 'completed' && (
                    <button
                      type="button"
-                     onClick={() => {
-                       setPhase('idle');
-                       setQuery('');
-                       setSearchStatus('idle');
-                       setSourceCount(0);
-                       setSearchSources([]);
-                       setReportGenerationFailed(false);
-                       setSourceDetail(null);
-                       labNeedWebRef.current = true;
-                       setPlanStreamText('');
-                     }}
+                     onClick={resetToIdle}
                      className="text-app-accent text-xs hover:underline font-bold"
                    >
                      {t('lab.new_research')}
@@ -584,19 +585,19 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
                </div>
 
                {/* Search status indicator */}
-               {searchStatus === 'searching' && (
+               {sidebarStatus === 'searching' && (
                  <div className="mb-3 p-2 bg-app-surface-raised border border-app-accent/30 rounded text-xs flex items-center gap-2 text-app-accent font-mono">
                    <Globe className="w-3 h-3 animate-pulse" />
                    <span>{t('lab.searching')}</span>
                  </div>
                )}
-               {searchStatus === 'found' && (
+               {sidebarStatus === 'found' && (
                  <div className="mb-3 p-2 bg-app-surface-raised border border-[#4ade80]/30 rounded text-xs flex items-center gap-2 text-[#16a34a] font-mono">
                    <Globe className="w-3 h-3" />
-                   <span>{t('lab.search_complete', { count: sourceCount })}</span>
+                   <span>{t('lab.search_complete', { count: sidebarCount })}</span>
                  </div>
                )}
-               {searchStatus === 'fallback' && (
+               {sidebarStatus === 'fallback' && (
                  <div className="mb-3 p-2 bg-app-surface-raised border border-[#eab308]/30 rounded text-xs flex items-center gap-2 text-[#a16207] font-mono">
                    <AlertTriangle className="w-3 h-3" />
                    <span>{t('lab.search_fallback')}</span>
@@ -604,8 +605,8 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
                )}
 
                <div className="space-y-3">
-                 {searchSources.length > 0 ? (
-                   searchSources.map((wp, idx) => {
+                 {sidebarSources.length > 0 ? (
+                   sidebarSources.map((wp, idx) => {
                      const cardShell =
                        'w-full text-left bg-app-surface-raised border border-app-border p-3 rounded-lg text-sm shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-accent/30 hover:border-app-accent/45 hover:shadow-md cursor-pointer';
                      return (
@@ -615,11 +616,7 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
                          data-testid={`lab-source-card-${idx}`}
                          aria-label={t('lab.source_view_detail')}
                          onClick={() => setSourceDetail(wp)}
-                         className={`${cardShell} ${
-                           phase === 'researching' && researchExecStage === 'resolving_context'
-                             ? 'opacity-90'
-                             : ''
-                         }`}
+                         className={cardShell}
                        >
                          <div className="text-[10px] text-[#4ade80] mb-1 font-mono flex items-center gap-1 font-bold">
                            <Check className="w-3 h-3 shrink-0" aria-hidden />
@@ -691,7 +688,19 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
            <div className="flex-1 p-12 overflow-y-auto w-full max-w-5xl mx-auto">
               <div className="mb-8 border-b border-app-border pb-8">
                  <div className="text-app-accent font-mono text-xs mb-2">{t('lab.target_inquiry')}</div>
-                 <h2 className="text-3xl font-serif font-bold text-app-text">{query}</h2>
+                 {phase === 'plan_ready' ? (
+                   <input
+                     type="text"
+                     value={query}
+                     onChange={(e) => setQuery(e.target.value)}
+                     aria-label={t('lab.target_inquiry')}
+                     placeholder={t('lab.placeholder')}
+                     data-testid="lab-query-input"
+                     className="w-full bg-transparent text-3xl font-serif font-bold text-app-text placeholder-app-text-faint border-b border-transparent hover:border-app-border focus:border-app-accent focus:outline-none transition-colors"
+                   />
+                 ) : (
+                   <h2 className="text-3xl font-serif font-bold text-app-text">{query}</h2>
+                 )}
               </div>
 
               <div className="bg-app-surface-raised border border-app-border shadow-md rounded-xl p-8 relative overflow-hidden">
@@ -756,7 +765,7 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
                               </div>
                            </div>
                         )) : (
-                           <div className="text-center text-app-text-muted">Generating plan...</div>
+                           <div className="text-center text-app-text-muted">{t('lab.plan_stream_status')}</div>
                         )}
                      </div>
 
@@ -789,11 +798,14 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
                         </form>
                      </div>
 
-                     <div className="flex justify-end pt-6 border-t border-app-border mt-6">
+                     <div className="flex flex-wrap items-center justify-between gap-3 pt-6 border-t border-app-border mt-6">
+                        <p className="font-mono text-xs text-app-text-muted" data-testid="lab-cost-estimate">
+                          {costEstimateLabel}
+                        </p>
                         <button
                           type="button"
                           onClick={() => void executeResearch()}
-                          disabled={planRevising || researchPlan.length === 0}
+                          disabled={planRevising || researchPlan.length === 0 || !query.trim()}
                           className="bg-app-accent hover:bg-app-accent-hover disabled:opacity-50 disabled:pointer-events-none text-white px-6 py-3 rounded-lg font-sans font-bold transition-all shadow-md flex items-center gap-2"
                         >
                           {t('lab.approve')} <ArrowRight className="w-4 h-4" />
@@ -806,83 +818,13 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
          )}
 
          {phase === 'researching' && (
-           <div className="flex-1 flex items-center justify-center p-8 w-full max-w-2xl mx-auto">
-              <div className="w-full bg-app-surface-raised border border-app-border shadow-md rounded-xl p-6 font-mono text-sm">
-                 <div className="flex items-center gap-2 mb-6 text-app-accent font-bold">
-                   <Terminal className="w-4 h-4" />
-                   <span>{t('lab.executing')}</span>
-                 </div>
-
-                 <div className="space-y-4 text-app-text-faint">
-                   {/* Web search step */}
-                   <div className="flex items-center gap-3">
-                     {searchStatus === 'found' ? (
-                       <CheckCircle2 className="w-4 h-4 text-[#4ade80]" />
-                     ) : searchStatus === 'fallback' ? (
-                       <AlertTriangle className="w-4 h-4 text-[#eab308]" />
-                     ) : searchStatus === 'searching' ? (
-                       <Loader2 className="w-4 h-4 animate-spin text-app-accent" />
-                     ) : (
-                       <CheckCircle2 className="w-4 h-4 text-[#4ade80]" />
-                     )}
-                     <span className={
-                       searchStatus === 'found' ? "text-app-text" :
-                       searchStatus === 'fallback' ? "text-[#a16207]" :
-                       searchStatus === 'searching' ? "text-app-text" :
-                       "text-app-text-muted"
-                     }>
-                       {searchStatus === 'searching' && t('lab.searching')}
-                       {searchStatus === 'found' && t('lab.search_complete', { count: sourceCount })}
-                       {searchStatus === 'fallback' && t('lab.search_fallback')}
-                       {searchStatus === 'idle' &&
-                         (aiConfig.searchApiKey ? t('lab.search_preparing') : t('lab.search_offline_no_key'))}
-                     </span>
-                   </div>
-
-                   <div className="flex items-center gap-3">
-                     {researchExecStage === 'resolving_context' ? (
-                       <Loader2 className="w-4 h-4 animate-spin text-app-accent shrink-0" aria-hidden />
-                     ) : (
-                       <CheckCircle2 className="w-4 h-4 text-[#4ade80] shrink-0" aria-hidden />
-                     )}
-                     <span
-                       className={
-                         researchExecStage === 'resolving_context' ? 'text-app-text-muted' : 'text-app-text'
-                       }
-                     >
-                       {t('lab.stage_resolving_context')}
-                     </span>
-                   </div>
-
-                   <div className="flex items-center gap-3">
-                     {researchExecStage === 'generating_report' ? (
-                       <Loader2 className="w-4 h-4 animate-spin text-app-accent shrink-0" aria-hidden />
-                     ) : (
-                       <span
-                         className="w-4 h-4 shrink-0 rounded-full border-2 border-app-border"
-                         aria-hidden
-                       />
-                     )}
-                     <span
-                       className={
-                         researchExecStage === 'generating_report'
-                           ? 'text-app-text'
-                           : 'text-app-text-faint'
-                       }
-                     >
-                       {reportStreamText
-                         ? t('lab.report_stream_status')
-                         : t('lab.stage_generating_report')}
-                     </span>
-                   </div>
-                   {reportStreamText ? (
-                     <pre className="mt-4 max-h-[min(360px,50vh)] overflow-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-app-text bg-app-surface border border-app-border rounded-lg p-4">
-                       {reportStreamText}
-                     </pre>
-                   ) : null}
-                 </div>
-              </div>
-           </div>
+           <ResearchRunView
+             run={run.state}
+             onStop={run.stop}
+             onRetry={() => void executeResearch()}
+             onBackToPlan={backToPlan}
+             onShowSource={setSourceDetail}
+           />
          )}
 
          {phase === 'completed' && (
@@ -890,24 +832,17 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
                {/* Final Report */}
                <div className="flex-1 bg-app-surface text-app-text overflow-y-auto relative paper-texture">
                      <div className="max-w-5xl mx-auto px-16 py-14">
-                     {reportGenerationFailed && (
-                       <div className="mb-8 rounded-xl border border-[#eab308]/40 bg-[#fffbeb] px-5 py-4 font-sans text-sm text-[#713f12] shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                         <div className="flex gap-3 min-w-0">
-                           <AlertTriangle className="w-5 h-5 shrink-0 text-[#b45309]" aria-hidden />
-                           <p className="leading-relaxed">{t('lab.report_failed_banner')}</p>
-                         </div>
-                         <button
-                           type="button"
-                           data-testid="lab-retry-report"
-                           onClick={() => void executeResearch()}
-                           className="shrink-0 inline-flex items-center justify-center gap-2 rounded-lg bg-app-accent px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-app-accent-hover transition-colors"
-                         >
-                           {t('lab.retry_generate_report')}
-                         </button>
-                       </div>
-                     )}
-                     {onSpawnToCanvas && !reportGenerationFailed && (
-                       <div className="mb-8 flex justify-end">
+                     <div className="mb-8 flex flex-wrap justify-end gap-3">
+                       <button
+                         type="button"
+                         data-testid="lab-rebase-session"
+                         onClick={rebaseFromSession}
+                         className="inline-flex items-center gap-2 rounded-lg border border-app-border bg-app-surface-raised px-4 py-2 text-sm font-bold text-app-text shadow-sm hover:border-app-accent/50 hover:text-app-accent transition-colors"
+                       >
+                         <RotateCcw className="w-4 h-4" aria-hidden />
+                         {t('lab.rebase_from_session')}
+                       </button>
+                       {onSpawnToCanvas && (
                          <button
                            type="button"
                            data-testid="lab-spawn-to-canvas"
@@ -923,8 +858,8 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
                            <LayoutGrid className="w-4 h-4" />
                            {t('lab.spawn_to_canvas')}
                          </button>
-                       </div>
-                     )}
+                       )}
+                     </div>
                      <div className="mb-12 text-center">
                         <div className="text-app-accent font-mono text-xs uppercase tracking-widest mb-4 flex items-center justify-center gap-2 font-bold">
                           <FileText className="w-4 h-4" /> {t('lab.report')}
@@ -1014,7 +949,7 @@ export function ResearchLab({ aiConfig, callAI, onSpawnToCanvas }: ResearchLabPr
                   className="inline-flex items-center gap-2 rounded-lg bg-app-accent px-4 py-2 text-sm font-bold text-white shadow-md hover:bg-app-accent-hover"
                   onClick={() => {
                     void openExternalUrl(sourceDetail.link).catch((err) =>
-                      console.error('[Scribe AI] openExternalUrl failed', err),
+                      logger.error('research', 'openExternalUrl failed', err),
                     );
                   }}
                 >

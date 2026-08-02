@@ -12,7 +12,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const SRC = 'src';
-const LOCALES = { en: 'src/i18n/en.ts', zh: 'src/i18n/zh.ts' };
+/** 语言资源目录：每个顶层命名空间一个文件，文件名即命名空间名，index.ts 只做组装。 */
+const LOCALES = { en: 'src/i18n/en', zh: 'src/i18n/zh' };
 
 /** 允许保留原文的字面量：品牌名、密钥格式示例、编号、纯符号。 */
 const LITERAL_ALLOWLIST = new Set([
@@ -58,13 +59,32 @@ function flattenKeys(obj, prefix = '') {
  * 从 `export const xx = { … };` 里取出对象字面量并求值。
  * 资源文件是纯 JSON 风格 + 一个 `agentDefaultsXx` 引用，把后者替换成占位对象即可。
  */
-function loadLocale(file) {
+function evalObjectLiteral(file) {
   const src = fs.readFileSync(file, 'utf8');
   const start = src.indexOf('{', src.indexOf('export const'));
   const end = src.lastIndexOf('};');
   if (start < 0 || end < 0) throw new Error(`${file}: 无法定位对象字面量`);
   const body = src.slice(start, end + 1).replace(/agentDefaults(En|Zh)/g, '{}');
   return new Function(`return ${body}`)();
+}
+
+/**
+ * 逐文件合并命名空间目录（文件名即顶层命名空间），得到与 index.ts 组装结果相同形状的对象。
+ * 不求值 index.ts——它只是 import + 简写属性，无法脱离模块系统直接执行；
+ * 但顺带检查每个命名空间文件都被 index.ts 引用了，防止「文件加了、忘了挂上」的漏键。
+ */
+function loadLocale(dir) {
+  const indexSrc = fs.readFileSync(path.join(dir, 'index.ts'), 'utf8');
+  const locale = {};
+  for (const name of fs.readdirSync(dir).sort()) {
+    if (!name.endsWith('.ts') || name === 'index.ts') continue;
+    const ns = name.replace(/\.ts$/, '');
+    if (!indexSrc.includes(`from './${ns}'`)) {
+      problems.push(`${dir}/index.ts: 未引用命名空间文件 "./${ns}"，其中的键不会生效`);
+    }
+    locale[ns] = evalObjectLiteral(path.join(dir, name));
+  }
+  return locale;
 }
 
 const problems = [];

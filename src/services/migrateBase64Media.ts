@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { isTauriRuntime } from '../utils/isTauriRuntime';
 import { mediaImportBytes, type MediaCategory } from './mediaStore';
+import { logger } from '../utils/logger';
 
 /**
  * 把早期存成 data URL 的节点搬到文件存储。
@@ -79,7 +80,7 @@ export async function migrateBase64MediaNodes(limit = MIGRATION_BATCH_LIMIT): Pr
       migrated += 1;
     } catch (e) {
       // 静默：这条下次启动再试，期间靠 content 兜底照常显示
-      console.warn('[Spoor] base64 迁移跳过一条', node.id, e);
+      logger.warn('migrate', 'base64 迁移跳过一条', node.id, e);
     }
   }
   return migrated;

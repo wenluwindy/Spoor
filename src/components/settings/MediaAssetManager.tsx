@@ -3,11 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { FolderOpen, Loader2, Save, Trash2 } from 'lucide-react';
 import {
   mediaDelete,
-  mediaExport,
   mediaList,
   mediaReveal,
   type MediaEntry,
 } from '../../services/mediaStore';
+import { saveMediaAs } from '../../utils/saveMediaAs';
 import { db } from '../../db';
 import { mediaUrl } from '../../utils/mediaUrl';
 import { useAppDialog } from '../AppDialogProvider';
@@ -96,9 +96,8 @@ export function MediaAssetManager() {
   const handleExport = async () => {
     const [rel] = [...selected];
     if (!rel) return;
-    const { save } = await import('@tauri-apps/plugin-dialog');
-    const dest = await save({ defaultPath: rel.split('/').pop() });
-    if (dest) await mediaExport(rel, dest);
+    // 对话框在 Rust 侧弹并入写入白名单（见 utils/saveMediaAs），media_export 只放行白名单路径
+    await saveMediaAs(rel);
   };
 
   if (entries === null) {
@@ -137,7 +136,12 @@ export function MediaAssetManager() {
             const isSelected = selected.has(entry.rel);
             const unused = !referenced.has(entry.rel);
             return (
-              <li key={entry.rel}>
+              // 生图历史"永久保留"会让这份列表涨到数千项：视口外的项不布局不绘制，
+              // contain-intrinsic-size 给出占位高度让滚动条不跳
+              <li
+                key={entry.rel}
+                style={{ contentVisibility: 'auto', containIntrinsicSize: '0 88px' } as React.CSSProperties}
+              >
                 <button
                   type="button"
                   onClick={() => toggle(entry.rel)}

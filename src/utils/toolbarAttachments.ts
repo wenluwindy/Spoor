@@ -1,4 +1,5 @@
-import { readFileContent } from './file';
+import i18n from '../i18n';
+import { readFileToContentData } from '../services/fileImport';
 import { AppError } from '../services/appError';
 import type { ToolbarAttachment } from '../constants/toolbarAttachments';
 
@@ -25,7 +26,7 @@ export function htmlToPlainText(html: string): string {
 }
 
 export async function fileToToolbarAttachment(file: File): Promise<ToolbarAttachment> {
-  const data = await readFileContent(file);
+  const data = await readFileToContentData(file, i18n.t('nodes.empty_document_body'));
   const id = crypto.randomUUID();
 
   if (data.type === 'image') {
@@ -37,7 +38,7 @@ export async function fileToToolbarAttachment(file: File): Promise<ToolbarAttach
   if (data.type === 'text') {
     return { id, name: file.name, kind: 'text', text: data.content };
   }
-  // 视频等：readFileContent 认得，但当不了提示词上下文
+  // 视频等：readFileToContentData 认得，但当不了提示词上下文
   throw new AppError('file.unsupported', file.type || file.name);
 }
 

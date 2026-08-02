@@ -14,7 +14,7 @@ vi.mock('react-i18next', () => ({
     t: (key: string) => key,
     i18n: { language: 'zh', changeLanguage: vi.fn() },
   }),
-  // useAiActions 经 utils/file 拉到 i18n 单例，单例 init 时要用它
+  // useAiActions 经 utils/toolbarAttachments 拉到 i18n 单例，单例 init 时要用它
   initReactI18next: { type: '3rdParty', init: vi.fn() },
 }));
 

@@ -24,11 +24,6 @@ import {
   type ImportDegradations,
 } from './jsonCanvas';
 
-/** 旧数据里没有 `canvasId` 的行归 `'default'`，与 App 的过滤口径一致。 */
-function belongsTo(owner: string | undefined, canvasId: string): boolean {
-  return owner === canvasId || (!owner && canvasId === 'default');
-}
-
 /** 文件名里不能出现的字符换成短横，免得画布名带了斜杠就存不下去。 */
 export function toSafeFileName(name: string): string {
   const cleaned = name.replace(/[\\/:*?"<>|]/g, '-').trim();
@@ -41,9 +36,10 @@ async function loadCanvas(canvasId: string): Promise<{
   edges: Edge[];
   agentNameById: (id: string | undefined) => string | undefined;
 }> {
+  // canvasId 由 v5 迁移与 db hook 保证必有，可以直接走索引
   const [nodes, edges, agents] = await Promise.all([
-    db.nodes.filter((n) => belongsTo(n.canvasId, canvasId)).toArray(),
-    db.edges.filter((e) => belongsTo(e.canvasId, canvasId)).toArray(),
+    db.nodes.where('canvasId').equals(canvasId).toArray(),
+    db.edges.where('canvasId').equals(canvasId).toArray(),
     db.agents.toArray(),
   ]);
   return {

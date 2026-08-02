@@ -1,4 +1,5 @@
 import { isTauriRuntime } from '../utils/isTauriRuntime';
+import { logger } from '../utils/logger';
 
 /**
  * 检查更新的外部 store。
@@ -38,6 +39,13 @@ export interface UpdateState {
   progress: number;
   /** 下载完成后的安装包绝对路径。 */
   installerPath: string | null;
+  /**
+   * `install_update` 的返回值。
+   *
+   * - `'exit'`（Windows）：应用即将退出让 NSIS 覆盖安装——前端大概率来不及渲染它。
+   * - `'manual'`（macOS）：dmg 已打开、应用不退出，要提示用户手动拖入「应用程序」。
+   */
+  installOutcome: 'exit' | 'manual' | null;
   /** Rust 抛上来的原始错误，折叠展示。 */
   error: string | null;
 }
@@ -47,6 +55,7 @@ const INITIAL: UpdateState = {
   info: null,
   progress: 0,
   installerPath: null,
+  installOutcome: null,
   error: null,
 };
 
@@ -108,7 +117,7 @@ export async function checkForUpdate({ silent = false } = {}): Promise<UpdateSta
     const info = await invoke<UpdateInfo>('check_for_update');
     setState({ phase: info.available ? 'available' : 'up_to_date', info, error: null });
   } catch (e) {
-    console.error('[Spoor] check_for_update failed', e);
+    logger.error('update', 'check_for_update failed', e);
     setState(silent ? { phase: 'idle' } : { phase: 'error', error: describe(e) });
   }
   return current;
@@ -136,7 +145,8 @@ export async function downloadUpdate(): Promise<UpdateState> {
   if (!isTauriRuntime() || !info?.available) return current;
   if (current.phase === 'downloading') return current;
 
-  setState({ phase: 'downloading', progress: 0, error: null });
+  // 换一次下载就把上一轮的安装结果清掉，manual 提示不该跨版本残留
+  setState({ phase: 'downloading', progress: 0, installOutcome: null, error: null });
   try {
     const [invoke, { listen }] = await Promise.all([
       getInvoke(),
@@ -160,7 +170,7 @@ export async function downloadUpdate(): Promise<UpdateState> {
     });
     setState({ phase: 'ready', progress: 100, installerPath, error: null });
   } catch (e) {
-    console.error('[Spoor] download_update failed', e);
+    logger.error('update', 'download_update failed', e);
     setState({ phase: 'error', error: describe(e) });
   } finally {
     unlistenProgress?.();
@@ -170,19 +180,25 @@ export async function downloadUpdate(): Promise<UpdateState> {
 }
 
 /**
- * 拉起安装程序。
+ * 拉起安装程序。返回值（也写进 `state.installOutcome`）说明接下来会发生什么：
  *
- * Rust 侧起完进程会立刻退出本应用——NSIS 要覆盖的正是当前跑着的 exe，
- * 不退出就会被文件占用挡住。所以这个调用**正常情况下不会返回**。
+ * - Windows 返回 `"exit"`：NSIS 要覆盖的正是当前跑着的 exe，Rust 侧起完进程立刻
+ *   退出本应用——这个分支**正常情况下等不到返回值**。
+ * - macOS 返回 `"manual"`：dmg 已打开、应用不退出，UI 据此提示用户把 Spoor
+ *   拖入「应用程序」完成更新。
  */
-export async function installUpdate(): Promise<void> {
+export async function installUpdate(): Promise<'exit' | 'manual' | null> {
   const path = current.installerPath;
-  if (!isTauriRuntime() || !path) return;
+  if (!isTauriRuntime() || !path) return null;
   try {
     const invoke = await getInvoke();
-    await invoke('install_update', { path });
+    const outcome = await invoke<string>('install_update', { path });
+    const normalized = outcome === 'manual' ? 'manual' : 'exit';
+    setState({ installOutcome: normalized, error: null });
+    return normalized;
   } catch (e) {
-    console.error('[Spoor] install_update failed', e);
+    logger.error('update', 'install_update failed', e);
     setState({ phase: 'error', error: describe(e) });
+    return null;
   }
 }

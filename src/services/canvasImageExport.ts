@@ -151,14 +151,15 @@ export async function saveCanvasImage(defaultFileName: string, dataUrl: string):
   const payload = base64FromDataUrl(dataUrl);
   if (!payload) throw new CanvasImageExportError('render_failed');
 
-  const { save } = await import('@tauri-apps/plugin-dialog');
-  const dest = await save({
-    defaultPath: defaultFileName,
+  // 保存对话框在 Rust 侧弹：路径当场入写入白名单，`user_file_write_base64`
+  // 只放行白名单里的路径（见 src-tauri/src/userfile.rs）
+  const { invoke } = await import('@tauri-apps/api/core');
+  const dest = await invoke<string | null>('user_file_pick_save_path', {
+    defaultFileName,
     filters: [{ name: 'PNG', extensions: ['png'] }],
   });
   if (!dest) return false;
 
-  const { invoke } = await import('@tauri-apps/api/core');
   await invoke('user_file_write_base64', { destPath: dest, contents: payload });
   return true;
 }

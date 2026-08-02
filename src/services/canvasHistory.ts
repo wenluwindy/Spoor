@@ -192,19 +192,23 @@ async function applyPatch(patch: CanvasHistoryPatch, direction: 'undo' | 'redo')
   const nodesToAdd = undoing ? patch.removedNodes : patch.addedNodes;
   const edgesToAdd = undoing ? patch.removedEdges : patch.addedEdges;
 
-  if (edgesToDelete?.length) await db.edges.bulkDelete(edgesToDelete.map((e) => e.id));
-  if (nodesToDelete?.length) await db.nodes.bulkDelete(nodesToDelete.map((n) => n.id));
-  // bulkPut 而非 bulkAdd：重复撤销/重做时不该因为行已存在就整批失败。
-  if (nodesToAdd?.length) await db.nodes.bulkPut(nodesToAdd);
-  if (edgesToAdd?.length) await db.edges.bulkPut(edgesToAdd);
+  // 一条补丁要么整个生效要么整个不生效：撤销撤到一半留下的状态既不是 before 也不是 after，
+  // 用户没有任何手段回到正确的一侧。
+  await db.transaction('rw', db.nodes, db.edges, async () => {
+    if (edgesToDelete?.length) await db.edges.bulkDelete(edgesToDelete.map((e) => e.id));
+    if (nodesToDelete?.length) await db.nodes.bulkDelete(nodesToDelete.map((n) => n.id));
+    // bulkPut 而非 bulkAdd：重复撤销/重做时不该因为行已存在就整批失败。
+    if (nodesToAdd?.length) await db.nodes.bulkPut(nodesToAdd);
+    if (edgesToAdd?.length) await db.edges.bulkPut(edgesToAdd);
 
-  for (const change of patch.updatedNodes ?? []) {
-    const fields = undoing ? change.before : change.after;
-    // 行已经不在了（比如被后续操作删掉又撤到这里）就跳过，别把半行数据写回去。
-    const exists = await db.nodes.get(change.id);
-    if (!exists) continue;
-    await db.nodes.update(change.id, fields);
-  }
+    for (const change of patch.updatedNodes ?? []) {
+      const fields = undoing ? change.before : change.after;
+      // 行已经不在了（比如被后续操作删掉又撤到这里）就跳过，别把半行数据写回去。
+      const exists = await db.nodes.get(change.id);
+      if (!exists) continue;
+      await db.nodes.update(change.id, fields);
+    }
+  });
 }
 
 /** 串行闸门：undo/redo 一次只跑一个，避免两次写库与 live query 回流交错。 */

@@ -1,5 +1,51 @@
 import { describe, it, expect } from 'vitest';
-import { mediaUrl, resolveNodeMediaSrc } from '../../src/utils/mediaUrl';
+import { mediaOrigin, mediaUrl, resolveNodeMediaSrc } from '../../src/utils/mediaUrl';
+
+const WINDOWS_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Edg/126';
+const MAC_UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15';
+const LINUX_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko)';
+
+/** 临时改写 navigator.userAgent（tests/setup.ts 钉的是 Windows UA）。 */
+function withUserAgent(ua: string, fn: () => void): void {
+  const original = navigator.userAgent;
+  Object.defineProperty(window.navigator, 'userAgent', { configurable: true, value: ua });
+  try {
+    fn();
+  } finally {
+    Object.defineProperty(window.navigator, 'userAgent', { configurable: true, value: original });
+  }
+}
+
+describe('mediaOrigin', () => {
+  it('Windows（WebView2）映射成 http://<scheme>.localhost', () => {
+    expect(mediaOrigin(WINDOWS_UA)).toBe('http://spoor-media.localhost');
+  });
+
+  it('macOS / Linux 保持 <scheme>://localhost 原样', () => {
+    // 曾经的缺陷：这里硬编码了 Windows 形式，macOS 包加载不到本地媒体
+    expect(mediaOrigin(MAC_UA)).toBe('spoor-media://localhost');
+    expect(mediaOrigin(LINUX_UA)).toBe('spoor-media://localhost');
+  });
+
+  it('UA 缺失时按非 Windows 处理（协议原样是 Tauri 的默认形式）', () => {
+    expect(mediaOrigin('')).toBe('spoor-media://localhost');
+  });
+
+  it('mediaUrl 跟随运行环境的 UA', () => {
+    withUserAgent(MAC_UA, () => {
+      expect(mediaUrl('media/uploaded/a.png')).toBe(
+        'spoor-media://localhost/media/uploaded/a.png',
+      );
+    });
+    withUserAgent(WINDOWS_UA, () => {
+      expect(mediaUrl('media/uploaded/a.png')).toBe(
+        'http://spoor-media.localhost/media/uploaded/a.png',
+      );
+    });
+  });
+});
 
 describe('mediaUrl', () => {
   it('拼成 spoor-media 协议的 URL', () => {

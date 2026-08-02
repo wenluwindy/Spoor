@@ -30,10 +30,6 @@ vi.mock('react-i18next', () => ({
         'lab.source_open_new_tab': 'Open source',
         'lab.source_untitled': 'Untitled',
         'lab.processed': 'Processed',
-        'lab.demo_source_card_1_title': 'Ch 4: The Archive',
-        'lab.demo_source_card_1_desc': "Found 3 metaphors for 'decay'.",
-        'lab.demo_source_card_2_title': 'REF-042: Spatial Encoding',
-        'lab.demo_source_card_2_desc': 'Linked theory of trauma and blueprints.',
         'lab.target_inquiry': 'Target inquiry',
         'lab.recommended_plan_title': 'Recommended research plan',
         'lab.approve': 'Approve & Execute',
@@ -45,7 +41,7 @@ vi.mock('react-i18next', () => ({
         'lab.delete_session_confirm': 'Remove?',
         'lab.no_past_sessions': 'No completed research yet.',
         'lab.searching': 'Searching the web...',
-        'lab.search_complete': `${opts?.count ?? 0} web sources found`,
+        'lab.search_complete': '{{count}} web sources found',
         'lab.search_fallback': 'Search unavailable, using offline mode',
         'lab.plan_edit_hint': 'Edit plan hint',
         'lab.plan_revision_placeholder': 'Revision instructions...',
@@ -57,15 +53,29 @@ vi.mock('react-i18next', () => ({
         'lab.ai_need_web_classifier': 'Classifier {{query}}',
         'lab.ai_decompose_question': 'Decompose question: {{query}}',
         'lab.ai_revise_decompose': 'Revise decompose for {{query}}. Plan: {{plan}}. Instruction: {{instruction}}',
-        'lab.ai_research_report': 'Generate report for: {{query}}',
+        'lab.ai_step_subquery': 'Subquery step {{index}}/{{total}} "{{title}}" for {{query}}. Prior: {{prior}}',
+        'lab.ai_step_analysis': 'Analyze step {{index}}/{{total}} "{{title}}" for {{query}}. Prior: {{prior}}. Sources: {{sources}}',
+        'lab.ai_synthesize_report': 'Synthesize {{query}} into {{total}} points from: {{findings}}',
+        'lab.ai_prior_none': '(no prior findings)',
+        'lab.ai_sources_none': '(no web sources)',
         'lab.search_preparing': 'Preparing web search…',
         'lab.search_offline_no_key': 'Offline mode — no Metaso API key configured.',
-        'lab.stage_resolving_context': 'Resolving web sources…',
-        'lab.stage_generating_report': 'Generating report…',
         'lab.report_footer_web': 'Based on {{count}} web sources + LLM synthesis',
         'lab.report_footer_offline': 'Offline mode — LLM-only synthesis',
         'lab.report_failed_banner': 'Report generation failed.',
+        'lab.run_failed_banner': 'Step {{step}} failed.',
+        'lab.run_stopped_banner': 'Research stopped.',
         'lab.retry_generate_report': 'Retry report generation',
+        'lab.back_to_plan': 'Back to outline',
+        'lab.stop_run': 'Stop',
+        'lab.synthesizing': 'Synthesizing final report…',
+        'lab.calls_progress': 'Calls done: {{done}} / ~{{total}}',
+        'lab.step_progress': 'Step {{current}} / {{total}}',
+        'lab.estimated_calls_with_search': 'Estimated: ~{{llm}} model calls + up to {{search}} searches',
+        'lab.estimated_calls_no_search': 'Estimated: ~{{llm}} model calls',
+        'lab.step_subquery_label': 'Search query:',
+        'lab.step_sources_label': 'Sources for this step',
+        'lab.rebase_from_session': 'Reuse as new research',
         'lab.conclusion_label': 'Agent recommendation and conclusion:',
         'nodes.ai_loading': 'Synthesizing...',
       };
@@ -102,6 +112,58 @@ const baseConfig = {
   baseUrl: '',
   model: 'gpt-4o',
 };
+
+const planJson3 = JSON.stringify([
+  { title: 'Step 1', desc: 'Desc 1' },
+  { title: 'Step 2', desc: 'Desc 2' },
+  { title: 'Step 3', desc: 'Desc 3' },
+]);
+
+const reportJson = JSON.stringify({
+  intro: 'Synth intro',
+  points: [
+    { title: 'P1', text: 'T1' },
+    { title: 'P2', text: 'T2' },
+    { title: 'P3', text: 'T3' },
+  ],
+  conclusion: 'Synth done',
+});
+
+type CallOpts = { prompt: string; onStreamChunk?: (acc: string) => void };
+
+/**
+ * 分步执行后 callAI 按 prompt 前缀路由：
+ * 计划 → planJson；分类器 → need_web；子查询 → `subq`；分步分析 → `analysis-N`；汇总 → 报告 JSON。
+ */
+function makeRouterCallAI(overrides?: {
+  plan?: string;
+  synthesis?: () => string;
+  onAnalysis?: (n: number, opts: CallOpts) => Promise<void> | void;
+}) {
+  let analysis = 0;
+  return vi.fn().mockImplementation(async (opts: CallOpts) => {
+    const { prompt } = opts;
+    if (prompt.startsWith('Classifier')) return '{"need_web":true}';
+    if (prompt.startsWith('Decompose question')) return overrides?.plan ?? planJson3;
+    if (prompt.startsWith('Subquery step')) return 'subq';
+    if (prompt.startsWith('Analyze step')) {
+      analysis += 1;
+      await overrides?.onAnalysis?.(analysis, opts);
+      return `analysis-${analysis}`;
+    }
+    if (prompt.startsWith('Synthesize')) return overrides?.synthesis?.() ?? reportJson;
+    throw new Error(`unexpected prompt: ${prompt.slice(0, 50)}`);
+  });
+}
+
+async function submitTopic(topic: string) {
+  const input = screen.getByPlaceholderText('Search topic...');
+  fireEvent.change(input, { target: { value: topic } });
+  fireEvent.submit(input.closest('form')!);
+  await waitFor(() => {
+    expect(screen.getByLabelText('Step 1 title')).toBeTruthy();
+  });
+}
 
 describe('ResearchLab', () => {
   beforeEach(async () => {
@@ -213,13 +275,7 @@ describe('ResearchLab', () => {
   });
 
   it('calls callAI without search context when no search key', async () => {
-    const callAI = vi.fn().mockResolvedValue(
-      JSON.stringify([
-        { title: 'Step 1', desc: 'Desc 1' },
-        { title: 'Step 2', desc: 'Desc 2' },
-        { title: 'Step 3', desc: 'Desc 3' },
-      ]),
-    );
+    const callAI = vi.fn().mockResolvedValue(planJson3);
     render(<ResearchLab aiConfig={baseConfig} callAI={callAI} />);
 
     const input = screen.getByPlaceholderText('Search topic...');
@@ -240,15 +296,10 @@ describe('ResearchLab', () => {
   });
 
   it('generatePlan 传入 onStreamChunk 并显示流式大纲预览', async () => {
-    const planJson = JSON.stringify([
-      { title: 'Step 1', desc: 'Desc 1' },
-      { title: 'Step 2', desc: 'Desc 2' },
-      { title: 'Step 3', desc: 'Desc 3' },
-    ]);
     const callAI = vi.fn().mockImplementation(async (opts: { onStreamChunk?: (t: string) => void }) => {
       opts.onStreamChunk?.('{"title":');
-      opts.onStreamChunk?.(planJson);
-      return planJson;
+      opts.onStreamChunk?.(planJson3);
+      return planJson3;
     });
     render(<ResearchLab aiConfig={baseConfig} callAI={callAI} />);
 
@@ -275,13 +326,7 @@ describe('ResearchLab', () => {
 
     const callAI = vi.fn()
       .mockResolvedValueOnce('{"need_web":true}')
-      .mockResolvedValue(
-        JSON.stringify([
-          { title: 'Step 1', desc: 'Desc' },
-          { title: 'Step 2', desc: 'Desc' },
-          { title: 'Step 3', desc: 'Desc' },
-        ]),
-      );
+      .mockResolvedValue(planJson3);
 
     render(<ResearchLab aiConfig={{ ...baseConfig, searchApiKey: 'sk-metaso-test' }} callAI={callAI} />);
 
@@ -316,12 +361,7 @@ describe('ResearchLab', () => {
         { title: 'Paper', link: 'https://example.com/doc', snippet: 'S', score: '', date: '' },
       ],
     });
-    const planJson = JSON.stringify([
-      { title: 'Step 1', desc: 'D1' },
-      { title: 'Step 2', desc: 'D2' },
-      { title: 'Step 3', desc: 'D3' },
-    ]);
-    const callAI = vi.fn().mockResolvedValueOnce('{"need_web":true}').mockResolvedValueOnce(planJson);
+    const callAI = vi.fn().mockResolvedValueOnce('{"need_web":true}').mockResolvedValueOnce(planJson3);
 
     render(<ResearchLab aiConfig={{ ...baseConfig, searchApiKey: 'sk-metaso' }} callAI={callAI} />);
 
@@ -346,13 +386,7 @@ describe('ResearchLab', () => {
   it('does not call metaso when classifier returns need_web false', async () => {
     const callAI = vi.fn()
       .mockResolvedValueOnce('{"need_web":false}')
-      .mockResolvedValue(
-        JSON.stringify([
-          { title: 'Step 1', desc: 'Desc' },
-          { title: 'Step 2', desc: 'Desc' },
-          { title: 'Step 3', desc: 'Desc' },
-        ]),
-      );
+      .mockResolvedValue(planJson3);
 
     render(<ResearchLab aiConfig={{ ...baseConfig, searchApiKey: 'sk-metaso-test' }} callAI={callAI} />);
 
@@ -376,13 +410,7 @@ describe('ResearchLab', () => {
 
     const callAI = vi.fn()
       .mockResolvedValueOnce('{"need_web":true}')
-      .mockResolvedValue(
-        JSON.stringify([
-          { title: 'Step 1', desc: 'Desc' },
-          { title: 'Step 2', desc: 'Desc' },
-          { title: 'Step 3', desc: 'Desc' },
-        ]),
-      );
+      .mockResolvedValue(planJson3);
 
     const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -409,80 +437,72 @@ describe('ResearchLab', () => {
     consoleSpy.mockRestore();
   });
 
-  it('includes user-approved research plan in the report prompt when executing', async () => {
-    const planJson = JSON.stringify([
-      { title: 'Step 1', desc: 'Desc 1' },
-      { title: 'Step 2', desc: 'Desc 2' },
-      { title: 'Step 3', desc: 'Desc 3' },
-    ]);
-    const reportJson = JSON.stringify({
-      intro: 'Intro',
-      points: [{ title: 'P1', text: 'T1' }],
-      conclusion: 'Done',
-    });
-    const callAI = vi.fn().mockResolvedValueOnce(planJson).mockResolvedValueOnce(reportJson);
-
+  it('shows a call-cost estimate next to the approve button', async () => {
+    const callAI = makeRouterCallAI();
     render(<ResearchLab aiConfig={baseConfig} callAI={callAI} />);
 
-    const topicInput = screen.getByPlaceholderText('Search topic...');
-    fireEvent.change(topicInput, { target: { value: 'memory loss' } });
-    fireEvent.submit(topicInput.closest('form')!);
+    await submitTopic('estimate topic');
 
-    await waitFor(() => {
-      expect(screen.getByLabelText('Step 1 title')).toBeTruthy();
-    });
+    // 无搜索 Key：3 步分析 + 1 汇总 = 4 次模型调用
+    expect(screen.getByTestId('lab-cost-estimate').textContent).toContain('~4 model calls');
+  });
+
+  it('executes step by step: per-step analysis prompts carry the edited plan, prior findings relay, synthesis last', async () => {
+    const callAI = makeRouterCallAI();
+    render(<ResearchLab aiConfig={baseConfig} callAI={callAI} />);
+
+    await submitTopic('memory loss');
 
     fireEvent.change(screen.getByLabelText('Step 1 title'), { target: { value: 'Edited step one' } });
     fireEvent.click(screen.getByRole('button', { name: /Approve & Execute/i }));
 
+    // plan(1) + 3 analyses + synthesis(1) = 5
     await waitFor(() => {
-      expect(callAI).toHaveBeenCalledTimes(2);
+      expect(callAI).toHaveBeenCalledTimes(5);
     });
 
-    const reportPrompt = callAI.mock.calls[1][0].prompt as string;
-    expect(reportPrompt).toContain('user-approved research plan');
-    expect(reportPrompt).toContain('Edited step one');
-    expect(reportPrompt).toContain('memory loss');
+    const prompts = callAI.mock.calls.map((c: any[]) => c[0].prompt as string);
+    const analysisPrompts = prompts.filter((p) => p.startsWith('Analyze step'));
+    expect(analysisPrompts).toHaveLength(3);
+    expect(analysisPrompts[0]).toContain('Edited step one');
+    expect(analysisPrompts[0]).toContain('memory loss');
+    expect(analysisPrompts[0]).toContain('(no prior findings)');
+    // 步骤接力：第 2、3 步吃到之前的结论
+    expect(analysisPrompts[1]).toContain('analysis-1');
+    expect(analysisPrompts[2]).toContain('analysis-2');
+    // 汇总是最后一次调用，且带各步产出
+    const last = prompts[prompts.length - 1];
+    expect(last.startsWith('Synthesize')).toBe(true);
+    expect(last).toContain('analysis-3');
+
+    await waitFor(() => {
+      expect(screen.getByText('Synth intro')).toBeTruthy();
+    });
   });
 
   it('persists completed research session to IndexedDB', async () => {
-    const planJson = JSON.stringify([
-      { title: 'Step 1', desc: 'Desc 1' },
-      { title: 'Step 2', desc: 'Desc 2' },
-      { title: 'Step 3', desc: 'Desc 3' },
-    ]);
-    const reportJson = JSON.stringify({
-      intro: 'Persisted intro',
-      points: [{ title: 'P1', text: 'T1' }],
-      conclusion: 'Persisted done',
-    });
-    const callAI = vi.fn().mockResolvedValueOnce(planJson).mockResolvedValueOnce(reportJson);
-
+    const callAI = makeRouterCallAI();
     render(<ResearchLab aiConfig={baseConfig} callAI={callAI} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Search topic...'), { target: { value: 'persist query' } });
-    fireEvent.submit(screen.getByPlaceholderText('Search topic...').closest('form')!);
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('Step 1 title')).toBeTruthy();
-    });
+    await submitTopic('persist query');
     fireEvent.click(screen.getByRole('button', { name: /Approve & Execute/i }));
 
     await waitFor(() => {
-      expect(callAI).toHaveBeenCalledTimes(2);
+      expect(callAI).toHaveBeenCalledTimes(5);
     });
 
     await waitFor(async () => {
       const rows = await db.researchSessions.toArray();
       expect(rows).toHaveLength(1);
       expect(rows[0].query).toBe('persist query');
-      expect(rows[0].researchReport.intro).toBe('Persisted intro');
+      expect(rows[0].researchReport.intro).toBe('Synth intro');
+      expect(rows[0].researchReport.points).toHaveLength(3);
       expect(rows[0].searchStatus).toBe('idle');
       expect(rows[0].searchWebpages).toEqual([]);
     });
   });
 
-  it('persists searchStatus found and sourceCount when Metaso returns webpages on execute', async () => {
+  it('runs one search per step and persists merged deduped sources', async () => {
     mockMetasoSearch.mockResolvedValue({
       credits: 1,
       total: 3,
@@ -492,46 +512,33 @@ describe('ResearchLab', () => {
         { title: 'C', link: 'https://c.com', snippet: 'Sc', score: '', date: '' },
       ],
     });
-    const planJson = JSON.stringify([
-      { title: 'Step 1', desc: 'D1' },
-      { title: 'Step 2', desc: 'D2' },
-      { title: 'Step 3', desc: 'D3' },
-    ]);
-    const reportJson = JSON.stringify({
-      intro: 'Web intro',
-      points: [{ title: 'P', text: 'T' }],
-      conclusion: 'C',
-    });
-    const callAI = vi.fn()
-      .mockResolvedValueOnce('{"need_web":true}')
-      .mockResolvedValueOnce(planJson)
-      .mockResolvedValueOnce(reportJson);
+    const callAI = makeRouterCallAI();
 
     render(<ResearchLab aiConfig={{ ...baseConfig, searchApiKey: 'sk-m' }} callAI={callAI} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Search topic...'), { target: { value: 'metaso topic' } });
-    fireEvent.submit(screen.getByPlaceholderText('Search topic...').closest('form')!);
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('Step 1 title')).toBeTruthy();
-    });
+    await submitTopic('metaso topic');
     fireEvent.click(screen.getByRole('button', { name: /Approve & Execute/i }));
 
+    // classifier + plan + 3×(subquery + analysis) + synthesis = 9
     await waitFor(() => {
-      expect(callAI).toHaveBeenCalledTimes(3);
+      expect(callAI).toHaveBeenCalledTimes(9);
     });
 
     await waitFor(async () => {
       const rows = await db.researchSessions.toArray();
       expect(rows).toHaveLength(1);
       expect(rows[0].searchStatus).toBe('found');
+      // 三步来源重复，去重后仍是 3 条
       expect(rows[0].sourceCount).toBe(3);
       expect(rows[0].searchWebpages?.length).toBe(3);
       expect(rows[0].searchWebpages?.[0]?.link).toBe('https://a.com');
-      expect(rows[0].researchReport.intro).toBe('Web intro');
+      expect(rows[0].researchReport.intro).toBe('Synth intro');
     });
 
-    expect(mockMetasoSearch).toHaveBeenCalledTimes(2);
+    // 计划阶段 1 次 + 每步 1 次 = 4 次检索，检索词是改写后的子查询
+    expect(mockMetasoSearch).toHaveBeenCalledTimes(4);
+    expect(mockMetasoSearch.mock.calls[1][0]).toBe('subq');
+    expect(mockMetasoSearch.mock.calls[2][0]).toBe('subq');
   });
 
   it('still shows report when persisting session fails', async () => {
@@ -539,34 +546,18 @@ describe('ResearchLab', () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     try {
-      const planJson = JSON.stringify([
-        { title: 'Step 1', desc: 'Desc 1' },
-        { title: 'Step 2', desc: 'Desc 2' },
-        { title: 'Step 3', desc: 'Desc 3' },
-      ]);
-      const reportJson = JSON.stringify({
-        intro: 'Shown even if save fails',
-        points: [],
-        conclusion: 'End',
-      });
-      const callAI = vi.fn().mockResolvedValueOnce(planJson).mockResolvedValueOnce(reportJson);
-
+      const callAI = makeRouterCallAI();
       render(<ResearchLab aiConfig={baseConfig} callAI={callAI} />);
 
-      fireEvent.change(screen.getByPlaceholderText('Search topic...'), { target: { value: 'q' } });
-      fireEvent.submit(screen.getByPlaceholderText('Search topic...').closest('form')!);
-
-      await waitFor(() => {
-        expect(screen.getByLabelText('Step 1 title')).toBeTruthy();
-      });
+      await submitTopic('q');
       fireEvent.click(screen.getByRole('button', { name: /Approve & Execute/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('Shown even if save fails')).toBeTruthy();
+        expect(screen.getByText('Synth intro')).toBeTruthy();
       });
 
       expect(errSpy).toHaveBeenCalledWith(
-        '[Scribe AI] ResearchLab failed to persist session',
+        '[Spoor:research] ResearchLab failed to persist session',
         expect.any(Error),
       );
 
@@ -579,65 +570,92 @@ describe('ResearchLab', () => {
   });
 
   it('ignores second Approve while executeResearch is in flight', async () => {
-    const planJson = JSON.stringify([
-      { title: 'Step 1', desc: 'D1' },
-      { title: 'Step 2', desc: 'D2' },
-      { title: 'Step 3', desc: 'D3' },
-    ]);
-    const reportJson = JSON.stringify({ intro: 'Done', points: [], conclusion: 'C' });
-
-    let releaseReport!: (v: string) => void;
-    const reportGate = new Promise<string>((res) => {
-      releaseReport = res;
+    let releaseAnalysis!: () => void;
+    const gate = new Promise<void>((res) => {
+      releaseAnalysis = res;
     });
-
-    const callAI = vi.fn().mockResolvedValueOnce(planJson).mockImplementationOnce(() => reportGate);
+    const callAI = makeRouterCallAI({
+      onAnalysis: async (n) => {
+        if (n === 1) await gate;
+      },
+    });
 
     render(<ResearchLab aiConfig={baseConfig} callAI={callAI} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Search topic...'), { target: { value: 't' } });
-    fireEvent.submit(screen.getByPlaceholderText('Search topic...').closest('form')!);
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('Step 1 title')).toBeTruthy();
-    });
+    await submitTopic('t');
 
     const approveBtn = screen.getByRole('button', { name: /Approve & Execute/i });
     fireEvent.click(approveBtn);
     fireEvent.click(approveBtn);
 
+    // plan + first analysis (gated) — 第二次点击不应再启动一轮
     await waitFor(() => {
       expect(callAI).toHaveBeenCalledTimes(2);
     });
 
-    releaseReport(reportJson);
+    releaseAnalysis();
 
     await waitFor(async () => {
       const rows = await db.researchSessions.toArray();
       expect(rows).toHaveLength(1);
     });
 
-    expect(callAI).toHaveBeenCalledTimes(2);
+    // plan + 3 analyses + synthesis
+    expect(callAI).toHaveBeenCalledTimes(5);
+  });
+
+  it('stop button aborts the run, keeps finished step output on screen, persists nothing', async () => {
+    let releaseAnalysis!: () => void;
+    const gate = new Promise<void>((res) => {
+      releaseAnalysis = res;
+    });
+    const callAI = makeRouterCallAI({
+      onAnalysis: async (n) => {
+        if (n === 2) await gate;
+      },
+    });
+
+    render(<ResearchLab aiConfig={baseConfig} callAI={callAI} />);
+
+    await submitTopic('stop me');
+    fireEvent.click(screen.getByRole('button', { name: /Approve & Execute/i }));
+
+    // 第一步完成后其分析出现在界面上
+    await waitFor(() => {
+      expect(screen.getByText('analysis-1')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId('lab-stop-run'));
+    releaseAnalysis();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('lab-run-stopped')).toBeTruthy();
+    });
+
+    // 已完成步骤的产出保留，且后续调用（第 3 步、汇总）没有发生
+    expect(screen.getByText('analysis-1')).toBeTruthy();
+    // plan + analysis1 + analysis2（中断发生在这次调用内）
+    expect(callAI).toHaveBeenCalledTimes(3);
+    const prompts = callAI.mock.calls.map((c: any[]) => c[0].prompt as string);
+    expect(prompts.some((p) => p.startsWith('Synthesize'))).toBe(false);
+
+    expect(await db.researchSessions.count()).toBe(0);
+
+    // 「返回大纲」回到可编辑计划
+    fireEvent.click(screen.getByTestId('lab-back-to-plan'));
+    await waitFor(() => {
+      expect(screen.getByLabelText('Step 1 title')).toBeTruthy();
+    });
   });
 
   it('calls AI to revise plan from the revision textarea', async () => {
-    const initialPlan = JSON.stringify([
-      { title: 'Step 1', desc: 'Desc 1' },
-      { title: 'Step 2', desc: 'Desc 2' },
-      { title: 'Step 3', desc: 'Desc 3' },
-    ]);
+    const initialPlan = planJson3;
     const revisedPlan = JSON.stringify([{ title: 'Only one step', desc: 'Condensed' }]);
     const callAI = vi.fn().mockResolvedValueOnce(initialPlan).mockResolvedValueOnce(revisedPlan);
 
     render(<ResearchLab aiConfig={baseConfig} callAI={callAI} />);
 
-    const topicInput = screen.getByPlaceholderText('Search topic...');
-    fireEvent.change(topicInput, { target: { value: 'topic t' } });
-    fireEvent.submit(topicInput.closest('form')!);
-
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Revision instructions...')).toBeTruthy();
-    });
+    await submitTopic('topic t');
 
     fireEvent.change(screen.getByPlaceholderText('Revision instructions...'), {
       target: { value: 'Merge everything into one step' },
@@ -657,53 +675,100 @@ describe('ResearchLab', () => {
     });
   });
 
-  it('does not persist session when report JSON is invalid; retry generates and persists', async () => {
-    const planJson = JSON.stringify([
-      { title: 'Step 1', desc: 'D1' },
-      { title: 'Step 2', desc: 'D2' },
-      { title: 'Step 3', desc: 'D3' },
-    ]);
-    const fixedReport = JSON.stringify({
-      intro: 'Recovered intro',
-      points: [{ title: 'P', text: 'T' }],
-      conclusion: 'Done',
+  it('does not persist session when synthesis JSON is invalid; retry re-runs and persists', async () => {
+    let attempt = 0;
+    const callAI = makeRouterCallAI({
+      synthesis: () => {
+        attempt += 1;
+        return attempt === 1 ? 'NOT VALID JSON { broken' : reportJson;
+      },
     });
-    const callAI = vi
-      .fn()
-      .mockResolvedValueOnce(planJson)
-      .mockResolvedValueOnce('NOT VALID JSON { broken')
-      .mockResolvedValueOnce(fixedReport);
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      render(<ResearchLab aiConfig={baseConfig} callAI={callAI} />);
+
+      await submitTopic('retry topic');
+      fireEvent.click(screen.getByRole('button', { name: /Approve & Execute/i }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('lab-retry-report')).toBeTruthy();
+      });
+
+      let rows = await db.researchSessions.toArray();
+      expect(rows).toHaveLength(0);
+
+      fireEvent.click(screen.getByTestId('lab-retry-report'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Synth intro')).toBeTruthy();
+      });
+
+      await waitFor(async () => {
+        rows = await db.researchSessions.toArray();
+        expect(rows).toHaveLength(1);
+        expect(rows[0].researchReport.intro).toBe('Synth intro');
+      });
+
+      // plan + (3 analyses + synth) ×2
+      expect(callAI).toHaveBeenCalledTimes(9);
+    } finally {
+      errSpy.mockRestore();
+    }
+  });
+
+  it('reuse-as-new-research from a history session returns to an editable outline', async () => {
+    const callAI = makeRouterCallAI();
+    await db.researchSessions.add({
+      id: 'sess-rebase',
+      query: 'Old research question',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      researchPlan: [
+        { title: 'Old step 1', desc: 'od1' },
+        { title: 'Old step 2', desc: 'od2' },
+      ],
+      researchReport: { intro: 'Old intro', points: [{ title: 'P', text: 'T' }], conclusion: 'Old c' },
+      sourceCount: 0,
+      searchStatus: 'idle',
+    });
 
     render(<ResearchLab aiConfig={baseConfig} callAI={callAI} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Search topic...'), { target: { value: 'retry topic' } });
-    fireEvent.submit(screen.getByPlaceholderText('Search topic...').closest('form')!);
+    await waitFor(() => {
+      expect(screen.getByTestId('research-session-sess-rebase')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('research-session-sess-rebase'));
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Step 1 title')).toBeTruthy();
+      expect(screen.getByTestId('lab-rebase-session')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('lab-rebase-session'));
+
+    // query 与 plan 已填回，且都可编辑
+    await waitFor(() => {
+      expect(screen.getByTestId('lab-query-input')).toHaveValue('Old research question');
+      expect(screen.getByLabelText('Step 1 title')).toHaveValue('Old step 1');
+    });
+
+    fireEvent.change(screen.getByTestId('lab-query-input'), {
+      target: { value: 'Refined research question' },
     });
     fireEvent.click(screen.getByRole('button', { name: /Approve & Execute/i }));
 
+    // 2 步分析 + 汇总（无搜索 Key，也无分类器）
     await waitFor(() => {
-      expect(screen.getByTestId('lab-retry-report')).toBeTruthy();
+      expect(callAI).toHaveBeenCalledTimes(3);
     });
 
-    let rows = await db.researchSessions.toArray();
-    expect(rows).toHaveLength(0);
-
-    fireEvent.click(screen.getByTestId('lab-retry-report'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Recovered intro')).toBeTruthy();
-    });
+    const analysisPrompt = callAI.mock.calls[0][0].prompt as string;
+    expect(analysisPrompt.startsWith('Analyze step')).toBe(true);
+    expect(analysisPrompt).toContain('Refined research question');
 
     await waitFor(async () => {
-      rows = await db.researchSessions.toArray();
-      expect(rows).toHaveLength(1);
-      expect(rows[0].researchReport.intro).toBe('Recovered intro');
+      const rows = await db.researchSessions.toArray();
+      expect(rows.some((r) => r.query === 'Refined research question')).toBe(true);
     });
-
-    expect(callAI).toHaveBeenCalledTimes(3);
   });
 
   it('uses fallback plan when model returns empty or invalid JSON', async () => {

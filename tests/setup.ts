@@ -31,6 +31,14 @@ Object.defineProperty(window, 'matchMedia', {
   }),
 });
 
+// 测试环境统一按 Windows WebView2 的 UA 走：`spoor-media` 协议的源是按平台拼的
+// （见 src/utils/mediaUrl.ts），不钉死的话组件测试里的 src 断言会随宿主机漂移。
+Object.defineProperty(window.navigator, 'userAgent', {
+  configurable: true,
+  value:
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Spoor-Tests',
+});
+
 // Mock window.confirm and window.alert to prevent test interruptions
 window.confirm = () => true;
 window.alert = () => {};

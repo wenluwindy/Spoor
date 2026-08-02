@@ -1,14 +1,19 @@
-//! 检查更新：查 GitHub Releases → 下载 NSIS 安装包 → 拉起安装程序覆盖安装。
+//! 检查更新：查 GitHub Releases → 下载本平台的安装包 → 交给用户安装。
 //!
 //! 全链路在 Rust 里，理由和 [`crate::imagegen`] 一致：绕开 CORS、几十 MB 的安装包
 //! 不穿 IPC、当前版本号直接从 `package_info()` 读而不必在前端另存一份跟着漂。
 //!
 //! 没有用 `tauri-plugin-updater`：那套要签名密钥与随包发布的 `latest.json`，
-//! 而现有发布流水线（`.github/workflows/release-desktop.yml`）只产出 NSIS exe。
-//! 这里要的语义也更直白——下载下来，把安装程序交给用户。
+//! 而现有发布流水线（`.github/workflows/release-desktop.yml`）只产出裸安装包
+//! （Windows 的 NSIS exe 与 macOS 的通用 dmg）。这里要的语义也更直白——
+//! 下载下来，把安装程序交给用户。
+//!
+//! 「交给用户」在两个平台上是两回事：NSIS 能覆盖安装，退出本进程即可；
+//! dmg 打开后要用户自己把 app 拖进「应用程序」，进程不能退，见 [`install_update`]。
 
 use std::cmp::Ordering;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use futures_util::StreamExt;
 use serde::Serialize;
@@ -19,6 +24,10 @@ use tauri::{AppHandle, Emitter};
 const RELEASES_API: &str = "https://api.github.com/repos/wenluwindy/Spoor/releases/latest";
 /// GitHub API 强制要求 UA，缺了直接 403。
 const USER_AGENT: &str = "Spoor-Updater";
+/// 连不上就是连不上，等更久只是拖长报错。
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+/// 查询接口的总超时。只是一个几 KB 的 JSON，超过这个数基本是对面挂了。
+const CHECK_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Serialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
@@ -67,12 +76,23 @@ pub fn compare_versions(a: &str, b: &str) -> Ordering {
     Ordering::Equal
 }
 
-/// 从 release 的 assets 里挑出 Windows 安装包。
+/// 从 release 的 assets 里挑出**当前平台**的安装包。
 ///
-/// 优先 `*-setup.exe`（流水线产出的是 `Spoor_0.2.0_x64-setup.exe`），
-/// 找不到再退回任意 `.exe`。挑不出来就返回 `None` —— 宁可报「暂无更新」，
+/// 不分平台的话 macOS 也会挑到 `.exe`，下载下来双击不了不说，`install_update`
+/// 还会顺手把应用退掉。挑不出来就返回 `None` —— 宁可报「暂无更新」，
 /// 也别让用户下到一个 `.sig` 或源码包去双击。
 pub fn pick_installer_asset(assets: &[Value]) -> Option<(String, String, u64)> {
+    pick_installer_asset_for(std::env::consts::OS, assets)
+}
+
+/// 平台作为参数拆出来是为了单测：不论 CI 跑在哪个系统上，两条分支都要验得到。
+///
+/// - Windows：优先 `*-setup.exe`（流水线产出的是 `Spoor_0.2.0_x64-setup.exe`），
+///   找不到再退回任意 `.exe`。
+/// - macOS：找 `.dmg`（流水线产出的是通用二进制 `Spoor_*_universal.dmg`，一个包
+///   同时覆盖 Intel 与 Apple Silicon，不必再按架构挑）。
+/// - 其余平台一律 `None`，由调用方报「无适配安装包」。
+pub fn pick_installer_asset_for(os: &str, assets: &[Value]) -> Option<(String, String, u64)> {
     let named = |asset: &Value| -> Option<(String, String, u64)> {
         let name = asset.get("name")?.as_str()?.to_string();
         let url = asset.get("browser_download_url")?.as_str()?.to_string();
@@ -80,17 +100,26 @@ pub fn pick_installer_asset(assets: &[Value]) -> Option<(String, String, u64)> {
         Some((name, url, size))
     };
 
-    let is_exe = |name: &str| name.to_ascii_lowercase().ends_with(".exe");
-    let is_setup = |name: &str| {
-        let lower = name.to_ascii_lowercase();
-        lower.ends_with("-setup.exe") || lower.ends_with("_setup.exe")
-    };
+    match os {
+        "windows" => {
+            let is_exe = |name: &str| name.to_ascii_lowercase().ends_with(".exe");
+            let is_setup = |name: &str| {
+                let lower = name.to_ascii_lowercase();
+                lower.ends_with("-setup.exe") || lower.ends_with("_setup.exe")
+            };
 
-    assets
-        .iter()
-        .filter_map(named)
-        .find(|(name, ..)| is_setup(name))
-        .or_else(|| assets.iter().filter_map(named).find(|(name, ..)| is_exe(name)))
+            assets
+                .iter()
+                .filter_map(named)
+                .find(|(name, ..)| is_setup(name))
+                .or_else(|| assets.iter().filter_map(named).find(|(name, ..)| is_exe(name)))
+        }
+        "macos" => assets
+            .iter()
+            .filter_map(named)
+            .find(|(name, ..)| name.to_ascii_lowercase().ends_with(".dmg")),
+        _ => None,
+    }
 }
 
 /// 安装包落盘位置。放临时目录而不是安装目录：安装目录下正跑着本程序。
@@ -110,6 +139,8 @@ pub async fn check_for_update(app: AppHandle) -> Result<UpdateInfo, String> {
     let idle = |current: String| UpdateInfo { current_version: current, ..Default::default() };
 
     let client = reqwest::Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(CHECK_TIMEOUT)
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -150,8 +181,16 @@ pub async fn check_for_update(app: AppHandle) -> Result<UpdateInfo, String> {
     let empty = Vec::new();
     let assets = release.get("assets").and_then(Value::as_array).unwrap_or(&empty);
     let Some((asset_name, download_url, asset_size)) = pick_installer_asset(assets) else {
-        // 有 tag 但没有可用安装包（比如只传了源码包），当作没有更新
-        eprintln!("[Spoor] check_for_update: release {latest} has no .exe asset");
+        // 有 tag 但没有本平台的安装包（比如只传了源码包，或某平台的构建漏了）。
+        // 新版本确实存在时要如实报「无适配安装包」——安静回「已是最新」的话，
+        // 这个平台的用户会永远等不到更新提示，还以为自己一直在最新版上。
+        eprintln!(
+            "[Spoor] check_for_update: release {latest} has no installer asset for {}",
+            std::env::consts::OS
+        );
+        if compare_versions(&latest, &current) == Ordering::Greater {
+            return Err("no_installer_for_platform".into());
+        }
         return Ok(UpdateInfo { latest_version: latest, ..idle(current) });
     };
 
@@ -194,13 +233,16 @@ pub async fn download_update(
         .rsplit(['/', '\\'])
         .next()
         .filter(|s| !s.is_empty())
-        .unwrap_or("spoor-setup.exe");
+        .unwrap_or(if cfg!(target_os = "macos") { "spoor-update.dmg" } else { "spoor-setup.exe" });
 
     let dir = download_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let dest = dir.join(safe_name);
 
+    // 只设连接超时，不设总超时：安装包几十 MB，慢网络上会被总超时误杀；
+    // 下载卡死与否由进度事件反映，用户看得见，可以自己关掉重来
     let client = reqwest::Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
         .build()
         .map_err(|e| e.to_string())?;
     let response = client
@@ -238,12 +280,15 @@ pub async fn download_update(
     Ok(dest.to_string_lossy().to_string())
 }
 
-/// 拉起安装程序并退出本进程。
+/// 拉起安装包。返回值告诉前端接下来会发生什么：
 ///
-/// **必须退出**：NSIS 覆盖安装要改的正是当前正在运行的 exe，进程不退出就会被
-/// 文件占用挡住。安装程序是 `ShellExecute` 起的独立进程，不受我们退出影响。
+/// - `"exit"`（Windows）：NSIS 覆盖安装要改的正是当前正在运行的 exe，进程不退出
+///   就会被文件占用挡住，所以拉起后**立即退出本进程**——前端大概率收不到这个返回值。
+///   安装程序是 `ShellExecute` 起的独立进程，不受我们退出影响。
+/// - `"manual"`（macOS）：dmg 打开后要用户自己把 app 拖进「应用程序」，这里**不退出**——
+///   退了用户面对一个空桌面不知道下一步该干嘛。前端据此提示手动安装。
 #[tauri::command]
-pub fn install_update(app: AppHandle, path: String) -> Result<(), String> {
+pub fn install_update(app: AppHandle, path: String) -> Result<String, String> {
     let target = PathBuf::from(&path);
     // 只允许运行我们自己刚下下来的那个文件
     if !target.starts_with(download_dir()) {
@@ -254,8 +299,11 @@ pub fn install_update(app: AppHandle, path: String) -> Result<(), String> {
     }
 
     open::that(&target).map_err(|e| e.to_string())?;
+    if cfg!(target_os = "macos") {
+        return Ok("manual".into());
+    }
     app.exit(0);
-    Ok(())
+    Ok("exit".into())
 }
 
 #[cfg(test)]
@@ -316,21 +364,55 @@ mod tests {
     }
 
     #[test]
-    fn prefers_the_nsis_setup_exe() {
+    fn windows_prefers_the_nsis_setup_exe() {
         let assets = vec![
             asset("Spoor_0.2.0_x64_en-US.msi", 1),
             asset("Spoor_0.2.0_x64-setup.exe", 42),
         ];
-        let (name, url, size) = pick_installer_asset(&assets).unwrap();
+        let (name, url, size) = pick_installer_asset_for("windows", &assets).unwrap();
         assert_eq!(name, "Spoor_0.2.0_x64-setup.exe");
         assert_eq!(size, 42);
         assert!(url.ends_with("Spoor_0.2.0_x64-setup.exe"));
     }
 
     #[test]
-    fn falls_back_to_any_exe() {
+    fn windows_falls_back_to_any_exe() {
         let assets = vec![asset("Spoor-portable.exe", 7)];
-        assert_eq!(pick_installer_asset(&assets).unwrap().0, "Spoor-portable.exe");
+        assert_eq!(
+            pick_installer_asset_for("windows", &assets).unwrap().0,
+            "Spoor-portable.exe"
+        );
+    }
+
+    #[test]
+    fn macos_picks_the_dmg_not_the_exe() {
+        // 曾经的缺陷：macOS 也会挑到 setup.exe，下载后 install_update 还顺手把应用退掉
+        let assets = vec![
+            asset("Spoor_0.3.1_x64-setup.exe", 1),
+            asset("Spoor_0.3.1_universal.dmg", 42),
+        ];
+        assert_eq!(
+            pick_installer_asset_for("macos", &assets).unwrap().0,
+            "Spoor_0.3.1_universal.dmg"
+        );
+        // 反过来 Windows 也不该挑到 dmg
+        assert_eq!(
+            pick_installer_asset_for("windows", &assets).unwrap().0,
+            "Spoor_0.3.1_x64-setup.exe"
+        );
+    }
+
+    #[test]
+    fn macos_without_dmg_yields_nothing() {
+        // 只传了 exe 的 release 对 macOS 就是「无适配安装包」，不能退回 exe
+        let assets = vec![asset("Spoor_0.3.1_x64-setup.exe", 1)];
+        assert!(pick_installer_asset_for("macos", &assets).is_none());
+    }
+
+    #[test]
+    fn unknown_platform_yields_nothing() {
+        let assets = vec![asset("Spoor_0.3.1_x64-setup.exe", 1), asset("Spoor.dmg", 2)];
+        assert!(pick_installer_asset_for("linux", &assets).is_none());
     }
 
     #[test]
@@ -340,17 +422,19 @@ mod tests {
             asset("Spoor_0.2.0_x64-setup.exe.sig", 1),
             asset("Source code (zip)", 2),
         ];
-        assert!(pick_installer_asset(&assets).is_none());
+        assert!(pick_installer_asset_for("windows", &assets).is_none());
+        assert!(pick_installer_asset_for("macos", &assets).is_none());
     }
 
     #[test]
     fn empty_asset_list_yields_nothing() {
-        assert!(pick_installer_asset(&[]).is_none());
+        assert!(pick_installer_asset_for("windows", &[]).is_none());
+        assert!(pick_installer_asset_for("macos", &[]).is_none());
     }
 
     #[test]
     fn malformed_assets_are_skipped_not_fatal() {
         let assets = vec![json!({ "name": "no-url-setup.exe" }), asset("ok-setup.exe", 3)];
-        assert_eq!(pick_installer_asset(&assets).unwrap().0, "ok-setup.exe");
+        assert_eq!(pick_installer_asset_for("windows", &assets).unwrap().0, "ok-setup.exe");
     }
 }

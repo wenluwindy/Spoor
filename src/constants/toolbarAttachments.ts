@@ -1,7 +1,7 @@
 /**
  * 底部输入栏附件的**纯**定义（类型 + accept）。
  *
- * 单独一个模块是为了让 `CanvasToolbar` 不必顺带拖进 `utils/file` → `i18n` 单例：
+ * 单独一个模块是为了让 `CanvasToolbar` 不必顺带拖进 `utils/toolbarAttachments` → `i18n` 单例：
  * 组件只需要知道附件长什么样、能选什么文件，读文件是 `utils/toolbarAttachments` 的事。
  */
 
