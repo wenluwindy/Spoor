@@ -9,6 +9,10 @@ dist/
 src-tauri/target/
 release/
 
+# Bundled llama.cpp engine (CI downloads it; locally use scripts/fetch-llama-engine.ps1)
+src-tauri/resources/llama/*
+!src-tauri/resources/llama/.gitkeep
+
 # --- Promo / Remotion (local only; not submitted) ---
 remotion-kit/
 scripts/remotion-server.mjs
@@ -23,13 +27,6 @@ output/
 /en2.wav
 /zh.wav
 
-# Local toolchain (LLVM installer + extracted libclang for bindgen); do not commit
-.build-tools/
-.llvm-min/
-
-# Vendored llama-cpp-sys-2 patched for MSVC (copy from local cargo registry); optional to commit — large
-src-tauri/third_party/
-
 # Temp scripts
 generate-icons.cjs
 
@@ -41,13 +38,6 @@ playwright-report/
 # Logs
 *.log
 npm-debug.log*
-scripts/cuda-build-log.txt
-
-# Stray binary file accidentally created by old PowerShell copy-target scripts
-/binaries
-
-# Deprecated debug script for the abandoned source-CUDA build path (kept locally only)
-scripts/debug-cuda-build.cmd
 
 # Environment
 .env*

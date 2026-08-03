@@ -5,6 +5,12 @@ import { DEEPSEEK_BASE_URL, DEEPSEEK_DEFAULT_MODEL } from '../constants/deepseek
 import { ANTHROPIC_BASE_URL } from '../constants/aiProviderPresets';
 import { looksLikeSamplingRejection, modelRejectsSampling } from '../utils/samplingParams';
 import { AppError, isAppError } from './appError';
+import {
+  planLocalRun,
+  type GgufInfo,
+  type HardwareInfo,
+  type LocalRunPlan,
+} from './localModelPlanner';
 import { logger } from '../utils/logger';
 
 /** For logs only — never log full API keys. */
@@ -44,7 +50,7 @@ function appErrorFromProxyFailure(msg: string): AppError {
   return new AppError('ai.http', msg);
 }
 
-function isTauriRuntime(): boolean {
+export function isTauriRuntime(): boolean {
   return typeof window !== 'undefined' &&
     Object.prototype.hasOwnProperty.call(window, '__TAURI_INTERNALS__');
 }
@@ -379,7 +385,195 @@ export type AiProviderConfig = {
   model: string;
   localGgufPath?: string;
   localEnableThinking?: boolean;
+  /** 本地推理手动覆盖；undefined = 自动（由规划器按硬件现算）。 */
+  localNGpuLayers?: number;
+  localNCtx?: number;
+  localNThreads?: number;
+  localMaxTokens?: number;
+  /** undefined = 默认 15 分钟；null = 会话期常驻；0 = 用后即退。 */
+  localKeepAliveMinutes?: number | null;
 };
+
+// ───────────────────────── 本地模型（llama-server 常驻子进程） ─────────────────────────
+
+type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+
+/** hardware_probe 打不通时的保守兜底：纯 CPU、4 线程、按 8GB 机器的可用量估。 */
+const FALLBACK_HARDWARE: HardwareInfo = {
+  totalRamBytes: 8 * 1024 ** 3,
+  availableRamBytes: 4 * 1024 ** 3,
+  physicalCores: 4,
+  logicalCores: 8,
+  gpus: [],
+  platform: 'unknown',
+  unifiedMemory: false,
+};
+
+/**
+ * 解析本次本地推理的运行参数：GGUF 元数据 + 硬件探测 → 规划器，手动覆盖直接生效。
+ *
+ * GGUF 读不动（选错文件/文件没了/版本不支持）当场报，不再等子进程失败翻日志；
+ * 硬件探测失败则退回保守默认值——探测挂了不该把整条本地推理路都堵死。
+ */
+async function resolveLocalRunParams(
+  invoke: InvokeFn,
+  config: AiProviderConfig,
+  modelPath: string,
+): Promise<LocalRunPlan> {
+  let gguf: GgufInfo;
+  try {
+    gguf = await invoke<GgufInfo>('gguf_inspect', { path: modelPath });
+  } catch (e) {
+    throw new AppError('ai.local_gguf_invalid', formatAiError(e));
+  }
+
+  let hardware: HardwareInfo;
+  try {
+    hardware = await invoke<HardwareInfo>('hardware_probe', {});
+  } catch (e) {
+    logger.warn('ai', 'hardware_probe failed, using conservative CPU fallback', formatAiError(e));
+    hardware = FALLBACK_HARDWARE;
+  }
+
+  // 实际引擎后端约束规划：CPU 引擎不给任何卡 offload，CUDA 引擎只认 NVIDIA。
+  // 查不到状态（老引擎/异常）按硬件乐观规划——server 侧对无效 -ngl 会自行忽略。
+  let engineBackend: 'cpu' | 'cuda' | 'metal' | null = null;
+  try {
+    const status = await invoke<{ backend?: 'cpu' | 'cuda' | 'metal' | null }>(
+      'local_engine_status',
+      {},
+    );
+    engineBackend = status.backend ?? null;
+  } catch {
+    /* 状态查询失败不拦路 */
+  }
+
+  return planLocalRun(
+    gguf,
+    hardware,
+    {
+      nGpuLayers: config.localNGpuLayers,
+      nCtx: config.localNCtx,
+      nThreads: config.localNThreads,
+      maxTokens: config.localMaxTokens,
+    },
+    { engineBackend },
+  );
+}
+
+/**
+ * 本地 GGUF 对话：确保 llama-server 起着 → 走它的 OpenAI 兼容接口。
+ *
+ * 流式、多轮消息、错误映射全部复用 openai 分支的现成通道
+ * （`postOpenAiCompatibleChatWithOptionalStream`，127.0.0.1 在 http 白名单里）。
+ * `enable_thinking` 经 `chat_template_kwargs` 传给 chat template——旧架构里
+ * 这个开关 UI 有、后端从不读，在这里复活。
+ */
+async function callLocalLlama({
+  config,
+  prompt,
+  systemInstruction,
+  temperature,
+  topP,
+  onStreamChunk,
+}: {
+  config: AiProviderConfig;
+  prompt: string;
+  systemInstruction?: string;
+  temperature: number;
+  topP: number;
+  onStreamChunk?: (accumulatedText: string) => void;
+}): Promise<string> {
+  const modelPath = (config.localGgufPath ?? '').trim();
+  const { invoke } = await import('@tauri-apps/api/core');
+  const typedInvoke: InvokeFn = (cmd, args) => invoke(cmd, args);
+
+  const plan = await resolveLocalRunParams(typedInvoke, config, modelPath);
+
+  const keepAlive = config.localKeepAliveMinutes;
+  const ensureArgs = (nGpuLayers: number): Record<string, unknown> => ({
+    modelPath,
+    nGpuLayers,
+    nCtx: plan.nCtx,
+    nThreads: plan.nThreads,
+    // null（会话期常驻）以 -1 下发；undefined 不传，由 Rust 用默认 15 分钟
+    ...(keepAlive === undefined ? {} : { keepAliveMinutes: keepAlive === null ? -1 : keepAlive }),
+  });
+
+  logger.info('ai', 'local llama-server ensure', {
+    modelPath: modelPath.slice(0, 80) + (modelPath.length > 80 ? '…' : ''),
+    ...plan,
+  });
+
+  let ensured: { port: number; restarted: boolean };
+  try {
+    ensured = await invoke<{ port: number; restarted: boolean }>(
+      'local_server_ensure',
+      ensureArgs(plan.nGpuLayers),
+    );
+  } catch (e) {
+    const msg = formatAiError(e);
+    // 显存不够：按实际情况降 25% 层数再试一次；仍失败就原样报
+    if (!(msg === 'oom' || msg.startsWith('oom')) || plan.nGpuLayers <= 0) {
+      throw new AppError('ai.local_failed', msg);
+    }
+    const reduced = Math.floor(plan.nGpuLayers * 0.75);
+    logger.warn('ai', 'local server OOM, retrying with fewer GPU layers', {
+      from: plan.nGpuLayers,
+      to: reduced,
+    });
+    try {
+      ensured = await invoke<{ port: number; restarted: boolean }>(
+        'local_server_ensure',
+        ensureArgs(reduced),
+      );
+    } catch (e2) {
+      throw new AppError('ai.local_failed', formatAiError(e2));
+    }
+  }
+
+  const url = `http://127.0.0.1:${ensured.port}/v1/chat/completions`;
+  const body: Record<string, unknown> = {
+    model: 'local',
+    messages: [
+      ...(systemInstruction ? [{ role: 'system' as const, content: systemInstruction }] : []),
+      { role: 'user' as const, content: prompt },
+    ],
+    temperature,
+    top_p: topP,
+    max_tokens: plan.maxTokens,
+    chat_template_kwargs: { enable_thinking: config.localEnableThinking ?? false },
+  };
+
+  try {
+    await invoke('local_server_touch');
+  } catch {
+    /* touch 失败不拦对话 */
+  }
+  try {
+    return await postOpenAiCompatibleChatWithOptionalStream(
+      'local',
+      url,
+      body,
+      { provider: 'local_llama', model: modelPath },
+      onStreamChunk,
+    );
+  } finally {
+    try {
+      await invoke('local_server_touch');
+    } catch {
+      /* ignore */
+    }
+    if (keepAlive === 0) {
+      // 用后即退：对话一结束立刻卸载，内存/显存马上归还
+      try {
+        await invoke('local_server_stop');
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
 
 export async function callUniversalAI({
   config,
@@ -408,57 +602,10 @@ export async function callUniversalAI({
     if (!isTauriRuntime()) {
       throw new AppError('ai.local_desktop_only');
     }
-    const modelPath = (config.localGgufPath ?? '').trim();
-    if (!modelPath) {
+    if (!(config.localGgufPath ?? '').trim()) {
       throw new AppError('ai.local_no_path');
     }
-    const { invoke } = await import('@tauri-apps/api/core');
-
-    let logPath: string | null = null;
-    try {
-      logPath = await invoke<string>('get_local_llama_log_path');
-    } catch {
-      // 忽略：旧版本没有这个命令
-    }
-
-    const startedAt = Date.now();
-    logger.info('ai', 'local_llama → invoke', {
-      modelPath: modelPath.slice(0, 80) + (modelPath.length > 80 ? '…' : ''),
-      promptChars: prompt.length,
-      systemChars: (systemInstruction ?? '').length,
-      temperature,
-      topP,
-      maxTokens: 256,
-      nCtx: 1024,
-      logPath,
-    });
-
-    try {
-      const out = await invoke<string>('local_llama_chat', {
-        payload: {
-          modelPath,
-          systemInstruction: systemInstruction ?? null,
-          userMessage: prompt,
-          temperature,
-          topP,
-          maxTokens: 256,
-          nCtx: 1024,
-          enableThinking: config.localEnableThinking ?? false,
-        },
-      });
-      logger.info('ai', 'local_llama ← done', {
-        elapsedMs: Date.now() - startedAt,
-        outChars: (out ?? '').length,
-      });
-      const text = out ?? '';
-      onStreamChunk?.(text);
-      return text;
-    } catch (e) {
-      const elapsedMs = Date.now() - startedAt;
-      const msg = formatAiError(e);
-      logger.error('ai', `local_llama ← FAILED (${elapsedMs}ms)`, msg, { logPath });
-      throw new AppError('ai.local_failed', logPath ? `${msg}\n${logPath}` : msg);
-    }
+    return callLocalLlama({ config, prompt, systemInstruction, temperature, topP, onStreamChunk });
   }
 
   if (config.provider === 'gemini') {

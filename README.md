@@ -97,7 +97,9 @@ Spoor（踪迹）是一张装着 AI 的无限画布。想法、资料、PDF、�
 
 **首次使用**：Spoor 不内置 API Key，需要你自己填一个模型服务。打开应用后点左下角齿轮 → **模型服务** → 选一个预设（火山方舟 / OpenAI / Gemini / 自定义），填入 API 密钥与模型名。每条模型旁边有「测试」按钮，会真发一次请求，当场告诉你能不能通。首次启动时画布上也会有一张引导卡片直接带你过去。
 
-支持的服务商：Google Gemini、OpenAI、Anthropic Claude、DeepSeek、MiMo（小米）、豆包（火山方舟）、自定义 OpenAI 兼容端点，以及桌面端的本地 GGUF（llama.cpp）。同一个服务下可以挂多个对话模型和多个生图模型。联网搜索可选配秘塔（Metaso）密钥。
+支持的服务商：Google Gemini、OpenAI、Anthropic Claude、DeepSeek、MiMo（小米）、豆包（火山方舟）、自定义 OpenAI 兼容端点，以及桌面端的本地 GGUF。同一个服务下可以挂多个对话模型和多个生图模型。联网搜索可选配秘塔（Metaso）密钥。
+
+**本地模型（0.6.0 起即插即用）**：推理引擎（llama.cpp）随安装包内置，选一个本机的 `.gguf` 模型文件就能直接对话——运行参数按你的显存、内存与 CPU 自动设置（选完文件当场显示模型信息和「装不装得下」），高级面板可逐项手改。NVIDIA 用户可一键下载 GPU 加速组件（约 500MB）；模型按需加载、空闲自动退出，只用在线 API 时零开销。详见[本地模型指南](docs/guide/LOCAL_LLM.md)。
 
 > 豆包（火山方舟）的「模型」填的是账号下的推理接入点 ID（形如 `ep-xxxxxxxx`），不是模型名。
 
@@ -149,8 +151,8 @@ spoor/
 │   └── main.tsx            入口
 ├── src-tauri/              Rust 桌面端
 │   └── src/                media（本地文件存储）、imagegen（生图）、userfile（用户选定路径的读写）、
-│                           snapshot（自动快照）、
-│                           local_llama（GGUF）、cc_switch（配置导入）
+│                           snapshot（自动快照）、notes（笔记镜像）、keystore（密钥加密）、
+│                           gguf/hardware/engine/llama_server（本地模型）、cc_switch（配置导入）
 ├── tests/                  Vitest，目录结构镜像 src/
 ├── scripts/                构建、发布与 lint 守卫脚本
 ├── docs/                   guide/ 用户指南 · product/ 产品说明
@@ -164,5 +166,5 @@ spoor/
 - [本地 GGUF 模型](docs/guide/LOCAL_LLM.md)
 - [数据恢复](docs/guide/DATA_RECOVERY.md)
 - [产品说明](docs/product/APP.md) · [Agent 设计](docs/product/AGENT.md) · [提示词](docs/product/AI-PROMPTS.md)
-- [v0.5.0 规划](docs/dev/ROADMAP_v0.5.0.md) · [v0.4.0 规划](docs/dev/ROADMAP_v0.4.0.md) · [v0.3.0 规划与竞品对标](docs/dev/ROADMAP_v0.3.0.md) · [升级开发文档](docs/dev/UPGRADE_PLAN.md)
-- 发布说明：[v0.5.0](docs/release/RELEASE_v0.5.0.md) · [v0.4.0](docs/release/RELEASE_v0.4.0.md) · [v0.3.1](docs/release/RELEASE_v0.3.1.md) · [v0.3.0](docs/release/RELEASE_v0.3.0.md) · [v0.2.0](docs/release/RELEASE_v0.2.0.md) · [v0.1.0](docs/release/RELEASE_v0.1.0.md)
+- [v0.6.0 规划](docs/dev/ROADMAP_v0.6.0.md) · [v0.5.0 规划](docs/dev/ROADMAP_v0.5.0.md) · [v0.4.0 规划](docs/dev/ROADMAP_v0.4.0.md) · [v0.3.0 规划与竞品对标](docs/dev/ROADMAP_v0.3.0.md) · [升级开发文档](docs/dev/UPGRADE_PLAN.md)
+- 发布说明：[v0.6.0](docs/release/RELEASE_v0.6.0.md) · [v0.5.0](docs/release/RELEASE_v0.5.0.md) · [v0.4.0](docs/release/RELEASE_v0.4.0.md) · [v0.3.1](docs/release/RELEASE_v0.3.1.md) · [v0.3.0](docs/release/RELEASE_v0.3.0.md) · [v0.2.0](docs/release/RELEASE_v0.2.0.md) · [v0.1.0](docs/release/RELEASE_v0.1.0.md)

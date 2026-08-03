@@ -1,4 +1,6 @@
-import { callUniversalAI } from './ai';
+import { callUniversalAI, formatAiError, isTauriRuntime } from './ai';
+import { AppError } from './appError';
+import type { GgufInfo } from './localModelPlanner';
 import type { AIProviderProfile } from '../types/aiConfig';
 
 /**
@@ -29,6 +31,9 @@ export async function testChatModel(
   provider: AIProviderProfile,
   modelName: string,
 ): Promise<ConnectivityResult> {
+  if (provider.kind === 'local_llama') {
+    return testLocalModel(provider);
+  }
   try {
     const text = await callUniversalAI({
       config: {
@@ -42,6 +47,43 @@ export async function testChatModel(
       prompt: PING_PROMPT,
     });
     return { ok: true, sample: (text ?? '').trim().slice(0, 120) };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
+
+/**
+ * 本地模型不真跑一轮推理（旧实现一次 ping 就是 5–10 秒起步）。
+ * 「能通」在这里等价于：推理引擎装着 + GGUF 文件读得动——两者都是毫秒级检查，
+ * 真正的加载与生成留给第一次对话。
+ */
+async function testLocalModel(provider: AIProviderProfile): Promise<ConnectivityResult> {
+  try {
+    if (!isTauriRuntime()) {
+      throw new AppError('ai.local_desktop_only');
+    }
+    const path = (provider.localGgufPath ?? '').trim();
+    if (!path) {
+      throw new AppError('ai.local_no_path');
+    }
+    const { invoke } = await import('@tauri-apps/api/core');
+
+    const status = await invoke<{ installed: boolean }>('local_engine_status');
+    if (!status.installed) {
+      throw new AppError('ai.local_engine_missing');
+    }
+
+    let info: GgufInfo;
+    try {
+      info = await invoke<GgufInfo>('gguf_inspect', { path });
+    } catch (e) {
+      throw new AppError('ai.local_gguf_invalid', formatAiError(e));
+    }
+
+    const sample = [info.modelName, info.sizeLabel, info.quantLabel]
+      .filter((v): v is string => Boolean(v))
+      .join(' · ');
+    return { ok: true, sample };
   } catch (error) {
     return { ok: false, error };
   }

@@ -1,8 +1,11 @@
 mod cc_switch;
 mod dataroot;
+mod engine;
+mod gguf;
+mod hardware;
 mod imagegen;
 mod keystore;
-mod local_llama;
+mod llama_server;
 mod media;
 mod notes;
 mod snapshot;
@@ -16,7 +19,6 @@ use futures_util::StreamExt;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 
-use local_llama::LocalLlamaChatPayload;
 
 /// 网络超时的统一口径。
 ///
@@ -343,20 +345,6 @@ fn open_external_url(url: String) -> Result<(), String> {
     open::that(url).map_err(|e| e.to_string())
 }
 
-/// 内置 llama.cpp：加载本地 GGUF，使用模型自带 chat 模板完成一轮对话（桌面端离线）。
-#[tauri::command]
-async fn local_llama_chat(payload: LocalLlamaChatPayload) -> Result<String, String> {
-  tokio::task::spawn_blocking(move || local_llama::chat(payload))
-    .await
-    .map_err(|e| format!("推理任务异常: {e}"))?
-}
-
-/// 返回本地 LLM 日志文件路径（每次推理的命令行/stdout/stderr/耗时都会写入此文件）。
-#[tauri::command]
-fn get_local_llama_log_path() -> String {
-  local_llama::log_path().to_string_lossy().to_string()
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -383,6 +371,9 @@ pub fn run() {
     .setup(|app| {
       let root = media::init_data_root(app.handle());
       println!("[Spoor] 媒体数据根：{}", root.display());
+      // 上次异常退出可能留下孤儿 llama-server（pid 文件 + 进程名双重校验后才杀）。
+      // tasklist 要上百毫秒，放线程里别拖慢启动。
+      std::thread::spawn(llama_server::cleanup_orphan);
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -395,8 +386,6 @@ pub fn run() {
       updater::check_for_update,
       updater::download_update,
       updater::install_update,
-      local_llama_chat,
-      get_local_llama_log_path,
       cc_switch::cc_switch_read_config,
       media::media_store_info,
       media::media_list,
@@ -412,6 +401,7 @@ pub fn run() {
       imagegen::image_generate,
       imagegen::image_generate_cancel,
       userfile::user_file_pick_save_path,
+      userfile::user_file_pick_open_path,
       userfile::user_file_pick_directory,
       userfile::user_file_write_text,
       userfile::user_file_write_base64,
@@ -423,10 +413,25 @@ pub fn run() {
       notes::notes_read_all,
       notes::notes_list_foreign,
       notes::notes_delete,
+      gguf::gguf_inspect,
+      hardware::hardware_probe,
+      engine::local_engine_status,
+      engine::local_engine_install_cuda,
+      llama_server::local_server_ensure,
+      llama_server::local_server_touch,
+      llama_server::local_server_stop,
+      llama_server::local_server_state,
       webpage::fetch_webpage,
       keystore::keystore_save,
       keystore::keystore_load
     ])
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .build(tauri::generate_context!())
+    .expect("error while running tauri application")
+    // .run(回调) 而不是 .run(ctx)：应用退出时要把常驻的 llama-server 一并带走，
+    // 否则它会拿着几 GB 显存活成孤儿（下次启动的 cleanup_orphan 只是兜底）
+    .run(|_app, event| {
+      if let tauri::RunEvent::Exit = event {
+        llama_server::stop_running();
+      }
+    });
 }

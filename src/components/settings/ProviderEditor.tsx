@@ -38,6 +38,7 @@ import {
 import { testChatModel, type ConnectivityResult } from '../../services/aiConfigTest';
 import { resolveErrorMessage } from '../../utils/resolveErrorMessage';
 import { Tooltip } from '../ui/Tooltip';
+import { LocalModelSection } from './LocalModelSection';
 
 const PROVIDER_KINDS: ProviderKind[] = [
   'doubao',
@@ -178,35 +179,10 @@ export function ProviderEditor({
           </div>
 
           {isLocal ? (
-            <div className="space-y-1.5">
-              <label className={META_LABEL} htmlFor={`gguf-${provider.id}`}>
-                {t('settings.local_gguf_path')}
-              </label>
-              <input
-                id={`gguf-${provider.id}`}
-                className={`${FIELD} font-mono`}
-                placeholder={t('settings.local_gguf_placeholder')}
-                value={provider.localGgufPath ?? ''}
-                onChange={(e) =>
-                  onChange(updateProvider(config, provider.id, { localGgufPath: e.target.value }))
-                }
-              />
-              <label className="flex items-center gap-2 text-[11px] text-app-text-muted cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="rounded border-app-border"
-                  checked={provider.localEnableThinking ?? false}
-                  onChange={(e) =>
-                    onChange(
-                      updateProvider(config, provider.id, {
-                        localEnableThinking: e.target.checked,
-                      }),
-                    )
-                  }
-                />
-                {t('settings.local_enable_thinking')}
-              </label>
-            </div>
+            <LocalModelSection
+              provider={provider}
+              onPatch={(patch) => onChange(updateProvider(config, provider.id, patch))}
+            />
           ) : (
             <div className="space-y-1.5">
               <label className={META_LABEL} htmlFor={`key-${provider.id}`}>

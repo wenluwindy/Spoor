@@ -14,6 +14,8 @@ export const errors = {
   "ai.local_no_path": "Fill in the full path to your GGUF model file in Settings.",
   "ai.local_no_images": "Local GGUF (llama.cpp) cannot take images. Use an online multimodal model, or disconnect the image nodes.",
   "ai.local_failed": "Local inference failed.",
+  "ai.local_engine_missing": "No usable inference engine was found on this machine (the install may be incomplete). Check Settings → Model services → Local inference engine.",
+  "ai.local_gguf_invalid": "Could not read that GGUF model file — wrong file, moved file, or an unsupported version. Pick it again in Settings.",
   "search.no_key": "No Metaso Search API key configured. Add one in Settings.",
   "search.failed": "Web search failed.",
   "file.unsupported": "Unsupported file type.",

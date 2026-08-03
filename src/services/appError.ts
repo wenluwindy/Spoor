@@ -27,6 +27,8 @@ export type AppErrorCode =
   | 'ai.local_no_path'
   | 'ai.local_no_images'
   | 'ai.local_failed'
+  | 'ai.local_engine_missing'
+  | 'ai.local_gguf_invalid'
   // --- 联网搜索 ---
   | 'search.no_key'
   | 'search.failed'

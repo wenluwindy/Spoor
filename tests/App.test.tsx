@@ -720,14 +720,17 @@ describe('App 组件', () => {
       expect(screen.queryByText('settings.image_models')).toBeNull();
     });
 
-    it('本地 GGUF 显示模型路径而不是 API 密钥', async () => {
+    it('本地 GGUF 显示模型文件区块而不是 API 密钥', async () => {
       const user = userEvent.setup();
       await act(async () => { render(<App />); });
       await openSettings(user);
       await addProvider(user);
 
       await user.selectOptions(screen.getByLabelText('AI 服务商'), 'local_llama');
-      expect(screen.getByLabelText('settings.local_gguf_path')).toBeInTheDocument();
+      // 0.6.0 起手打路径输入框换成了文件选择区块；网页测试环境（非 Tauri）
+      // 只显示「桌面版可用」的说明，但 API 密钥输入必须消失
+      expect(screen.getByText('settings.local_gguf_path')).toBeInTheDocument();
+      expect(screen.getByText('errors.ai.local_desktop_only')).toBeInTheDocument();
       expect(screen.queryByLabelText('API 密钥')).toBeNull();
     });
 

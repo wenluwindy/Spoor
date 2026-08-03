@@ -1,6 +1,6 @@
 [package]
 name = "spoor"
-version = "0.5.0"
+version = "0.6.0"
 description = "踪迹 · Spoor — local-first spatial note taking"
 authors = ["AI Studio"]
 edition = "2021"
@@ -26,11 +26,14 @@ mime_guess = "2.0.5"
 tauri-plugin-dialog = "2.7.2"
 base64 = "0.23.0"
 rusqlite = { version = "0.37", features = ["bundled"] }
+# hardware.rs（0.6.0）：内存总量/可用量与物理核数；显存另走 DXGI / nvidia-smi
+sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 
 # keystore.rs：AI 配置加密落盘。Windows 走 DPAPI（0.61 与 tauri 依赖树里的同版），
 # macOS 走 Security framework 的钥匙串；其余平台明文降级（见 keystore.rs 文件头）。
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+# Dxgi 两个 feature 是 0.6.0 硬件探测（显存枚举）加的；Cryptography 是密钥库 DPAPI
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3"

@@ -404,3 +404,98 @@ describe('isAiConfigEmpty', () => {
     expect(isAiConfigEmpty(noPath)).toBe(true);
   });
 });
+
+describe('本地模型参数字段（v0.6.0 新增）的规范化与透传', () => {
+  it('normalizeAiConfig 保留合法的本地覆盖参数，小数取整', () => {
+    const got = normalizeAiConfig({
+      version: 2,
+      providers: [
+        {
+          id: 'p',
+          kind: 'local_llama',
+          localGgufPath: 'D:/m.gguf',
+          localNGpuLayers: 12.7,
+          localNCtx: 2048,
+          localNThreads: 4,
+          localMaxTokens: 512,
+          localKeepAliveMinutes: 30,
+        },
+      ],
+    });
+    const p = got.providers[0];
+    expect(p.localNGpuLayers).toBe(12);
+    expect(p.localNCtx).toBe(2048);
+    expect(p.localNThreads).toBe(4);
+    expect(p.localMaxTokens).toBe(512);
+    expect(p.localKeepAliveMinutes).toBe(30);
+  });
+
+  it('坏数据（负数/字符串/NaN）一律降级为「自动」而不是报错', () => {
+    const got = normalizeAiConfig({
+      version: 2,
+      providers: [
+        {
+          id: 'p',
+          kind: 'local_llama',
+          localNGpuLayers: -3,
+          localNCtx: 'big',
+          localNThreads: NaN,
+          localMaxTokens: 0, // 生成上限 0 无意义，同样视为自动
+          localKeepAliveMinutes: 'forever',
+        },
+      ],
+    });
+    const p = got.providers[0];
+    expect(p.localNGpuLayers).toBeUndefined();
+    expect(p.localNCtx).toBeUndefined();
+    expect(p.localNThreads).toBeUndefined();
+    expect(p.localMaxTokens).toBeUndefined();
+    expect(p.localKeepAliveMinutes).toBeUndefined();
+  });
+
+  it('localKeepAliveMinutes 的 null（会话期常驻）与 0（用后即退）都是有含义的值，必须保住', () => {
+    const make = (v: unknown) =>
+      normalizeAiConfig({
+        version: 2,
+        providers: [{ id: 'p', kind: 'local_llama', localKeepAliveMinutes: v }],
+      }).providers[0].localKeepAliveMinutes;
+    expect(make(null)).toBeNull();
+    expect(make(0)).toBe(0);
+    expect(make(undefined)).toBeUndefined();
+  });
+
+  it('nGpuLayers 允许 0（纯 CPU），nCtx/nThreads/maxTokens 至少为 1', () => {
+    const got = normalizeAiConfig({
+      version: 2,
+      providers: [
+        { id: 'p', kind: 'local_llama', localNGpuLayers: 0, localNCtx: 0, localNThreads: 0 },
+      ],
+    });
+    const p = got.providers[0];
+    expect(p.localNGpuLayers).toBe(0);
+    expect(p.localNCtx).toBeUndefined();
+    expect(p.localNThreads).toBeUndefined();
+  });
+
+  it('resolveActiveChatConfig 把本地参数透传给对话链路', () => {
+    const c = config({
+      providers: [
+        provider({
+          kind: 'local_llama',
+          localGgufPath: 'D:/m.gguf',
+          localNGpuLayers: 8,
+          localNCtx: 2048,
+          localNThreads: 6,
+          localMaxTokens: 256,
+          localKeepAliveMinutes: null,
+        }),
+      ],
+    });
+    const flat = resolveActiveChatConfig(c);
+    expect(flat.localNGpuLayers).toBe(8);
+    expect(flat.localNCtx).toBe(2048);
+    expect(flat.localNThreads).toBe(6);
+    expect(flat.localMaxTokens).toBe(256);
+    expect(flat.localKeepAliveMinutes).toBeNull();
+  });
+});

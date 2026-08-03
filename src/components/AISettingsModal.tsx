@@ -27,6 +27,13 @@ export interface AIConfig {
   localGgufPath?: string;
   /** 可选：Thinking 变体需套用带思考块的模板时设为 true */
   localEnableThinking?: boolean;
+  /** 本地推理手动覆盖参数；undefined 表示「自动」，由规划器现算 */
+  localNGpuLayers?: number;
+  localNCtx?: number;
+  localNThreads?: number;
+  localMaxTokens?: number;
+  /** 模型保留时长（分钟）；undefined=默认 15，null=会话期常驻，0=用后即退 */
+  localKeepAliveMinutes?: number | null;
   /**
    * @deprecated v1 时代的秘塔 Key。只在 `migrateV1ToV2` 读老配置时还会出现，
    * 新代码一律用下面的 `searchApiKey`。

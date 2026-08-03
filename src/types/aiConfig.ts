@@ -69,6 +69,19 @@ export interface AIProviderProfile {
   /** `kind === 'local_llama'` 时的 GGUF 绝对路径。 */
   localGgufPath?: string;
   localEnableThinking?: boolean;
+  /**
+   * 本地推理的手动覆盖参数。以下四项 `undefined` 一律表示「自动」——
+   * 由 `services/localModelPlanner` 按 GGUF 元数据 + 硬件探测结果现算。
+   */
+  localNGpuLayers?: number;
+  localNCtx?: number;
+  localNThreads?: number;
+  localMaxTokens?: number;
+  /**
+   * 模型保留时长（分钟）。`undefined` = 默认（15 分钟）；`null` = 会话期常驻；
+   * `0` = 用后即退（每次对话完成即卸载）。
+   */
+  localKeepAliveMinutes?: number | null;
 }
 
 /**

@@ -85,6 +85,11 @@ export function resolveActiveChatConfig(config: AIConfigV2): AIConfig {
     model: modelName,
     localGgufPath: provider?.localGgufPath,
     localEnableThinking: provider?.localEnableThinking,
+    localNGpuLayers: provider?.localNGpuLayers,
+    localNCtx: provider?.localNCtx,
+    localNThreads: provider?.localNThreads,
+    localMaxTokens: provider?.localMaxTokens,
+    localKeepAliveMinutes: provider?.localKeepAliveMinutes,
     ...resolveSearchConfig(config),
   };
 }
@@ -259,7 +264,21 @@ function normalizeProvider(raw: unknown): AIProviderProfile | null {
     imageApiKind: (o.imageApiKind as ImageApiKind | undefined) ?? undefined,
     localGgufPath: typeof o.localGgufPath === 'string' ? o.localGgufPath : undefined,
     localEnableThinking: o.localEnableThinking === true ? true : undefined,
+    localNGpuLayers: normalizeLocalInt(o.localNGpuLayers, 0),
+    localNCtx: normalizeLocalInt(o.localNCtx, 1),
+    localNThreads: normalizeLocalInt(o.localNThreads, 1),
+    localMaxTokens: normalizeLocalInt(o.localMaxTokens, 1),
+    // null 是有含义的值（会话期常驻），不能和「缺省」混为一谈
+    localKeepAliveMinutes:
+      o.localKeepAliveMinutes === null ? null : normalizeLocalInt(o.localKeepAliveMinutes, 0),
   };
+}
+
+/** 本地参数覆盖项：只收非负整数，坏数据当「自动」处理而不是让 UI 崩掉。 */
+function normalizeLocalInt(v: unknown, min: number): number | undefined {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return undefined;
+  const n = Math.floor(v);
+  return n >= min ? n : undefined;
 }
 
 /**

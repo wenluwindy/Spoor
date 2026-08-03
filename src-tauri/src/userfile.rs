@@ -222,6 +222,36 @@ pub async fn user_file_pick_directory(app: tauri::AppHandle) -> Result<Option<St
     Ok(Some(normalized.to_string_lossy().into_owned()))
 }
 
+/// 弹系统「打开文件」对话框，返回用户选中的绝对路径。用户取消返回 `None`。
+///
+/// [`user_file_pick_save_path`] 的姊妹版，但**不进写入白名单**——这是读操作
+/// （选 GGUF 模型、导入 `.canvas` 等），授权语义只属于写入。`filters` 结构
+/// 与保存版共用 [`SaveDialogFilter`]。
+#[tauri::command]
+pub async fn user_file_pick_open_path(
+    app: tauri::AppHandle,
+    filters: Option<Vec<SaveDialogFilter>>,
+) -> Result<Option<String>, String> {
+    let mut dialog = app.dialog().file();
+    for filter in filters.unwrap_or_default() {
+        let extensions: Vec<&str> = filter.extensions.iter().map(String::as_str).collect();
+        dialog = dialog.add_filter(&filter.name, &extensions);
+    }
+
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    dialog.pick_file(move |picked| {
+        let _ = tx.send(picked);
+    });
+    let Some(picked) = rx.await.map_err(|e| format!("dialog_failed: {e}"))? else {
+        return Ok(None);
+    };
+
+    let path = picked.into_path().map_err(|e| format!("dialog_failed: {e}"))?;
+    // 打开对话框选的必然是已存在的文件，normalize 只为统一 `\\?\` 前缀等形态
+    let normalized = normalize_path(&path.to_string_lossy())?;
+    Ok(Some(normalized.to_string_lossy().into_owned()))
+}
+
 // ───────────────────────────── 读写命令 ─────────────────────────────
 
 fn ensure_parent(dest: &Path) -> Result<(), String> {

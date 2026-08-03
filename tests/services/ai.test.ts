@@ -13,6 +13,12 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
 }));
 
+// 流式通道在 Tauri 运行时会订阅 'lab-ai-stream' 事件；测试里不发增量，只验请求形状
+const mockListen = vi.fn().mockResolvedValue(() => {});
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: (...args: unknown[]) => mockListen(...args),
+}));
+
 import { callUniversalAI, parseImageDataUrl } from '../../src/services/ai';
 
 const baseConfig = {
@@ -703,8 +709,9 @@ describe('callUniversalAI', () => {
     });
   });
 
-  // --- Local llama (Tauri subprocess) ---
+  // --- Local llama（llama-server 常驻 + OpenAI 兼容通道） ---
   describe('local_llama provider', () => {
+    const GiB = 1024 ** 3;
     const localBase = {
       ...baseConfig,
       provider: 'local_llama',
@@ -712,7 +719,68 @@ describe('callUniversalAI', () => {
       localGgufPath: 'D:\\Models\\m.gguf',
     };
 
+    const ggufInfo = {
+      fileBytes: 4 * GiB,
+      version: 3,
+      tensorCount: 291,
+      architecture: 'llama',
+      modelName: 'Test 8B',
+      blockCount: 32,
+      contextLength: 32768,
+      embeddingLength: 4096,
+      headCount: 32,
+      headCountKv: 8,
+      hasChatTemplate: true,
+    };
+    // 4GB N 卡 + 8B Q4：规划器给 17 层 / 4096 ctx / 8 线程（见 localModelPlanner.test.ts）
+    const hardwareInfo = {
+      totalRamBytes: 16 * GiB,
+      availableRamBytes: 8 * GiB,
+      physicalCores: 8,
+      logicalCores: 16,
+      gpus: [{ name: 'RTX 3050', vendor: 'nvidia', dedicatedVramBytes: 4 * GiB }],
+      platform: 'windows',
+      unifiedMemory: false,
+    };
+
     let savedTauri: unknown;
+
+    const invokedCmds = () => mockInvoke.mock.calls.map((c) => c[0]);
+    const invokeArgsOf = (cmd: string, nth = 0) =>
+      mockInvoke.mock.calls.filter((c) => c[0] === cmd)[nth]?.[1] as
+        | Record<string, unknown>
+        | undefined;
+
+    /** 全链路 happy path 的 invoke 桩；单测里再按需覆盖个别命令。 */
+    function mockLocalInvoke(patch: Record<string, (args?: Record<string, unknown>) => Promise<unknown>> = {}) {
+      mockInvoke.mockImplementation((cmd: unknown, args: unknown) => {
+        const override = patch[cmd as string];
+        if (override) return override(args as Record<string, unknown>);
+        switch (cmd) {
+          case 'gguf_inspect':
+            return Promise.resolve(ggufInfo);
+          case 'hardware_probe':
+            return Promise.resolve(hardwareInfo);
+          case 'local_engine_status':
+            return Promise.resolve({
+              installed: true,
+              backend: 'cuda',
+              path: 'C:\\x\\llama-server.exe',
+              nvidiaDetected: true,
+              cudaInstalled: true,
+            });
+          case 'local_server_ensure':
+            return Promise.resolve({ port: 8123, restarted: false });
+          case 'local_server_touch':
+          case 'local_server_stop':
+            return Promise.resolve(null);
+          case 'openai_compatible_chat':
+            return Promise.resolve('local response');
+          default:
+            return Promise.reject(new Error(`unexpected invoke: ${String(cmd)}`));
+        }
+      });
+    }
 
     beforeEach(() => {
       savedTauri = (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
@@ -736,23 +804,14 @@ describe('callUniversalAI', () => {
       expect(mockInvoke).not.toHaveBeenCalled();
     });
 
-    it('localGgufPath 为空时抛错（不调用任何 Tauri 命令）', async () => {
+    it('localGgufPath 为空或仅含空格时抛错（不调用任何 Tauri 命令）', async () => {
       await expect(
-        callUniversalAI({
-          config: { ...localBase, localGgufPath: '' },
-          prompt: 'hi',
-        })
+        callUniversalAI({ config: { ...localBase, localGgufPath: '' }, prompt: 'hi' })
+      ).rejects.toThrow('ai.local_no_path');
+      await expect(
+        callUniversalAI({ config: { ...localBase, localGgufPath: '   \t  ' }, prompt: 'hi' })
       ).rejects.toThrow('ai.local_no_path');
       expect(mockInvoke).not.toHaveBeenCalled();
-    });
-
-    it('localGgufPath 仅含空格时也视为空', async () => {
-      await expect(
-        callUniversalAI({
-          config: { ...localBase, localGgufPath: '   \t  ' },
-          prompt: 'hi',
-        })
-      ).rejects.toThrow('ai.local_no_path');
     });
 
     it('附带 images 时抛错且不调用 invoke', async () => {
@@ -766,10 +825,8 @@ describe('callUniversalAI', () => {
       expect(mockInvoke).not.toHaveBeenCalled();
     });
 
-    it('调用 local_llama_chat 时 payload 形状与字段映射正确', async () => {
-      mockInvoke
-        .mockResolvedValueOnce('D:\\TEMP\\spoor_llama.log') // get_local_llama_log_path
-        .mockResolvedValueOnce('local response'); // local_llama_chat
+    it('全链路：规划 → ensure → touch → OpenAI 兼容请求 → touch', async () => {
+      mockLocalInvoke();
 
       const result = await callUniversalAI({
         config: { ...localBase, localEnableThinking: true },
@@ -780,127 +837,185 @@ describe('callUniversalAI', () => {
       });
 
       expect(result).toBe('local response');
+      expect(invokedCmds()).toEqual([
+        'gguf_inspect',
+        'hardware_probe',
+        'local_engine_status',
+        'local_server_ensure',
+        'local_server_touch',
+        'openai_compatible_chat',
+        'local_server_touch',
+      ]);
 
-      // 第一次调用：拿日志路径
-      expect(mockInvoke).toHaveBeenNthCalledWith(1, 'get_local_llama_log_path');
+      // ensure：规划器输出直接下发；keepAlive 未配置时不带该字段（Rust 用默认 15 分钟）
+      const ensureArgs = invokeArgsOf('local_server_ensure');
+      expect(ensureArgs).toEqual({
+        modelPath: 'D:\\Models\\m.gguf',
+        nGpuLayers: 17,
+        nCtx: 4096,
+        nThreads: 8,
+      });
 
-      // 第二次调用：实际推理，payload 形状必须严格匹配 Rust 端 LocalLlamaChatPayload
-      expect(mockInvoke).toHaveBeenNthCalledWith(2, 'local_llama_chat', {
-        payload: {
-          modelPath: 'D:\\Models\\m.gguf',
-          systemInstruction: 'be brief',
-          userMessage: 'Hello local',
-          temperature: 0.5,
-          topP: 0.8,
-          maxTokens: 256,
-          nCtx: 1024,
-          enableThinking: true,
+      // 对话：走 server 的 OpenAI 兼容接口，api key 固定 'local'，多轮消息结构与 openai 分支一致
+      const chatArgs = invokeArgsOf('openai_compatible_chat');
+      expect(chatArgs?.apiKey).toBe('local');
+      expect(chatArgs?.url).toBe('http://127.0.0.1:8123/v1/chat/completions');
+      const body = chatArgs?.body as Record<string, unknown>;
+      expect(body.messages).toEqual([
+        { role: 'system', content: 'be brief' },
+        { role: 'user', content: 'Hello local' },
+      ]);
+      expect(body.temperature).toBe(0.5);
+      expect(body.top_p).toBe(0.8);
+      expect(body.max_tokens).toBe(1024);
+      expect(body.chat_template_kwargs).toEqual({ enable_thinking: true });
+    });
+
+    it('无 systemInstruction 时只有 user 消息；enableThinking 缺省为 false', async () => {
+      mockLocalInvoke();
+      await callUniversalAI({ config: localBase, prompt: 'hi' });
+      const body = invokeArgsOf('openai_compatible_chat')?.body as Record<string, unknown>;
+      expect(body.messages).toEqual([{ role: 'user', content: 'hi' }]);
+      expect(body.chat_template_kwargs).toEqual({ enable_thinking: false });
+    });
+
+    it('手动覆盖参数直接下发：层数/上下文/线程给 ensure，maxTokens 进请求体', async () => {
+      mockLocalInvoke();
+      await callUniversalAI({
+        config: { ...localBase, localNGpuLayers: 8, localNCtx: 2048, localNThreads: 4, localMaxTokens: 256 },
+        prompt: 'hi',
+      });
+      expect(invokeArgsOf('local_server_ensure')).toEqual({
+        modelPath: 'D:\\Models\\m.gguf',
+        nGpuLayers: 8,
+        nCtx: 2048,
+        nThreads: 4,
+      });
+      const body = invokeArgsOf('openai_compatible_chat')?.body as Record<string, unknown>;
+      expect(body.max_tokens).toBe(256);
+    });
+
+    it('keepAlive=0（用后即退）：下发 0 且完成后调用 local_server_stop', async () => {
+      mockLocalInvoke();
+      await callUniversalAI({
+        config: { ...localBase, localKeepAliveMinutes: 0 },
+        prompt: 'hi',
+      });
+      expect(invokeArgsOf('local_server_ensure')?.keepAliveMinutes).toBe(0);
+      expect(invokedCmds()).toContain('local_server_stop');
+      // stop 在收尾 touch 之后
+      expect(invokedCmds().at(-1)).toBe('local_server_stop');
+    });
+
+    it('keepAlive=null（会话期常驻）：以 -1 下发且不 stop；数字原样透传', async () => {
+      mockLocalInvoke();
+      await callUniversalAI({
+        config: { ...localBase, localKeepAliveMinutes: null },
+        prompt: 'hi',
+      });
+      expect(invokeArgsOf('local_server_ensure')?.keepAliveMinutes).toBe(-1);
+      expect(invokedCmds()).not.toContain('local_server_stop');
+
+      mockInvoke.mockReset();
+      mockLocalInvoke();
+      await callUniversalAI({
+        config: { ...localBase, localKeepAliveMinutes: 30 },
+        prompt: 'hi',
+      });
+      expect(invokeArgsOf('local_server_ensure')?.keepAliveMinutes).toBe(30);
+    });
+
+    it('ensure 报 oom 时自动降 25% 层数重试一次', async () => {
+      let ensureCalls = 0;
+      mockLocalInvoke({
+        local_server_ensure: () => {
+          ensureCalls += 1;
+          return ensureCalls === 1
+            ? Promise.reject('oom')
+            : Promise.resolve({ port: 8123, restarted: true });
         },
+      });
+
+      const result = await callUniversalAI({ config: localBase, prompt: 'hi' });
+      expect(result).toBe('local response');
+      expect(invokeArgsOf('local_server_ensure', 0)?.nGpuLayers).toBe(17);
+      // floor(17 × 0.75) = 12
+      expect(invokeArgsOf('local_server_ensure', 1)?.nGpuLayers).toBe(12);
+    });
+
+    it('降层重试仍 oom 时归为 ai.local_failed，不无限重试', async () => {
+      mockLocalInvoke({ local_server_ensure: () => Promise.reject('oom') });
+      await expect(
+        callUniversalAI({ config: localBase, prompt: 'hi' })
+      ).rejects.toThrow(expect.objectContaining({ code: 'ai.local_failed' }));
+      expect(invokedCmds().filter((c) => c === 'local_server_ensure')).toHaveLength(2);
+    });
+
+    it('ensure 的非 oom 失败原样归为 ai.local_failed，不重试', async () => {
+      mockLocalInvoke({
+        local_server_ensure: () => Promise.reject(new Error('spawn failed: engine missing')),
+      });
+      await expect(
+        callUniversalAI({ config: localBase, prompt: 'hi' })
+      ).rejects.toThrow(
+        expect.objectContaining({
+          code: 'ai.local_failed',
+          detail: expect.stringContaining('spawn failed'),
+        }),
+      );
+      expect(invokedCmds().filter((c) => c === 'local_server_ensure')).toHaveLength(1);
+    });
+
+    it('GGUF 解析失败当场报 ai.local_gguf_invalid，不去起 server', async () => {
+      mockLocalInvoke({ gguf_inspect: () => Promise.reject('not_a_gguf') });
+      await expect(
+        callUniversalAI({ config: localBase, prompt: 'hi' })
+      ).rejects.toThrow(
+        expect.objectContaining({
+          code: 'ai.local_gguf_invalid',
+          detail: expect.stringContaining('not_a_gguf'),
+        }),
+      );
+      expect(invokedCmds()).not.toContain('local_server_ensure');
+    });
+
+    it('hardware_probe 失败时退回保守 CPU 方案（0 层 / 1024 ctx / 4 线程），对话照走', async () => {
+      mockLocalInvoke({ hardware_probe: () => Promise.reject(new Error('probe crashed')) });
+      const result = await callUniversalAI({ config: localBase, prompt: 'hi' });
+      expect(result).toBe('local response');
+      expect(invokeArgsOf('local_server_ensure')).toEqual({
+        modelPath: 'D:\\Models\\m.gguf',
+        nGpuLayers: 0,
+        nCtx: 1024,
+        nThreads: 4,
       });
     });
 
-    it('未提供 systemInstruction 时 payload 中应为 null（不能是 undefined）', async () => {
-      mockInvoke
-        .mockResolvedValueOnce('logpath')
-        .mockResolvedValueOnce('out');
-
-      await callUniversalAI({ config: localBase, prompt: 'hi' });
-
-      const chatCall = mockInvoke.mock.calls.find((c) => c[0] === 'local_llama_chat');
-      const payload = (chatCall?.[1] as { payload: Record<string, unknown> } | undefined)?.payload;
-      expect(payload?.systemInstruction).toBeNull();
-    });
-
-    it('localEnableThinking 未设置时默认 false', async () => {
-      mockInvoke
-        .mockResolvedValueOnce('logpath')
-        .mockResolvedValueOnce('out');
-
-      await callUniversalAI({ config: localBase, prompt: 'hi' });
-
-      const chatCall = mockInvoke.mock.calls.find((c) => c[0] === 'local_llama_chat');
-      const payload = (chatCall?.[1] as { payload: Record<string, unknown> } | undefined)?.payload;
-      expect(payload?.enableThinking).toBe(false);
-    });
-
-    it('使用调用方传入的 temperature/topP；不传则用默认 0.7/0.4', async () => {
-      mockInvoke
-        .mockResolvedValueOnce('logpath')
-        .mockResolvedValueOnce('out');
-
-      await callUniversalAI({ config: localBase, prompt: 'hi' });
-
-      const chatCall = mockInvoke.mock.calls.find((c) => c[0] === 'local_llama_chat');
-      const payload = (chatCall?.[1] as { payload: Record<string, unknown> } | undefined)?.payload;
-      expect(payload?.temperature).toBe(0.7);
-      expect(payload?.topP).toBe(0.4);
-    });
-
-    it('推理失败时错误消息附带日志路径', async () => {
-      mockInvoke
-        .mockResolvedValueOnce('D:\\TEMP\\spoor_llama.log')
-        .mockRejectedValueOnce(new Error('cudaMalloc failed: out of memory'));
-
-      await expect(
-        callUniversalAI({ config: localBase, prompt: 'hi' })
-      ).rejects.toThrow(
-        expect.objectContaining({
-          code: 'ai.local_failed',
-          detail: expect.stringMatching(/out of memory[\s\S]*spoor_llama\.log/),
-        }),
-      );
-    });
-
-    it('get_local_llama_log_path 调用失败时不应中断主流程', async () => {
-      // 第一次（拿日志路径）失败，第二次（实际推理）成功
-      mockInvoke
-        .mockRejectedValueOnce(new Error('command not found'))
-        .mockResolvedValueOnce('still works');
-
-      const result = await callUniversalAI({ config: localBase, prompt: 'hi' });
-      expect(result).toBe('still works');
-    });
-
-    it('日志路径不可得且推理也失败时，错误消息不应带空 suffix', async () => {
-      mockInvoke
-        .mockRejectedValueOnce(new Error('no log cmd'))
-        .mockRejectedValueOnce(new Error('inference exploded'));
-
-      await expect(
-        callUniversalAI({ config: localBase, prompt: 'hi' })
-      ).rejects.toThrow(
-        expect.objectContaining({ code: 'ai.local_failed', detail: 'inference exploded' }),
-      );
-    });
-
-    it('Tauri 端返回非 Error 异常（字符串/对象）也能正确格式化', async () => {
-      mockInvoke
-        .mockResolvedValueOnce('logpath')
-        .mockRejectedValueOnce('plain string error from rust');
-
-      await expect(
-        callUniversalAI({ config: localBase, prompt: 'hi' })
-      ).rejects.toThrow(
-        expect.objectContaining({
-          code: 'ai.local_failed',
-          detail: expect.stringContaining('plain string error from rust'),
-        }),
-      );
-    });
-
-    it('modelPath 前后含空格时应被 trim 后再下发', async () => {
-      mockInvoke
-        .mockResolvedValueOnce('logpath')
-        .mockResolvedValueOnce('out');
-
+    it('modelPath 前后空格 trim 后再下发', async () => {
+      mockLocalInvoke();
       await callUniversalAI({
         config: { ...localBase, localGgufPath: '   D:\\Models\\m.gguf  \t' },
         prompt: 'hi',
       });
+      expect(invokeArgsOf('local_server_ensure')?.modelPath).toBe('D:\\Models\\m.gguf');
+      expect(invokeArgsOf('gguf_inspect')?.path).toBe('D:\\Models\\m.gguf');
+    });
 
-      const chatCall = mockInvoke.mock.calls.find((c) => c[0] === 'local_llama_chat');
-      const payload = (chatCall?.[1] as { payload: Record<string, unknown> } | undefined)?.payload;
-      expect(payload?.modelPath).toBe('D:\\Models\\m.gguf');
+    it('带 onStreamChunk 时走流式通道（openai_compatible_chat_stream，body.stream=true）', async () => {
+      mockLocalInvoke({
+        openai_compatible_chat_stream: () => Promise.resolve('streamed response'),
+      });
+      const result = await callUniversalAI({
+        config: localBase,
+        prompt: 'hi',
+        onStreamChunk: () => {},
+      });
+      expect(result).toBe('streamed response');
+      const args = invokeArgsOf('openai_compatible_chat_stream');
+      expect(args?.apiKey).toBe('local');
+      expect(args?.url).toBe('http://127.0.0.1:8123/v1/chat/completions');
+      expect((args?.body as Record<string, unknown>).stream).toBe(true);
+      expect(mockListen).toHaveBeenCalledWith('lab-ai-stream', expect.any(Function));
     });
   });
 

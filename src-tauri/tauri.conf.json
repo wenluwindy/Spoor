@@ -1,6 +1,6 @@
 {
   "productName": "Spoor",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "identifier": "com.spoor.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -51,6 +51,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "resources": { "resources/llama": "llama" },
     "shortDescription": "Local-first spatial notes and AI thinking canvas",
     "longDescription": "Spoor (踪迹) — canvas notes, personas, research lab. Data stays on your device (IndexedDB).",
     "category": "Productivity",

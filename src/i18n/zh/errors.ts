@@ -14,6 +14,8 @@ export const errors = {
   "ai.local_no_path": "请在设置里填写本地 GGUF 模型文件的完整路径。",
   "ai.local_no_images": "本地 GGUF（llama.cpp）不能附带图片。请改用在线多模态模型，或断开相连的图片节点。",
   "ai.local_failed": "本地推理失败。",
+  "ai.local_engine_missing": "本机没有找到可用的推理引擎（安装包可能不完整）。请到 设置 → 模型服务 → 本地推理引擎 检查。",
+  "ai.local_gguf_invalid": "读不了这个 GGUF 模型文件——可能选错了文件、文件已被移动，或版本不支持。请到设置里重新选择。",
   "search.no_key": "尚未配置秘塔搜索 API Key。请到设置里添加。",
   "search.failed": "联网搜索失败。",
   "file.unsupported": "不支持这种文件类型。",

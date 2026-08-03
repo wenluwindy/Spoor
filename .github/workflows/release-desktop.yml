@@ -12,6 +12,11 @@ on:
 permissions:
   contents: write
 
+# 钉死的 llama.cpp 发布版本（与 src-tauri/src/engine.rs 的 LLAMA_RELEASE 一致）。
+# 升级时：换版本号 + 重算下面三个步骤里的 sha256 + 单独跑回归（ROADMAP v0.6.0 风险条款）。
+env:
+  LLAMA_RELEASE: b8763
+
 jobs:
   publish-tauri:
     strategy:
@@ -50,6 +55,65 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # ── 本地推理引擎随包（ROADMAP v0.6.0 主线 A1/A3）──
+      # 从 llama.cpp Releases 拉取钉死版本的 CPU/Metal 预编译包，sha256 校验后
+      # 放进 src-tauri/resources/llama/，由 tauri.conf.json 的 bundle.resources
+      # 映射到安装包的 llama/ 目录（engine.rs 按 resource_dir()/llama/ 查找）。
+      # 注意 macOS 官方资产是 .tar.gz（不是 zip），内层是 llama-<release>/ 平铺目录。
+      - name: Bundle llama.cpp CPU engine (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        env:
+          # sha256 来自 GitHub Releases API 的 asset digest，并经实际下载复核
+          LLAMA_ZIP_SHA256: 7d1ddbc810fa0c3106cab3d93ea31019a0c8cf931c91eecd1665cc6cd3268036
+        run: |
+          $zip = "llama-$env:LLAMA_RELEASE-bin-win-cpu-x64.zip"
+          $url = "https://github.com/ggml-org/llama.cpp/releases/download/$env:LLAMA_RELEASE/$zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:LLAMA_ZIP_SHA256) {
+            throw "sha256 mismatch for ${zip}: got $actual, want $env:LLAMA_ZIP_SHA256"
+          }
+          Expand-Archive -Path $zip -DestinationPath llama-extracted
+          # zip 根目录平铺：llama-server.exe + 各 ggml*/llama/mtmd/libomp dll，
+          # 只取 server 与 dll（CPU 包本身不含 cuda dll，其余 exe 用不上）
+          $dst = "src-tauri/resources/llama"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Copy-Item llama-extracted/llama-server.exe $dst/
+          Copy-Item llama-extracted/*.dll $dst/
+          if (-not (Test-Path "$dst/llama-server.exe")) { throw "llama-server.exe missing" }
+          Get-ChildItem $dst | Format-Table Name, Length
+
+      - name: Bundle llama.cpp Metal engines (macOS)
+        if: matrix.platform == 'macos-latest'
+        env:
+          # sha256 来自 GitHub Releases API 的 asset digest，并经实际下载复核
+          LLAMA_ARM64_SHA256: 4d9b809643df360e73eac0216660816b5af863ac99016bc80ca33a9259347671
+          LLAMA_X64_SHA256: 2f70855cdad2f49d3518d8e31561e0e0baabc1dfbd44d090fba17818f9d0efe9
+        run: |
+          set -euo pipefail
+          fetch_engine() {
+            arch="$1"; sha="$2"
+            tarball="llama-${LLAMA_RELEASE}-bin-macos-${arch}.tar.gz"
+            curl -fsSL --retry 3 -o "$tarball" \
+              "https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_RELEASE}/${tarball}"
+            echo "${sha}  ${tarball}" | shasum -a 256 -c -
+            workdir="llama-extracted-${arch}"
+            mkdir -p "$workdir"
+            tar -xzf "$tarball" -C "$workdir"
+            # tar 内层是 llama-<release>/，llama-server 与 dylib 平铺其中；
+            # dylib 通过 @rpath 相邻加载，与 server 放同一目录即可
+            src="${workdir}/llama-${LLAMA_RELEASE}"
+            dst="src-tauri/resources/llama/${arch}"
+            mkdir -p "$dst"
+            cp "${src}/llama-server" "$dst/"
+            cp "${src}"/*.dylib "$dst/"
+            chmod +x "${dst}/llama-server"
+          }
+          fetch_engine arm64 "$LLAMA_ARM64_SHA256"
+          fetch_engine x64 "$LLAMA_X64_SHA256"
+          ls -lR src-tauri/resources/llama
+
       - name: Build and publish release
         uses: tauri-apps/tauri-action@v1
         env:
@@ -66,7 +130,7 @@ jobs:
 
             - 系统：Windows 10/11，64 位
             - 首次使用：在应用 **设置 → 模型服务** 中配置 AI 服务商与 API Key（仅存本机）
-            - 本地 GGUF 可选，见 [LOCAL_LLM.md](https://github.com/wenluwindy/Spoor/blob/main/docs/guide/LOCAL_LLM.md)
+            - 本地 GGUF 模型开箱即用（推理引擎已随包），见 [LOCAL_LLM.md](https://github.com/wenluwindy/Spoor/blob/main/docs/guide/LOCAL_LLM.md)
 
             ## macOS 安装
 
